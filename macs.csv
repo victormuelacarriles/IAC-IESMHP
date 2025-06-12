@@ -1,2 +1,9 @@
 MAC, Equipo, IPf, Comentario
+#,#,#, Las lineas que comiencen por # se considerarán comentarios y deberán ser ignoradas
+#,#,#, MAC:        Dirección mac de la interfaz de red principal. Si esta como DHCP, se convertirá en estática manteniendo toda la configuración menos el octeto final (->IPf)
+#,#,#, Equipo:     Nombre a poner en el equipo (si no coincide se cambia)
+#,#,#, Comentario: Explicaciones adicionales del equipo 
+#,#,#, ######################################################################################
+#,#,#, AULA EJEMPLO - PRUEBAS EN MÁQUINAS VIRTUALES##########################################
 xxxx, EJEMPLO-01, 101, Ejemplo de equipo: 
+#,#,#, ######################################################################################
