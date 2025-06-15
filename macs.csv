@@ -7,4 +7,5 @@ MAC, Equipo, IPf, Comentario
 #,#,#, AULA EJEMPLO - PRUEBAS EN MÁQUINAS VIRTUALES##########################################
 00:0c:29:92:a0:0f, EJEMPLO-01, 101, Ejemplo de equipo: Mint22.1 virtual en pcvictorcasa 
 00:0c:29:92:a0:0f, EJEMPLO-02, 102, MintDesdeISOp mv en CEIABD-00 victor
+00:0c:29:90:7f:d0, EJEMPLO-03, 103, MintDesdeISOp-Distancia mv en CEIABD-00 victor
 #,#,#, ######################################################################################
