@@ -4,30 +4,28 @@ MAC, Equipo, IPf, Comentario
 #,#,#, Equipo:     Nombre a poner en el equipo (si no coincide se cambia) Deberá usarse un prefijo - un número. (Ej: CEIABD-01) Se reservará el -00 para el equipo de profesor
 #,#,#, Comentario: Explicaciones adicionales del equipo (NO SE DEBEN USAR COMAS EN EL COMENTARIO)
 #,#,#, ######################################################################################
-#,#,#, AULA EJEMPLO - PRUEBAS EN MÁQUINAS VIRTUALES##########################################
-00:0c:29:d9:75:f4, MintDesdeISOp-01, 101, Ejemplo de equipo: Mint22.1 virtual en pcvictorcasa 
-00:0c:29:90:7f:d0, MintDesdeISOp-02, 102, MintDesdeISOp mv en CEIABD-00 victor
 #,#,#, ######################################################################################
 #,#,#, AULA CEIABD                                              #############################
 d8:bb:c1:35:f1:dd, IABD-00, 120, Equipo de profesores 
 74:56:3c:95:eb:57, IABD-20, 140, probandoIABD
+74:56:3c:95:eb:57, IABD-99, 199, virtualProbando
 #,#,#, ######################################################################################
 #,#,#, AULA DISTANCIA                                              ##########################
----, SMRD-01, 121, equipo alumno
 bc:fc:e7:05:73:d1, SMRD-02, 122, equipo alumno
---, SMRD-03, 123, equipo alumno
 bc:fc:e7:05:70:f8, SMRD-04, 124, equipo alumno
 bc:fc:e7:05:71:4a, SMRD-05, 125, equipo alumno
---, SMRD-06, 126, equipo alumno
 bc:fc:e7:05:71:60, SMRD-07, 127, equipo alumno
 bc:fc:e7:05:72:e9, SMRD-08, 128, equipo alumno
+bc:fc:e7:05:75:7e, SMRD-13, 133, equipo alumno
+bc:fc:e7:05:73:c8, SMRD-15, 135, equipo alumno
+--, SMRD-01, 121, equipo alumno
+--, SMRD-03, 123, equipo alumno
+--, SMRD-06, 126, equipo alumno
 --, SMRD-09, 129, equipo alumno
 --, SMRD-10, 130, equipo alumno
 --, SMRD-11, 131, equipo alumno
 --, SMRD-12, 132, equipo alumno
-bc:fc:e7:05:75:7e, SMRD-13, 133, equipo alumno
 --, SMRD-14, 134, equipo alumno
-bc:fc:e7:05:73:c8, SMRD-15, 135, equipo alumno
 --, SMRD-16, 136, equipo alumno
 --, SMRD-17, 137, equipo alumno
 #,#,#, ######################################################################################
