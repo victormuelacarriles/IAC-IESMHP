@@ -77,25 +77,25 @@
           msg: "Información de la MAC: {{ info_macs }}"
       when: info_macs is defined
 
-#         - name: Get current hostname
-#             command: hostname
-#             register: current_hostname
-#             changed_when: false
+    - name: Get current hostname
+      command: hostname
+      register: current_hostname
+      changed_when: false
 
-#         - name: Set fact for hostname change needed
-#             set_fact:
-#                 change_hostname_needed: "{{ current_hostname.stdout != equipo_en_macs }}"
+    - name: Set fact for hostname change needed
+      set_fact:
+          change_hostname_needed: "{{ current_hostname.stdout != equipo_en_macs }}"
 
-#         - name: Show hostname info
-#             debug:
-#                 msg: "Equipo identificado: '{{ equipo_en_macs }}' Nombre actual del equipo: '{{ current_hostname.stdout }}'"
+    - name: Show hostname info
+      debug:
+          msg: "Equipo identificado: '{{ equipo_en_macs }}' Nombre actual del equipo: '{{ current_hostname.stdout }}'"
 
-#         - name: Change hostname
-#             block:
-#                 - name: Update /etc/hostname
-#                     copy:
-#                         content: "{{ equipo_en_macs }}"
-#                         dest: /etc/hostname
+            # - name: Change hostname
+            #   block:
+            #       - name: Update /etc/hostname
+            #           copy:
+            #               content: "{{ equipo_en_macs }}"
+            #               dest: /etc/hostname
 
 #                 - name: Update /etc/hosts
 #                     template:
