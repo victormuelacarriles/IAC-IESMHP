@@ -105,7 +105,7 @@ echo "Aula: $AULA - IP_REDAULA: $IP_REDAULA"
 
 
 #Activamos WOL
-ethtool -s $IP_INTERFAZ wol g
+###  ethtool -s $IP_INTERFAZ wol g  ###por probar si funciona sin el: está dando problemas en nuevas versiones de Linux
 nmcli c modify "$ncCONEXION" 802-3-ethernet.wake-on-lan magic
 nmcli c modify "$ncCONEXION" 802-3-ethernet.accept-all-mac-addresses 1
 
@@ -116,7 +116,8 @@ if [[ ("$IP_REDAULA" == "10.0.72" && "$AULA" == "IABD") ||
       ("$IP_REDAULA" == "10.0.33" && "$AULA" == "SMRD") ]]; then
     IPESTATICANUEVA="$IP_REDAULA.$IPFINALENMACS/24"
     if [ "$IP_METHOD" == "auto" ]; then
-        echo "La IP actual ($IP_RED) es dinámica, vamos a convertirla en estática."
+        echoverde "La IP actual ($IP_RED) es dinámica, vamos a convertirla en estática (-> $IPESTATICANUEVA)"
+        echorojo '(la conexión ssh se perderá durante el proceso!)'
         cambiar_ip_estatica "$ncCONEXION" "$IPESTATICANUEVA" "$IP_GATEWAY" "$IP_DNS1" "$IP_DNS2"
         BNECESARIORESTABLECERRED="S"
     else
