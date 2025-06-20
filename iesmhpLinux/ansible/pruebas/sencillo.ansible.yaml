@@ -1,0 +1,19 @@
+---
+#
+
+# Para ejecutar este playbook:
+#    ansible-playbook -i mi_inventario.ini sencillo.ansible.yaml
+
+
+# Simple playbook to return machine information (hostname, IP address, and MAC address)
+- name: Gather system information
+  hosts: all
+  gather_facts: yes  # Need to gather facts to get system information
+  tasks:
+    - name: Display system information
+      debug:
+        msg: |
+          Hostname: {{ ansible_hostname }}
+          IP Address: {{ ansible_default_ipv4.address }}
+          MAC Address: {{ ansible_default_ipv4.macaddress }}
+
