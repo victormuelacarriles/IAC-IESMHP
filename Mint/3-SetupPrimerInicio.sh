@@ -74,7 +74,7 @@ service ssh restart >> $FLOG
 
 #Obtener la IP de la máquina
 IP=$(hostname -I | awk '{print $1}')
-mostrar_mensaje "Actualizando Sistema: no apagar. Disponible SSH root/root en $IP ($(hostname)). (log en /var/log/3-SetupPrimerInicio.log)"
+mostrar_mensaje "Actualizando Sistema: no apagar. Disponible SSH root/root en $IP ($(hostname)). (log en $FLOG)"
 
 # Limpiar caché de paquetes
 echoverde "Limpiando caché de paquetes..."
@@ -100,7 +100,7 @@ echoverde "Desactivando y borrando el servicio de actualización en primer arran
 systemctl disable 3-SetupPrimerInicio.service
 rm /etc/systemd/system/3-SetupPrimerInicio.service
 rm -- "$0"
-mostrar_mensaje "Sistema actualizado $IP ($(hostname)). El sistema se reiniciará en 30 segundos." 30
+mostrar_mensaje "Sistema actualizado $IP ($(hostname)). Disponible SSH root/root en $IP ($(hostname)). (log en $FLOG) El sistema se reiniciará en 30 segundos. " 30
 
 
 #Reinciando en 30 segundos y avisando a los usuarios
