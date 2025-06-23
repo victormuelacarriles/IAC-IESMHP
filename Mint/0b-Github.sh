@@ -11,7 +11,9 @@ LOG0="$RAIZLOG/$0.log"
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 mkdir -p $RAIZLOG
 echoverde() {
-    echo -e "\033[32m$1\033[0m"
+    TEXTO=$1
+    echo -e "\033[32m$TEXTO\033[0m"
+    echo $TEXTO >> $LOG0
 }
 
 echoverde "($0) $RAIZLOG"
@@ -35,10 +37,11 @@ git clone $GITREPO $RAIZSCRIPTSLIVE 2>&1 | tee -a $LOG0
 chmod +x $RAIZSCRIPTSLIVE/Mint/*.sh
 mkdir -p $RAIZLOG 2>&1 | tee -a $LOG0
 
-
 LOGSig="$RAIZLOG/$SCRIPT1NOMBRE.log"
 echoverde "Ejecutamos $SCRIPT1 (log en $LOGSig)..." | tee -a $LOG0
 /bin/bash ./$SCRIPT1 2>&1 | tee -a $LOGSig || tee -a $LOG0
+
+#TODO: comprobación final de errores
 
 
 
