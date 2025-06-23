@@ -4,9 +4,12 @@
 #      - Logs en     /var/log/iesmhpLinux/*.log 
 #      - Arreglar este script para que acepte parámentros (isoentrada / isosalida)  y que funcione
 
+GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
-RAIZSCRIPTS="/opt/iesmhpLinux"
+RAIZSCRIPTS="/opt/iesmhp"
 RAIZLOGS="/var/log/iesmhpLinux"
+RAIZMINT="/mnt$RAIZSCRIPTS/Mint"
+
 set -e
 # Funciones de colores
 echoverde() {  
@@ -166,27 +169,25 @@ for dir in /dev /proc /sys /run; do
 done
 
 #Por si no existiera, creamos directorio y movemos scripts
-mkdir -p "/mnt$RAIZSCRIPTS" | echo true
+mkdir -p "/$RAIZMINT" | echo true
 mkdir -p "/mnt$RAIZLOGS" | echo true
 
 #Los scripts de GITHUB están en "$RAIZSCRIPTSLIVE/Mint" 
-#Los movemos a /mnt$RAIZSCRIPTS (raiz)
-echo "Moviendo scripts a /mnt$RAIZSCRIPTS desde $RAIZSCRIPTSLIVE/Mint"
-cp $RAIZSCRIPTSLIVE/*.* /mnt$RAIZSCRIPTS/ 
-mv $RAIZSCRIPTSLIVE/Mint/ /mnt$RAIZSCRIPTS/
-
+#Los movemos a /$RAIZMINT (raiz)
+echo "Vuelvo a descargar de git los scripts en /$RAIZMINT desde $RAIZSCRIPTSLIVE/Mint"
+git clone $GITREPO "/$RAIZMINT"
 
 
 
 # Paso 2-SetupSOdesdeLiveCD.sh  
 #Comprobamos que el script existe
-if [ ! -f "/mnt$RAIZSCRIPTS/2-SetupSOdesdeLiveCD.sh" ]; then
-    echorojo "No se encontró el script de configuración: /mnt$RAIZSCRIPTS/2-SetupSOdesdeLiveCD.sh"
+if [ ! -f "/$RAIZMINT/2-SetupSOdesdeLiveCD.sh" ]; then
+    echorojo "No se encontró el script de configuración: /$RAIZMINT/2-SetupSOdesdeLiveCD.sh"
     exit 1
 fi
 #--------------------------------------------------------------------------------------
 echoverde "Ejecutamos 2-SetupSOdesdeLiveCD.sh"
-chmod +x /mnt$RAIZSCRIPTS/2-SetupSOdesdeLiveCD.sh
+chmod +x /$RAIZMINT/2-SetupSOdesdeLiveCD.sh
 chroot /mnt $RAIZSCRIPTS/2-SetupSOdesdeLiveCD.sh 2>&1 | tee /mnt$RAIZLOGS/2-SetupSOdesdeLiveCD.log
 #---------------------------------------------------------------------------------------
 
