@@ -9,7 +9,7 @@ rojo() { echo -e "\033[31m$1\033[0m"; }
 # Verifica si es root
 if [ "$EUID" -ne 0 ]; then
     rojo "Este script debe ejecutarse como root."
-    exit 1
+    sleep 10 && exit 1
 fi
 
 # Verifica que se pasó una ISO
@@ -22,7 +22,7 @@ fi
 # Verifica que la ISO existe
 if [ ! -f "$ISO" ]; then
     rojo "La ISO especificada no existe: $ISO"
-    exit 1
+    sleep 10 && exit 1
 fi
     
 # Verifica que existen utilidades necesarias
@@ -31,13 +31,20 @@ apt install -y xorriso isolinux syslinux-utils
 
 
 #Creamos un directorio temporal para trabajar
-RAIZGIT="iesmhpLinux"
+GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 WORKDIR=$(mktemp -d ./livecd.XXXXXX) && chmod 755 "$WORKDIR"
 #Sobre el directorio de trabajo, creamos los subdirectorios necesarios
+
+#ESTOY AQUÍ!!!!! FALLA!!!
+
+echo "Descarlo los scripts en /$RAIZMINT desde $RAIZSCRIPTSLIVE/Mint"
+RAIZGIT="/$WORKDIR/iesmhp"
+git clone $GITREPO "/$RAIZGIT/"
 MOUNTDIR="$WORKDIR/mount" 
 EXTRACTDIR="$WORKDIR/extract"
 SQUASHFS_DIR="$WORKDIR/squashfs"
 SCRIPT_DIR="$PWD/$RAIZGIT"
+SCRIPT_GIT="$SCRIPT_DIR/0b-GitHub.sh"
 
 #Directorios a crear en el sistema nuevo
 RAIZSCRIPTS="/opt/$RAIZGIT"
@@ -45,9 +52,9 @@ RAIZLOGS="/var/log/$RAIZGIT"
 
 
 # Verifica que existe el script setup.sh
-if [ ! -f "$SCRIPT_DIR/1-SetupLiveCD.sh" ]; then
-    rojo "No se encontró $SCRIPT_DIR/1-SetupLiveCD.sh"
-    exit 1
+if [ ! -f "$SCRIPT_GIT" ]; then
+    rojo "No se encontró $SCRIPT_GIT"
+    sleep 10 && exit 1
 fi
 
 verde "Montando ISO sobre la carpeta $MOUNTDIR ..."

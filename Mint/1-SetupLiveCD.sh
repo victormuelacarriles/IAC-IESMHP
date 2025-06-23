@@ -7,7 +7,7 @@
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
 RAIZSCRIPTS="/opt/iesmhp"
-RAIZLOGS="/var/log/iesmhpLinux"
+RAIZLOGS="/var/log/iesmhp"
 RAIZMINT="/mnt$RAIZSCRIPTS/Mint"
 
 set -e
@@ -176,8 +176,6 @@ mkdir -p "/mnt$RAIZLOGS" | echo true
 #Los movemos a /$RAIZMINT (raiz)
 echo "Vuelvo a descargar de git los scripts en /$RAIZMINT desde $RAIZSCRIPTSLIVE/Mint"
 git clone $GITREPO "/$RAIZMINT"
-
-
 
 # Paso 2-SetupSOdesdeLiveCD.sh  
 #Comprobamos que el script existe

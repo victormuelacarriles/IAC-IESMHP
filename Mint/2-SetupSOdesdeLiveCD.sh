@@ -2,8 +2,9 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
 
-RAIZSCRIPTS="/opt/iesmhpLinux"
-RAIZLOGS="/var/log/iesmhpLinux"
+RAIZSCRIPTS="/opt/iesmhp/"
+RAIZMINT="/$RAIZSCRIPTS/Mint"
+RAIZLOGS="/var/log/iesmhp"
 
 # Funciones de colores
 echoverde() {  
@@ -53,18 +54,7 @@ echo && echo && echo "....Configurado entorno en español"
 # Configure fstab
 
 echo "Configurando /etc/fstab..."
-# #original
-#     DISKS=($(lsblk -dno NAME,SIZE | grep nvme | sort -h -k2 | awk '{print $1}'))
-#     DISK_SMALL="/dev/${DISKS[0]}"
-#     DISK_BIG="/dev/${DISKS[1]}"
-#     # Asignar particiones
-#     EFI="${DISK_SMALL}p1"
-#     SWAP="${DISK_SMALL}p2"
-#     ROOT="${DISK_SMALL}p3"
-#     HOME="${DISK_BIG}p1"
-
-#Parece funcionar con CEIAB pero no con distancia!!!!!!!!!!!!!!!!!!!!!!!!
-
+# Detectar particiones y asignar variables
 EFI=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/boot/efi" {print $1}')
 SWAP=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "[SWAP]" {print $1}')
 ROOT=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/" {print $1}')
@@ -102,16 +92,12 @@ echo "-1 Leyendo mac"
 
 MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
 echo "0-MAC: $MAC"
-#DOING: descargar desde github usuarios autorizados y claves ssh
 mkdir -p /root/.ssh
 echo "1-/root/.ssh creado"
-URL_AUTORIZADOS="https://raw.githubusercontent.com/victormuelacarriles/IAC-IESMHP/refs/heads/main/Autorizados.txt"
-URL_MACS="https://raw.githubusercontent.com/victormuelacarriles/IAC-IESMHP/refs/heads/main/macs.csv"
 LOCAL_MACS="$RAIZSCRIPTS/macs.csv"
-echo "2-variales cargadas / descargando archivos desde GitHub"
-wget --header="Cache-Control: no-cache" -O /root/.ssh/authorized_keys $URL_AUTORIZADOS
-wget --header="Cache-Control: no-cache" -O $LOCAL_MACS $URL_MACS
-
+LOCAL_AUTORIZADOS="$RAIZSCRIPTS/Autorizados.txt"
+cp $LOCAL_AUTORIZADOS /root/.ssh/authorized_keys
+echo "2-Macs y autorizados disponibles"
 
 # Compruebo si la MAC está en el repositorio: si no está, se queda el nombre del equipo por defecto "mint"
 EQUIPOENMACS="mint"
@@ -167,7 +153,6 @@ echoverde "Instalando y configurando el gestor de arranque..."
 ################################################################apt-get install -y grub-efi-amd64
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=MINT
 
-
 #17/06/2025:  al actualizar linux mint 22.1, se quedaba la pantalla negra al arrancar.
 # Por eso añadí la opción "nomodeset" al grub, para que arranque sin problemas gráficos.
     # nomodeset: Esta opción del kernel desactiva el sistema de gestión de modo de vídeo durante el arranque.
@@ -181,7 +166,7 @@ grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=MINT
 #con full-upgrade parece que funciona sin problemas, así que quito nomodeset, pero lo dejo comentado
 #sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash nomodeset"/' /etc/default/grub
 sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash "/' /etc/default/grub
-grep -q "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub || echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash nomodeset"' >> /etc/default/grub
+grep -q "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub || echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"' >> /etc/default/grub
 
 update-grub
 echo && echo && echoverde "...Instalado y configurado el gestor de arranque ( sin nomodeset! si hubiera problemas gráficos, añadirlo manualmente en /etc/default/grub)" 
@@ -200,16 +185,16 @@ echo && echo && echoverde "...Actualizado initramfs"
 
 #Paso 3 : servicio de actualización en primer arranque
 #Compruebo que existe el script de actualización en primer arranque
-if [ ! -f "$RAIZSCRIPTS/3-SetupPrimerInicio.sh" ]; then
-    echorojo "No se encontró el script de actualización en primer arranque: $RAIZSCRIPTS/3-SetupPrimerInicio.sh"
-    exit 1
+if [ ! -f "$RAIZMINT/3-SetupPrimerInicio.sh" ]; then
+    echorojo "No se encontró el script de actualización en primer arranque: $RAIZMINT/3-SetupPrimerInicio.sh"
+    sleep 10 && exit 1
 fi  
 #------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------
 # Creo un servicio para actualizar el sistema en el primer arranque
 echo "Configurando servicio de actualización en primer arranque..."
-chmod +x "$RAIZSCRIPTS/3-SetupPrimerInicio.sh"
+chmod +x "$RAIZMINT/3-SetupPrimerInicio.sh"
 #------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------
@@ -226,7 +211,7 @@ Conflicts=shutdown.target
 [Service]
 Type=always
 Environment=LC_ALL=es_ES.UTF-8
-ExecStart=sudo /bin/bash $RAIZSCRIPTS/3-SetupPrimerInicio.sh
+ExecStart=sudo /bin/bash $RAIZMINT/3-SetupPrimerInicio.sh
 StandardOutput=append: $RAIZLOGS/3-SetupPrimerInicio.log
 StandardError=append: $RAIZLOGS/3-SetupPrimerInicio.log
 TimeoutSec=0
@@ -250,7 +235,7 @@ echo "$CONTENIDOSERVICIO" > /etc/systemd/system/3-SetupPrimerInicio.service
 # [Service]
 # Type=always
 # Environment=LC_ALL=es_ES.UTF-8
-# ExecStart=sudo /bin/bash $RAIZSCRIPTS/3-SetupPrimerInicio.sh
+# ExecStart=sudo /bin/bash $RAIZMINT/3-SetupPrimerInicio.sh
 # StandardOutput=append: $RAIZLOGS/3-SetupPrimerInicio.log
 # StandardError=append: $RAIZLOGS/3-SetupPrimerInicio.log
 # TimeoutSec=0

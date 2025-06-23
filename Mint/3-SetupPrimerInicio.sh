@@ -3,8 +3,8 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
 
-RAIZSCRIPTS="/opt/iesmhpLinux"
-RAIZLOGS="/var/log/iesmhpLinux"
+RAIZSCRIPTS="/opt/iesmhp/Mint"
+RAIZLOGS="/var/log/iesmhp"
 
 #Fichero de log del servicio
 FLOG="$RAIZLOGS/3-SetupPrimerInicio.log"
