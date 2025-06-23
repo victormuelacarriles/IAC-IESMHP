@@ -73,7 +73,7 @@ unsquashfs -d "$SQUASHFS_DIR" "$MOUNTDIR/casper/filesystem.squashfs"
         #ver código al final de este script
 
 verde "Copio el script inicial en la raiz"
-cp "$SCRIPT_GIT" "$EXTRACTDIR/"
+cp "$SCRIPT_GIT" "$SQUASHFS_DIR/"
 
 #Originalmente:
     #verde "Insertando todos los script de configuración '$SCRIPT_DIR/*.sh' en '$SQUASHFS_DIR/root/'"
@@ -86,14 +86,14 @@ verde "Creando servicio autostart del usuario live para ejecutar setup.sh al ini
 AUTOSTART_DIR="$SQUASHFS_DIR/home/mint/.config/autostart"
 mkdir -p "$AUTOSTART_DIR"
 # Crear un .desktop que ejecute setup.sh en un terminal
-CONTENIDOSETUPINICIAL="[Desktop Entry]
+cat <<EOF-AUTOSTART > "$AUTOSTART_DIR/setup.desktop"
+[Desktop Entry]
 Type=Application
 Exec=x-terminal-emulator -e sudo /bin/bash /$NOMBRESCRIPINICIAL
 Name=SetupLiveCD
 Comment=Script de configuración personalizado para el LiveCD
-X-GNOME-Autostart-enabled=true"
-echo $CONTENIDOSETUPINICIAL > "$AUTOSTART_DIR/setup.desktop"
-
+X-GNOME-Autostart-enabled=true
+EOF-AUTOSTART
 
 #        #Desactivamos el servicio de display-manager, para que no se inicie al arrancar la ISO
 #        verde "Desactivando el servicio de display-manager..."
@@ -140,7 +140,6 @@ EOF-NUEVOGRUB
 
 
 verde "Creando nueva ISO personalizada..."
-OUTPUT="Custom_$(basename "$ISO")"
 xorriso -as mkisofs -r -V "$NOMBREISOFINAL" \
     -cache-inodes -J -l \
     -b isolinux/isolinux.bin \
@@ -151,7 +150,7 @@ xorriso -as mkisofs -r -V "$NOMBREISOFINAL" \
     -no-emul-boot \
     -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
     -isohybrid-gpt-basdat \
-    -o "$OUTPUT" "$EXTRACTDIR"
+    -o "$NOMBREISOFINAL.iso" "$EXTRACTDIR"
 verde "ISO personalizada creada con éxito: $OUTPUT"
 
 #mv $OUTPUT /mnt/hgfs/Shared/$OUTPUT
