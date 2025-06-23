@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-VERSION="9"
+VERSION="1.0"
 NOMBREISOFINAL="linux-CEIABD-DISTANCIA-v$VERSION"
 
 
@@ -114,7 +114,7 @@ set color_highlight=black/light-gray
 set timeout=5
 set timeout_style=menu
 set default=0
-menuentry "Instalación 'ON FIRE!' - by Victor Muela  [vs $(date +%Y%m%d-%H%M)]" --class linuxmint {
+menuentry "Instalación 'ON FIRE!' - by Victor Muela  [vs $VERSION $(date +%Y%m%d-%H%M)]" --class linuxmint {
     set gfxpayload=keep
     linux   /casper/vmlinuz  boot=casper username=mint hostname=mint iso-scan/filename=${iso_path} quiet splash nomodeset -- 
     initrd  /casper/initrd.lz
