@@ -151,10 +151,16 @@ echo && echoverde "...Montados sistemas de ficheros"
 # Find the squashfs file (containing the live filesystem)
 SQUASHFS=$(find /cdrom -name "filesystem.squashfs" -o -name "*.squashfs" | head -1)
 
+cp "$SQUASHFS" /tmp/ || {
+    echorojo "No se encontró el archivo filesystem.squashfs en /cdrom"
+    sleep 10 && exit 1
+}
+
 # Mount the squashfs
 echo "Montado sistema squashfs ..."
 mkdir -p /tmp/squashfs
-mount -o loop "$SQUASHFS" /tmp/squashfs
+mount -o loop "/tmp/$SQUASHFS" /tmp/squashfs
+#mount -o loop "$SQUASHFS" /tmp/squashfs
 
 # Copy the filesystem to the target
 echo "Copiando el sistema de archivos..."
@@ -169,8 +175,6 @@ for dir in /dev /proc /sys /run; do
     mount --bind $dir /mnt$dir
 done
 
-#HA FALLADO AQUÍ 23/6/2025
-
 #Por si no existiera, creamos directorio y movemos scripts
 RAIZSCRIPTSDISTRO="/mnt$RAIZSCRIPTS/$DISTRO"
 DISTROLOGS="/mnt$RAIZLOGS" 
@@ -183,7 +187,7 @@ mkdir -p $DISTROLOGS
 echo 
 echo "Moviendo auxiliares a '/mnt$RAIZSCRIPTS' desde '$RAIZSCRIPTSLIVE'" && echo
 cp $RAIZSCRIPTSLIVE/*.* /mnt$RAIZSCRIPTS/ 
-mv $RAIZSCRIPTSLIVE/$DISTRO/ $RAIZSCRIPTSDISTRO
+mv $RAIZSCRIPTSLIVE/$DISTRO/ /mnt$RAIZSCRIPTS
 
 # Paso 2-SetupSOdesdeLiveCD.sh  
 #Comprobamos que el script existe
@@ -209,20 +213,4 @@ else
     sleep 100000
     
 fi
-###
-###
-
-
-#Conexión   (como root/root o mint/mint)
-#ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@10.0.72.42
-
-#quiero ver los ultimos mensajes del log (y que se sigan viendo los nuevos)
-#tail -f /var/log/first-boot-update.log
-
-
-###05/06/2025 18:40  ... el script hace lo que tiene que hacer, 
-# pero se queda negro tras la actualización. Se puede arreglar arrancando como "nomodeset",
-# pero bajaría rendimiento gráfico. (POR INVESTIGAR!!!!)
-
-
 
