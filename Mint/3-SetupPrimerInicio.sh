@@ -56,6 +56,9 @@ echorojo()  {
     
 }
 
+echo "tail -f $FLOG" > /home/usuario/verLog.sh
+chmod +x /home/usuario/verLog.sh
+
 echoverde "Lanzando mensaje en sesiones gráficas activas..." 
 mostrar_mensaje "Actualizando: (SSH no disponible)" 
 echoverde "Ejecutando actualización del sistema en primer arranque en 20sg.." 
