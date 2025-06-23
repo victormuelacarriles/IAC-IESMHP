@@ -3,11 +3,14 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
 
-RAIZSCRIPTS="/opt/iesmhp/Mint"
-RAIZLOGS="/var/log/iesmhp"
+DISTRO="Mint"
+RAIZSCRIPTS="/opt/iesmhp$DISTRO"
+RAIZDISTRO="$RAIZSCRIPTS/$DISTRO"
+RAIZLOGS="/var/log/iesmhp$DISTRO"
+
 
 #Fichero de log del servicio
-FLOG="$RAIZLOGS/3-SetupPrimerInicio.log"
+FLOG="$RAIZLOGS/$0.log"
 
 # Function to show a message to all graphical sessions
 mostrar_mensaje() {
