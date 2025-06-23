@@ -4,7 +4,7 @@ set -e
 
 SCRIPT3="3-SetupPrimerInicio.sh"
 DISTRO="Mint"
-RAIZSCRIPTS="/opt/iesmhpLinux"
+RAIZSCRIPTS="/opt/iesmhp$DISTRO"
 RAIZDISTRO="$RAIZSCRIPTS/$DISTRO"
 RAIZLOGS="/var/log/iesmhp$DISTRO"
 
@@ -88,8 +88,7 @@ echoverde "Eliminando paquetes innecesarios..."
 apt-get remove -y --purge casper ubiquity ubiquity-frontend-* live-boot live-boot-initramfs-tools 
 echo "...Eliminados paquetes innecesarios..."  
 
-
-
+#FALLA AQUí 23/06/2025 19:00
 #Me quedo con la mac de la primera tarjeta de red
 MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
 mkdir -p /root/.ssh
