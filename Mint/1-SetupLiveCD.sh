@@ -147,28 +147,19 @@ echo && echoverde "...Montados sistemas de ficheros"
 
 # Step 3: Copy the live system to the target
 #TODO: acelerar? copiar el filesystem.squashfs a /tmp antes de montar el CD, y luego montarlo desde /tmp 
-
 # Find the squashfs file (containing the live filesystem)
 SQUASHFS=$(find /cdrom -name "filesystem.squashfs" -o -name "*.squashfs" | head -1)
-
-cp "$SQUASHFS" /tmp/ || {
-    echorojo "No se encontró el archivo filesystem.squashfs en /cdrom"
-    sleep 10 && exit 1
-}
-
 # Mount the squashfs
 echo "Montado sistema squashfs ..."
 mkdir -p /tmp/squashfs
-mount -o loop "/tmp/$SQUASHFS" /tmp/squashfs
-#mount -o loop "$SQUASHFS" /tmp/squashfs
-
+mount -o loop "$SQUASHFS" /tmp/squashfs
 # Copy the filesystem to the target
 echo "Copiando el sistema de archivos..."
 rsync -av --exclude=/etc/fstab --exclude=/etc/machine-id /tmp/squashfs/ /mnt/
 echoverde "...Copiado el sistema de archivos desde $SQUASHFS a /mnt"
-
 # Unmount squashfs
 umount /tmp/squashfs
+
 
 # Step 4: Prepare chroot environment
 for dir in /dev /proc /sys /run; do
