@@ -3,12 +3,15 @@
 #      - git clone a /opt/iesmhpLinux
 #      - Logs en     /var/log/iesmhpLinux/*.log 
 #      - Arreglar este script para que acepte parámentros (isoentrada / isosalida)  y que funcione
+set -e
 
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
-RAIZSCRIPTS="/opt/iesmhpLinux"
-RAIZLOGS="/var/log/iesmhpLinux"
-set -e
+DISTRO="Mint"
+RAIZSCRIPTS="/opt/iesmhp$DISTRO"
+RAIZLOGS="/var/log/iesmhp$DISTRO"
+SCRIPT2="2-SetupSOdesdeLiveCD.sh"
+
 # Funciones de colores
 echoverde() {  
     echo -e "\033[32m$1\033[0m" 
@@ -73,6 +76,11 @@ else
     fi
 fi
 
+if [[ "$DISK_SMALL" != *nvme* ]]; then
+    echorojo "#Error: se esperaba un disco NVMe para el disco pequeño"
+    exit 1
+fi
+
 echo && echo "Borrando y particionando discos: $DISK_SMALL y $DISK_BIG"
 lsblk -o NAME,SIZE,TYPE
 # Borrar particiones antiguas
@@ -94,11 +102,6 @@ echo && echoverde "...Borrados y particidos los discos: $DISK_SMALL y $DISK_BIG"
 echo && echo "Esperando a que el kernel detecte los cambios..." && sleep 5 
 
 # Asignar particiones
-if [[ "$DISK_SMALL" != *nvme* ]]; then
-    echorojo "#Error: se esperaba un disco NVMe para el disco pequeño"
-    exit 1
-fi
-
 EFI="${DISK_SMALL}p1"
 SWAP="${DISK_SMALL}p2"
 ROOT="${DISK_SMALL}p3"
@@ -124,7 +127,7 @@ mkfs.ext4 -F "$HOME" >/dev/null
 # Comprobar que las particiones se han formateado correctamente
 if ! blkid "$EFI" || ! blkid "$SWAP" || ! blkid "$ROOT" || ! blkid "$HOME"; then
     echorojo "#Error: no se pudieron formatear las particiones"
-    exit 1
+    sleep 10 && exit 1
 else
     #TODO: comprobar que las particiones son del tipo correcto
     echoverde "...Formateadas correctamente las particiones"
@@ -166,34 +169,38 @@ for dir in /dev /proc /sys /run; do
     mount --bind $dir /mnt$dir
 done
 
+#HA FALLADO AQUÍ 23/6/2025
+
 #Por si no existiera, creamos directorio y movemos scripts
-mkdir -p "/$RAIZMINT" | echo true
-mkdir -p "/mnt$RAIZLOGS" | echo true
+RAIZSCRIPTSDISTRO="/mnt$RAIZSCRIPTS/$DISTRO"
+DISTROLOGS="/mnt$RAIZLOGS" 
+mkdir -p $RAIZSCRIPTSDISTRO
+mkdir -p $DISTROLOGS
+
 
 #Los scripts de GITHUB están en "$RAIZSCRIPTSLIVE/Mint" 
 #Los movemos a /mnt$RAIZSCRIPTS (raiz)
-echo "Moviendo scripts a /mnt$RAIZSCRIPTS desde $RAIZSCRIPTSLIVE/Mint"
+echo 
+echo "Moviendo auxiliares a '/mnt$RAIZSCRIPTS' desde '$RAIZSCRIPTSLIVE'" && echo
 cp $RAIZSCRIPTSLIVE/*.* /mnt$RAIZSCRIPTS/ 
-mv $RAIZSCRIPTSLIVE/Mint/ /mnt$RAIZSCRIPTS/
-
-
-
+mv $RAIZSCRIPTSLIVE/$DISTRO/ $RAIZSCRIPTSDISTRO
 
 # Paso 2-SetupSOdesdeLiveCD.sh  
 #Comprobamos que el script existe
-if [ ! -f "/$RAIZMINT/2-SetupSOdesdeLiveCD.sh" ]; then
-    echorojo "No se encontró el script de configuración: /$RAIZMINT/2-SetupSOdesdeLiveCD.sh"
-    exit 1
+if [ ! -f "$RAIZSCRIPTSDISTRO/$SCRIPT2" ]; then
+    echorojo "No se encontró el script de configuración: $RAIZSCRIPTSDISTRO/$SCRIPT2"
+    sleep 10 && exit 1
+else
+    chmod +x /$RAIZSCRIPTSDISTRO/*.sh
 fi
 #--------------------------------------------------------------------------------------
-echoverde "Ejecutamos 2-SetupSOdesdeLiveCD.sh"
-chmod +x /$RAIZMINT/2-SetupSOdesdeLiveCD.sh
-chroot /mnt $RAIZSCRIPTS/2-SetupSOdesdeLiveCD.sh 2>&1 | tee /mnt$RAIZLOGS/2-SetupSOdesdeLiveCD.log
+echoverde "Ejecutamos $SCRIPT2 en el entorno chroot... ($RAIZSCRIPTS/$SCRIPT2)"
+chroot /mnt $RAIZSCRIPTS/$DISTRO/$SCRIPT2 2>&1 | tee $DISTROLOGS/$SCRIPT2.log
 #---------------------------------------------------------------------------------------
 
 echo && echo 
 # Check installation result
-if [[ $(tail -n 1 /mnt$RAIZLOGS/2-SetupSOdesdeLiveCD.log) == "Correcto" ]]; then
+if [[ $(tail -n 1 $DISTROLOGS/$SCRIPT2.log) == "Correcto" ]]; then
     echo -e "\e[32mInstalación completada. Reinicia el sistema para iniciar Linux Mint.\e[0m"
     sleep 10 && reboot
 else

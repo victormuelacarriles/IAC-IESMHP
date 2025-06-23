@@ -2,9 +2,12 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
 
-RAIZSCRIPTS="/opt/iesmhp/"
-RAIZMINT="/$RAIZSCRIPTS/Mint"
-RAIZLOGS="/var/log/iesmhp"
+SCRIPT3="3-SetupPrimerInicio.sh"
+DISTRO="Mint"
+RAIZSCRIPTS="/opt/iesmhpLinux"
+RAIZDISTRO="$RAIZSCRIPTS/$DISTRO"
+RAIZLOGS="/var/log/iesmhp$DISTRO"
+
 
 # Funciones de colores
 echoverde() {  
@@ -82,22 +85,18 @@ done
 # Remove live-specific packages and configurations
 echoverde "Eliminando paquetes innecesarios..."
 #apt-get update
-apt-get remove -y --purge casper ubiquity ubiquity-frontend-* live-boot live-boot-initramfs-tools 2>&1 1>/var/log/2-SetupSOdesdeLiveCD.log
+apt-get remove -y --purge casper ubiquity ubiquity-frontend-* live-boot live-boot-initramfs-tools 
 echo "...Eliminados paquetes innecesarios..."  
 
 
 
 #Me quedo con la mac de la primera tarjeta de red
-echo "-1 Leyendo mac"
-
 MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
-echo "0-MAC: $MAC"
 mkdir -p /root/.ssh
-echo "1-/root/.ssh creado"
 LOCAL_MACS="$RAIZSCRIPTS/macs.csv"
 LOCAL_AUTORIZADOS="$RAIZSCRIPTS/Autorizados.txt"
 cp $LOCAL_AUTORIZADOS /root/.ssh/authorized_keys
-echo "2-Macs y autorizados disponibles"
+echoverde "...Leida Mac y autorizados equipos de gestión por SSH"
 
 # Compruebo si la MAC está en el repositorio: si no está, se queda el nombre del equipo por defecto "mint"
 EQUIPOENMACS="mint"
@@ -185,8 +184,8 @@ echo && echo && echoverde "...Actualizado initramfs"
 
 #Paso 3 : servicio de actualización en primer arranque
 #Compruebo que existe el script de actualización en primer arranque
-if [ ! -f "$RAIZMINT/3-SetupPrimerInicio.sh" ]; then
-    echorojo "No se encontró el script de actualización en primer arranque: $RAIZMINT/3-SetupPrimerInicio.sh"
+if [ ! -f "$RAIZDISTRO/$SCRIPT3" ]; then
+    echorojo "No se encontró el script de actualización en primer arranque: $RAIZDISTRO/$SCRIPT3"
     sleep 10 && exit 1
 fi  
 #------------------------------------------------------------------------------------------
@@ -194,7 +193,7 @@ fi
 #------------------------------------------------------------------------------------------
 # Creo un servicio para actualizar el sistema en el primer arranque
 echo "Configurando servicio de actualización en primer arranque..."
-chmod +x "$RAIZMINT/3-SetupPrimerInicio.sh"
+chmod +x "$RAIZDISTRO/$SCRIPT3"
 #------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------
@@ -211,9 +210,9 @@ Conflicts=shutdown.target
 [Service]
 Type=always
 Environment=LC_ALL=es_ES.UTF-8
-ExecStart=sudo /bin/bash $RAIZMINT/3-SetupPrimerInicio.sh
-StandardOutput=append: $RAIZLOGS/3-SetupPrimerInicio.log
-StandardError=append: $RAIZLOGS/3-SetupPrimerInicio.log
+ExecStart=sudo /bin/bash $RAIZDISTRO/$SCRIPT3 | tee -a $RAIZLOGS/$SCRIPT3.log
+StandardOutput=append: $RAIZLOGS/$SCRIPT3.log
+StandardError=append: $RAIZLOGS/$SCRIPT3.log
 TimeoutSec=0
 RemainAfterExit=yes
 
@@ -222,30 +221,7 @@ WantedBy=multi-user.target"
 
 #Vuelco la variable $CONTENIDOSERVICIO en el fichero /etc/systemd/system/3-SetupPrimerInicio.service
 echo "$CONTENIDOSERVICIO" > /etc/systemd/system/3-SetupPrimerInicio.service
-
-# # Create the systemd service
-# cat > /etc/systemd/system/3-SetupPrimerInicio.service << 'EOF'
-# [Unit]
-# Description=3-SetupPrimerInicio
-# DefaultDependencies=no
-# Wants=network-online.target
-# After=network-online.target graphical.target
-# Conflicts=shutdown.target
-
-# [Service]
-# Type=always
-# Environment=LC_ALL=es_ES.UTF-8
-# ExecStart=sudo /bin/bash $RAIZMINT/3-SetupPrimerInicio.sh
-# StandardOutput=append: $RAIZLOGS/3-SetupPrimerInicio.log
-# StandardError=append: $RAIZLOGS/3-SetupPrimerInicio.log
-# TimeoutSec=0
-# RemainAfterExit=yes
-
-# [Install]
-# WantedBy=multi-user.target
-# EOF
-
-# Enable the service
+# Habilito el servicio
 systemctl enable 3-SetupPrimerInicio.service
 echo && echo && echoverde "...Servicio de actualización en primer arranque configurado." 
 echo && echo "Correcto"

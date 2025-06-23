@@ -16,10 +16,12 @@ echoverde() {
 
 echoverde "($0) $RAIZLOG"
 
-echoverde "En español (si se puede) y con usuario mint:mint por si hay que depurar"
+echoverde "En español (si se puede) y con usuarios mint:mint root:root por si hay que depurar"
 setxkbmap es || true && loadkeys es ||true
 echo "mint:prov" | chpasswd
+echo "root:prov" | chpasswd
 echo "mint:mint" | chpasswd
+echo "root:root" | chpasswd
 
 echoverde "Actualizamos..."
 rm /etc/apt/sources.list 2>/dev/null || true
@@ -33,11 +35,10 @@ git clone $GITREPO $RAIZSCRIPTSLIVE 2>&1 | tee -a $LOG0
 chmod +x $RAIZSCRIPTSLIVE/Mint/*.sh
 mkdir -p $RAIZLOG 2>&1 | tee -a $LOG0
 
-echoverde "ultimo ($0) $RAIZLOG"
-LOGSig="$RAIZLOG/$SCRIPT1NOMBRE.log"
-echoverde "Ejecutamos $SCRIPT1 (log en $LOGSig)..."
 
-/bin/bash ./$SCRIPT1 2>&1 | tee -a $LOGSig
+LOGSig="$RAIZLOG/$SCRIPT1NOMBRE.log"
+echoverde "Ejecutamos $SCRIPT1 (log en $LOGSig)..." | tee -a $LOG0
+/bin/bash ./$SCRIPT1 2>&1 | tee -a $LOGSig || tee -a $LOG0
 
 
 
