@@ -22,7 +22,7 @@ mostrar_mensaje() {
     IP=$(hostname -I | awk '{print $1}')
     MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
 
-    local IPMAC="[ $MAC ]  -  $(hostname)\n\n$FLOG)"
+    local IPMAC="[ $MAC ]  -  $(hostname)\n\n$FLOG\nó $VELOGSCRIPT"
     MENSAJE="$MENSAJE\n\n$IPMAC"
     while read -r sid; do
         USERNAME=$(loginctl show-session "$sid" -p Name --value)
