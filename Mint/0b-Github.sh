@@ -39,7 +39,7 @@ mkdir -p $RAIZLOG 2>&1 | tee -a $LOG0
 
 LOGSig="$RAIZLOG/$SCRIPT1NOMBRE.log"
 echoverde "Ejecutamos $SCRIPT1 (log en $LOGSig)..." | tee -a $LOG0
-/bin/bash ./$SCRIPT1 2>&1 | tee -a $LOGSig || tee -a $LOG0
+/bin/bash $SCRIPT1 2>&1 | tee -a $LOGSig || tee -a $LOG0
 
 #TODO: comprobación final de errores
 
