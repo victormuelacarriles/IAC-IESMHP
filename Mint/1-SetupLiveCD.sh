@@ -4,7 +4,7 @@
 #      - Logs en     /var/log/iesmhpLinux/*.log 
 #      - Arreglar este script para que acepte parámentros (isoentrada / isosalida)  y que funcione
 
-
+RAIZSCRIPTSLIVE="/LiveCDiesmhp"
 RAIZSCRIPTS="/opt/iesmhpLinux"
 RAIZLOGS="/var/log/iesmhpLinux"
 set -e
@@ -15,9 +15,9 @@ echoverde() {
 echorojo()  {
       echo -e "\033[31m$1\033[0m" 
 }  
-#Por si hay que depurar, establecemos español y quitamos source list
+#Por si hay que depurar, establecemos español 
 setxkbmap es
-mv /etc/apt/sources.list /sources.list.bak
+
 
 
 clear
@@ -36,11 +36,7 @@ echorojo "                                                  (comenzará en 10sg)
 echoverde "--------------------------------------------------------------------"
 sleep 9
 
-# Detectamos discos 
-
-#TODO: hay que ignorar los discos que sea USB (pendrives, etc)
-
-
+# Detectamos discos (ignorando los discos USB y loop0)
 DISCOS_M2=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0| grep -v 'usb'| grep nvme | sort -h -k2 | awk '{print $1}'))
 DISCOS_SD=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0| grep -v 'usb'| grep sd | sort -h -k2 | awk '{print $1}'))
 lsblk -dno NAME,SIZE | grep -v '^loop0'
@@ -145,9 +141,9 @@ swapon "$SWAP"
 lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
 echo && echoverde "...Montados sistemas de ficheros" 
 
-
-
 # Step 3: Copy the live system to the target
+#TODO: acelerar? copiar el filesystem.squashfs a /tmp antes de montar el CD, y luego montarlo desde /tmp 
+
 # Find the squashfs file (containing the live filesystem)
 SQUASHFS=$(find /cdrom -name "filesystem.squashfs" -o -name "*.squashfs" | head -1)
 
@@ -168,14 +164,19 @@ umount /tmp/squashfs
 for dir in /dev /proc /sys /run; do
     mount --bind $dir /mnt$dir
 done
+
 #Por si no existiera, creamos directorio y movemos scripts
 mkdir -p "/mnt$RAIZSCRIPTS" | echo true
 mkdir -p "/mnt$RAIZLOGS" | echo true
-#Si hay algún script en la raíz del live, lo movemos a /opt/iesmhpLinux
-if [ -f /*.sh ]; then
-    echo "Moviendo scripts a /mnt$RAIZSCRIPTS"
-    mv /*.sh "/mnt$RAIZSCRIPTS/" | echo true
-fi
+
+#Los scripts de GITHUB están en "$RAIZSCRIPTSLIVE/Mint" 
+#Los movemos a /mnt$RAIZSCRIPTS (raiz)
+echo "Moviendo scripts a /mnt$RAIZSCRIPTS desde $RAIZSCRIPTSLIVE/Mint"
+cp $RAIZSCRIPTSLIVE/*.* /mnt$RAIZSCRIPTS/ 
+mv $RAIZSCRIPTSLIVE/Mint/ /mnt$RAIZSCRIPTS/
+
+
+
 
 # Paso 2-SetupSOdesdeLiveCD.sh  
 #Comprobamos que el script existe
