@@ -4,36 +4,40 @@
 set -e
 
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
-SCRIPT0="$RAIZSCRIPTSLIVE/Mint/1-SetupLiveCD.sh"
+SCRIPT1NOMBRE="1-SetupLiveCD.sh"
+SCRIPT1="$RAIZSCRIPTSLIVE/Mint/$SCRIPT1NOMBRE"
 RAIZLOG="/var/log/iesmhpLinux"
+LOG0="$RAIZLOG/$0.log"
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 mkdir -p $RAIZLOG
 echoverde() {
     echo -e "\033[32m$1\033[0m"
 }
 
-echoverde "($0)"
+echoverde "($0) $RAIZLOG"
 
-echo "En español (si se puede) y con usuario mint:mint por si hay que depurar"
+echoverde "En español (si se puede) y con usuario mint:mint por si hay que depurar"
 setxkbmap es || true && loadkeys es ||true
-
 echo "mint:prov" | chpasswd
 echo "mint:mint" | chpasswd
 
 echoverde "Actualizamos..."
 rm /etc/apt/sources.list 2>/dev/null || true
-apt-get update 2>&1 | tee -a $RAIZLOG/$0.log
+apt-get update 2>&1 | tee -a $LOG0
 
 echoverde "Instalamos ssh y git"
-apt-get install -y ssh git 2>&1 | tee -a $RAIZLOG/$0.log
+apt-get install -y ssh git 2>&1 | tee -a $LOG0
 
 rm -r $RAIZSCRIPTSLIVE 2>/dev/null || true
-git clone $GITREPO $RAIZSCRIPTSLIVE 2>&1 | tee -a $RAIZLOG/$0.log
+git clone $GITREPO $RAIZSCRIPTSLIVE 2>&1 | tee -a $LOG0
 chmod +x $RAIZSCRIPTSLIVE/Mint/*.sh
-mkdir -p $RAIZLOG 2>&1 | tee -a $RAIZLOG/$0.log
+mkdir -p $RAIZLOG 2>&1 | tee -a $LOG0
 
-echoverde "Ejecutamos $SCRIPT0..."
-/bin/bash $SCRIPT0 2>&1 | tee -a $RAIZLOG/$SCRIPT0.log
+echoverde "ultimo ($0) $RAIZLOG"
+LOGSig="$RAIZLOG/$SCRIPT1NOMBRE.log"
+echoverde "Ejecutamos $SCRIPT1 (log en $LOGSig)..."
+
+/bin/bash $SCRIPT0 2>&1 | tee -a $LOGS0
 
 
 
