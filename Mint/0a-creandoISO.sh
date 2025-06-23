@@ -157,5 +157,3 @@ verde "ISO personalizada creada con éxito: $OUTPUT"
 verde "Desmonto $EXTRACTDIR ..."
 umount -l "$MOUNTDIR"
 rm -rf "$WORKDIR"
-
-#Inicio 20:17
