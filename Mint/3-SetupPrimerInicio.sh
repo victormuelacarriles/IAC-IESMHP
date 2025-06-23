@@ -10,6 +10,7 @@ RAIZLOGS="/var/log/iesmhp$DISTRO"
 
 SCRIPT4="$RAIZSCRIPTS/$DISTRO/utiles/NombreIP.sh"
 
+VERLOGSCRIPT="/home/usuario/verLog.sh"
 
 #Fichero de log del servicio
 FLOG="$RAIZLOGS/$SCRIPT3.log"
@@ -56,8 +57,8 @@ echorojo()  {
     
 }
 
-echo "tail -f $FLOG" > /home/usuario/verLog.sh
-chmod +x /home/usuario/verLog.sh
+echo "tail -f $FLOG" > $VERLOGSCRIPT
+chmod +x $VERLOGSCRIPT
 
 echoverde "Lanzando mensaje en sesiones gráficas activas..." 
 mostrar_mensaje "Actualizando: (SSH no disponible)" 
@@ -109,6 +110,7 @@ systemctl disable 3-SetupPrimerInicio.service
 rm /etc/systemd/system/3-SetupPrimerInicio.service
 rm -- "$0"
 
+
 mostrar_mensaje "Intentamos cambiar IP y nombre de nuevo"
 /bin/bash "$SCRIPT4"  >> $FLOG 
 
@@ -118,5 +120,6 @@ mostrar_mensaje "Sistema actualizado. SSH root/root"
 
 echoverde "Reiniciando el sistema en 30 segundos..." >> $FLOG
 sleep 30
+rm $VERLOGSCRIPT
 echo "Reiniciando el sistema..." >> $FLOG
 reboot now
