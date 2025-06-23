@@ -30,7 +30,7 @@ rm /etc/apt/sources.list 2>/dev/null || true
 apt-get update 2>&1 | tee -a $LOG0
 
 echoverde "Instalamos ssh y git"
-apt-get install -y ssh git 2>&1 | tee -a $LOG0
+apt-get install -y ssh git beep 2>&1 | tee -a $LOG0
 
 rm -r $RAIZSCRIPTSLIVE 2>/dev/null || true
 git clone $GITREPO $RAIZSCRIPTSLIVE 2>&1 | tee -a $LOG0

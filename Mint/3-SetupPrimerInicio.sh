@@ -66,7 +66,7 @@ apt-get update --fix-missing >> $FLOG
 
 #Instalado SSH server
 echoverde "Instalando servidor SSH y limpiando..."
-apt-get install -y ssh >> $FLOG
+apt-get install -y ssh beep >> $FLOG
 # Configurar SSH para permitir el acceso root
 sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 # Reiniciar el servicio SSH para aplicar los cambios
