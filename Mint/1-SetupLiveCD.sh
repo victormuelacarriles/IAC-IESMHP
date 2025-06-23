@@ -17,7 +17,7 @@ echorojo()  {
       echo -e "\033[31m$1\033[0m" 
 }  
 #Por si hay que depurar, establecemos español 
-setxkbmap es
+setxkbmap es || true
 
 
 
