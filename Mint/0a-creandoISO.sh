@@ -2,6 +2,7 @@
 set -e
 
 
+
 # Funciones de colores
 verde() { echo -e "\033[32m$1\033[0m"; }
 rojo() { echo -e "\033[31m$1\033[0m"; }
@@ -31,25 +32,23 @@ apt install -y xorriso isolinux syslinux-utils
 
 
 #Creamos un directorio temporal para trabajar
-GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
+
 WORKDIR=$(mktemp -d ./livecd.XXXXXX) && chmod 755 "$WORKDIR"
 #Sobre el directorio de trabajo, creamos los subdirectorios necesarios
-
-#ESTOY AQUÍ!!!!! FALLA!!!
-
-echo "Descarlo los scripts en /$RAIZMINT desde $RAIZSCRIPTSLIVE/Mint"
-RAIZGIT="/$WORKDIR/iesmhp"
-git clone $GITREPO "/$RAIZGIT/"
+GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
+RAIZGIT="$WORKDIR/iesmhp"
 MOUNTDIR="$WORKDIR/mount" 
 EXTRACTDIR="$WORKDIR/extract"
 SQUASHFS_DIR="$WORKDIR/squashfs"
-SCRIPT_DIR="$PWD/$RAIZGIT"
-SCRIPT_GIT="$SCRIPT_DIR/0b-GitHub.sh"
-
-#Directorios a crear en el sistema nuevo
+SCRIPT_GIT="$RAIZGIT/Mint/0b-Github.sh"
 RAIZSCRIPTS="/opt/$RAIZGIT"
 RAIZLOGS="/var/log/$RAIZGIT"
 
+#ESTOY AQUÍ!!!!! FALLA!!!
+
+echo "Descargo los scripts en /$RAIZMINT desde $RAIZSCRIPTSLIVE/Mint"
+git clone $GITREPO "$RAIZGIT/"
+#Directorios a crear en el sistema nuevo
 
 # Verifica que existe el script setup.sh
 if [ ! -f "$SCRIPT_GIT" ]; then
