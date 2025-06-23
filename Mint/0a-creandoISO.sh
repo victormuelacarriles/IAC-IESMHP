@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+VERSION="7"
+NOMBREISOFINAL="linux-CEIABD-DISTANCIA-v$VERSION"
 
 
 # Funciones de colores
@@ -40,7 +42,8 @@ RAIZGIT="$WORKDIR/iesmhp"
 MOUNTDIR="$WORKDIR/mount" 
 EXTRACTDIR="$WORKDIR/extract"
 SQUASHFS_DIR="$WORKDIR/squashfs"
-SCRIPT_GIT="$RAIZGIT/Mint/0b-Github.sh"
+NOMBRESCRIPINICIAL="0b-Github.sh"
+SCRIPT_GIT="$RAIZGIT/Mint/$NOMBRESCRIPINICIAL"
 RAIZSCRIPTS="/opt/$RAIZGIT"
 RAIZLOGS="/var/log/$RAIZGIT"
 
@@ -69,24 +72,28 @@ unsquashfs -d "$SQUASHFS_DIR" "$MOUNTDIR/casper/filesystem.squashfs"
         # #TODO: ejecutando sobre la / de squash, actualizar el sistema (y ponerlo en español)
         #ver código al final de este script
 
-verde "Insertando todos los script de configuración '$SCRIPT_DIR/*.sh' en '$SQUASHFS_DIR/root/'"
-mkdir -p "$SQUASHFS_DIR$RAIZSCRIPTS"
-rsync -ar "$SCRIPT_DIR/" "$SQUASHFS_DIR$RAIZSCRIPTS"
-chmod +x "$SQUASHFS_DIR$RAIZSCRIPTS/"*.sh
+verde "Copio el script inicial en la raiz"
+cp "$SCRIPT_GIT" "$EXTRACTDIR/"
+
+#Originalmente:
+    #verde "Insertando todos los script de configuración '$SCRIPT_DIR/*.sh' en '$SQUASHFS_DIR/root/'"
+    #mkdir -p "$SQUASHFS_DIR$RAIZSCRIPTS"
+    #rsync -ar "$SCRIPT_DIR/" "$SQUASHFS_DIR$RAIZSCRIPTS"
+    #chmod +x "$SQUASHFS_DIR$RAIZSCRIPTS/"*.sh
 
 
 verde "Creando servicio autostart del usuario live para ejecutar setup.sh al iniciar sesión..."
 AUTOSTART_DIR="$SQUASHFS_DIR/home/mint/.config/autostart"
 mkdir -p "$AUTOSTART_DIR"
 # Crear un .desktop que ejecute setup.sh en un terminal
-cat <<EOF > "$AUTOSTART_DIR/setup.desktop"
-[Desktop Entry]
+CONTENIDOSETUPINICIAL="[Desktop Entry]
 Type=Application
-Exec=x-terminal-emulator -e sudo /bin/bash $RAIZSCRIPTS/1-SetupLiveCD.sh
+Exec=x-terminal-emulator -e sudo /bin/bash /$NOMBRESCRIPINICIAL
 Name=SetupLiveCD
 Comment=Script de configuración personalizado para el LiveCD
-X-GNOME-Autostart-enabled=true
-EOF
+X-GNOME-Autostart-enabled=true"
+echo $CONTENIDOSETUPINICIAL > "$AUTOSTART_DIR/setup.desktop"
+
 
 #        #Desactivamos el servicio de display-manager, para que no se inicie al arrancar la ISO
 #        verde "Desactivando el servicio de display-manager..."
@@ -131,9 +138,10 @@ EOF-NUEVOGRUB
 #TODO!
 
 
+
 verde "Creando nueva ISO personalizada..."
 OUTPUT="Custom_$(basename "$ISO")"
-xorriso -as mkisofs -r -V "Custom_LiveCD" \
+xorriso -as mkisofs -r -V "$NOMBREISOFINAL" \
     -cache-inodes -J -l \
     -b isolinux/isolinux.bin \
     -c isolinux/boot.cat \
