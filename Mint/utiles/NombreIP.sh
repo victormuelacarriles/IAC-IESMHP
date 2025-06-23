@@ -2,8 +2,11 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
 
-RAIZSCRIPTS="/opt/iesmhpLinux"
-RAIZLOGS="/var/log/iesmhpLinux"
+DISTRO="Mint"
+RAIZSCRIPTS="/opt/iesmhp$DISTRO"
+RAIZLOGS="/var/log/iesmhp$DISTRO"
+
+mkdir -p "$RAIZSCRIPTS" "$RAIZLOGS"
 
 # Funciones de colores
 echoverde() {  

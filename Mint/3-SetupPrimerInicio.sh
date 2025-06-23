@@ -8,6 +8,7 @@ RAIZSCRIPTS="/opt/iesmhp$DISTRO"
 RAIZDISTRO="$RAIZSCRIPTS/$DISTRO"
 RAIZLOGS="/var/log/iesmhp$DISTRO"
 
+SCRIPT4="$RAIZSCRIPTS/$DISTRO/utiles/NombreIP.sh"
 
 #Fichero de log del servicio
 FLOG="$RAIZLOGS/$SCRIPT3.log"
@@ -100,10 +101,14 @@ echoverde "Desactivando y borrando el servicio de actualización en primer arran
 systemctl disable 3-SetupPrimerInicio.service
 rm /etc/systemd/system/3-SetupPrimerInicio.service
 rm -- "$0"
+
+mostrar_mensaje "Intentamos cambiar IP y nombre de nuevo (segun MACS de github) Disponible SSH root/root en $IP ($(hostname)). (log en $FLOG)"
+/bin/bash "$SCRIPT4"  >> $FLOG 
+
+IP=$(hostname -I | awk '{print $1}')
+#Reinciando en 30 segundos y avisando a los usuarios
 mostrar_mensaje "Sistema actualizado $IP ($(hostname)). Disponible SSH root/root en $IP ($(hostname)). (log en $FLOG) El sistema se reiniciará en 30 segundos. " 30
 
-
-#Reinciando en 30 segundos y avisando a los usuarios
 echoverde "Reiniciando el sistema en 30 segundos..." >> $FLOG
 sleep 30
 echo "Reiniciando el sistema..." >> $FLOG
