@@ -2,11 +2,11 @@
 #Script que descarga desde GIT la última versión de los scripts de instalación de IESMHP
 #y los copia a /LiveCDiesmhp, y ejecuta el script de configuración del LiveCD
 set -e
-
-RAIZSCRIPTSLIVE="/LiveCDiesmhp"
 SCRIPT1NOMBRE="1-SetupLiveCD.sh"
-SCRIPT1="$RAIZSCRIPTSLIVE/Mint/$SCRIPT1NOMBRE"
-RAIZLOG="/var/log/iesmhpLinux"
+DISTRO="Mint"
+RAIZSCRIPTSLIVE="/LiveCDiesmhp"
+SCRIPT1="$RAIZSCRIPTSLIVE/$DISTRO/$SCRIPT1NOMBRE"
+RAIZLOG="/var/log/iesmhp$DISTRO"
 LOG0="$RAIZLOG/$0.log"
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 mkdir -p $RAIZLOG
