@@ -6,10 +6,8 @@
 
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
-RAIZSCRIPTS="/opt/iesmhp"
-RAIZLOGS="/var/log/iesmhp"
-RAIZMINT="/mnt$RAIZSCRIPTS/Mint"
-
+RAIZSCRIPTS="/opt/iesmhpLinux"
+RAIZLOGS="/var/log/iesmhpLinux"
 set -e
 # Funciones de colores
 echoverde() {  
@@ -173,9 +171,13 @@ mkdir -p "/$RAIZMINT" | echo true
 mkdir -p "/mnt$RAIZLOGS" | echo true
 
 #Los scripts de GITHUB están en "$RAIZSCRIPTSLIVE/Mint" 
-#Los movemos a /$RAIZMINT (raiz)
-echo "Vuelvo a descargar de git los scripts en /$RAIZMINT desde $RAIZSCRIPTSLIVE/Mint"
-git clone $GITREPO "/$RAIZMINT"
+#Los movemos a /mnt$RAIZSCRIPTS (raiz)
+echo "Moviendo scripts a /mnt$RAIZSCRIPTS desde $RAIZSCRIPTSLIVE/Mint"
+cp $RAIZSCRIPTSLIVE/*.* /mnt$RAIZSCRIPTS/ 
+mv $RAIZSCRIPTSLIVE/Mint/ /mnt$RAIZSCRIPTS/
+
+
+
 
 # Paso 2-SetupSOdesdeLiveCD.sh  
 #Comprobamos que el script existe
