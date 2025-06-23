@@ -2,7 +2,7 @@
 
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
-
+SCRIPT3="3-SetupPrimerInicio.sh"
 DISTRO="Mint"
 RAIZSCRIPTS="/opt/iesmhp$DISTRO"
 RAIZDISTRO="$RAIZSCRIPTS/$DISTRO"
@@ -10,7 +10,7 @@ RAIZLOGS="/var/log/iesmhp$DISTRO"
 
 
 #Fichero de log del servicio
-FLOG="$RAIZLOGS/$0.log"
+FLOG="$RAIZLOGS/$SCRIPT3.log"
 
 # Function to show a message to all graphical sessions
 mostrar_mensaje() {
@@ -32,20 +32,26 @@ mostrar_mensaje() {
     done < <(loginctl list-sessions --no-legend | awk '{print $1}')
 }
 
-echoverde() {  
+echoverde() {
+    local MENSAJE_EN_GUI="${3:-'N'}"  
     echo -e "\033[32m$1\033[0m" 
     echo $1 >> $FLOG
-    mostrar_mensaje "$1"
+    if [[ "$MENSAJE_EN_GUI" == "S" ]]; then
+        mostrar_mensaje "$1"
+    fi
 }
 echorojo()  {
+    
     echo -e "\033[31m$1\033[0m"
     echo $1 >> $FLOG 
-    mostrar_mensaje "ROJO - $1"
+    
+    mostrar_mensaje "ERROR!!! :  $1"
+    
 }
 
-echoverde "Lanzando mensaje en sesiones gráficas activas..."
+echoverde "Lanzando mensaje en sesiones gráficas activas..." 
 mostrar_mensaje "Actualizando Sistema: no apagar. (log en $FLOG)"  
-echoverde "Ejecutando actualización del sistema en primer arranque en 20sg.."
+echoverde "Ejecutando actualización del sistema en primer arranque en 20sg.." 
 sleep 20 # Espera 20 segundos para asegurar que el sistema esté completamente arrancado
 
 

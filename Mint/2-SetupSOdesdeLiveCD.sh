@@ -209,7 +209,7 @@ Conflicts=shutdown.target
 [Service]
 Type=always
 Environment=LC_ALL=es_ES.UTF-8
-ExecStart=sudo /bin/bash $RAIZDISTRO/$SCRIPT3 | tee -a $RAIZLOGS/$SCRIPT3.log
+ExecStart=sudo /bin/bash $RAIZDISTRO/$SCRIPT3 
 StandardOutput=append: $RAIZLOGS/$SCRIPT3.log
 StandardError=append: $RAIZLOGS/$SCRIPT3.log
 TimeoutSec=0
