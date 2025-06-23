@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-VERSION="7"
+VERSION="8"
 NOMBREISOFINAL="linux-CEIABD-DISTANCIA-v$VERSION"
 
 
@@ -46,8 +46,6 @@ NOMBRESCRIPINICIAL="0b-Github.sh"
 SCRIPT_GIT="$RAIZGIT/Mint/$NOMBRESCRIPINICIAL"
 RAIZSCRIPTS="/opt/$RAIZGIT"
 RAIZLOGS="/var/log/$RAIZGIT"
-
-#ESTOY AQUÍ!!!!! FALLA!!!
 
 echo "Descargo los scripts en /$RAIZMINT desde $RAIZSCRIPTSLIVE/Mint"
 git clone $GITREPO "$RAIZGIT/"

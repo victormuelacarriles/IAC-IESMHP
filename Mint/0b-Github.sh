@@ -37,7 +37,7 @@ echoverde "ultimo ($0) $RAIZLOG"
 LOGSig="$RAIZLOG/$SCRIPT1NOMBRE.log"
 echoverde "Ejecutamos $SCRIPT1 (log en $LOGSig)..."
 
-/bin/bash $SCRIPT0 2>&1 | tee -a $LOGS0
+/bin/bash ./$SCRIPT1 2>&1 | tee -a $LOGSig
 
 
 
