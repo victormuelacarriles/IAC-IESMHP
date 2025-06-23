@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-VERSION="8"
+VERSION="9"
 NOMBREISOFINAL="linux-CEIABD-DISTANCIA-v$VERSION"
 
 
