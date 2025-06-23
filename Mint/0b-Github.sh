@@ -6,6 +6,10 @@ RAIZSCRIPTSLIVE="/LiveCDiesmhp"
 SCRIPT0="$RAIZSCRIPTSLIVE/Mint/1-SetupLiveCD.sh"
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 
+echoverde() {  
+    echo -e "\033[32m$1\033[0m" 
+}
+echover "$($0) - Preconfiguramos equipo para ejecutar la última versión de los scripts de instalación de IESMHP"
 set -e
 setxkbmap es
 echo "mint:mint" | chpasswd
