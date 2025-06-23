@@ -21,7 +21,7 @@ setxkbmap es
 
 
 
-clear
+
 echoverde "1-SetupLiveCD -"
 echo      "   Script personalizado de instalación de "
 echo      "   sistema operativo Linux Mint 22.1 para equipos distancia / CEIABD"

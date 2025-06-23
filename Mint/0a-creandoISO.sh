@@ -137,8 +137,6 @@ EOF-NUEVOGRUB
 #BIOS - TODO: hacer algo similar para BIOS, indicando que hay un error en placa, que se debe arrancar en UEFI
 #TODO!
 
-
-
 verde "Creando nueva ISO personalizada..."
 xorriso -as mkisofs -r -V "$NOMBREISOFINAL" \
     -cache-inodes -J -l \
