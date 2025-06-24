@@ -29,9 +29,10 @@ bc:fc:e7:05:73:63, SMRD-14, 134, equipo alumno
 bc:fc:e7:05:73:c8, SMRD-15, 135, equipo alumno
 bc:fc:e7:05:73:41, SMRD-16, 136, equipo alumno falla usb delantero
 bc:fc:e7:05:73:d0, SMRD-17, 137, equipo alumno
+bc:fc:e7:05:73:d5, SMRD-18, 138, equipo alumno
 --, SMRD-01, 121, equipo alumno
 
---, SMRD-18, 138, equipo alumno
+
 
 
 #,#,#, ######################################################################################
