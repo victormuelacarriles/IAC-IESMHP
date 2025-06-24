@@ -16,7 +16,7 @@ d8:bb:c1:35:f1:dd, IABD-00, 120, Equipo de profesores
 bc:fc:e7:05:73:d1, SMRD-02, 122, equipo alumno
 bc:fc:e7:05:70:f8, SMRD-04, 124, equipo alumno
 bc:fc:e7:05:71:4a, SMRD-05, 125, equipo alumno
-bc:fc:e7:05:71:60, SMRD-07, 127, equipo alumno
+bc:fc:e7:05:71:60, SMRD-07, 127, equipo alumno falla disco nvme
 bc:fc:e7:05:72:e9, SMRD-08, 128, equipo alumno
 bc:fc:e7:05:75:7e, SMRD-13, 133, equipo alumno
 bc:fc:e7:05:73:c8, SMRD-15, 135, equipo alumno
