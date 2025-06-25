@@ -1,5 +1,6 @@
 #!/bin/bash
 #"set -e" significa que el script se detendrá si ocurre un error
+#vs 25/6/2025
 set -e
 
 DISTRO="Mint"
@@ -116,7 +117,7 @@ nmcli c modify "$ncCONEXION" 802-3-ethernet.accept-all-mac-addresses 1
 BNECESARIORESTABLECERRED="N"
 #Compramos si la dirección actual está asociada al aula que corrsponde
 if [[ ("$IP_REDAULA" == "10.0.72" && "$AULA" == "IABD") || 
-      ("$IP_REDAULA" == "10.0.33" && "$AULA" == "SMRD") ]]; then
+      ("$IP_REDAULA" == "10.0.32" && "$AULA" == "SMRD") ]]; then
     IPESTATICANUEVA="$IP_REDAULA.$IPFINALENMACS/24"
     if [ "$IP_METHOD" == "auto" ]; then
         echoverde "La IP actual ($IP_RED) es dinámica, vamos a convertirla en estática (-> $IPESTATICANUEVA)"

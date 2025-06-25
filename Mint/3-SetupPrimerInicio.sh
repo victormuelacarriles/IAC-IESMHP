@@ -65,6 +65,9 @@ mostrar_mensaje "Actualizando: (SSH no disponible)"
 echoverde "Ejecutando actualización del sistema en primer arranque en 20sg.." 
 sleep 20 # Espera 20 segundos para asegurar que el sistema esté completamente arrancado
 
+echoverde "Ajustadando la hora del sistema..."
+timedatectl set-timezone Europe/Madrid
+timedatectl set-ntp true
 
 echoverde "Arreglando posibles problemas de configuración de paquetes..." 
 dpkg --configure -a >> $FLOG
