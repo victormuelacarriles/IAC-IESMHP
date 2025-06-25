@@ -1,0 +1,20 @@
+- name: Comprobar si obs-studio está instalado
+  command: obs --version
+  register: obs_check
+  ignore_errors: yes
+
+- name: Extraer versión instalada de OBS
+  set_fact:
+    obs_installed_version: "{{ obs_check.stdout | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') }}"
+  when: obs_check.rc == 0
+
+- name: Mostrar versión instalada
+  debug:
+    msg: "Versión instalada de OBS: {{ obs_installed_version | default('ninguna') }}"
+
+- name: Instalar OBS si no está instalado o la versión no coincide
+  apt:
+    name: obs-studio={{ obs_version }}
+    state: present
+    update_cache: yes
+  when: obs_installed_version is not defined or obs_installed_version != obs_version

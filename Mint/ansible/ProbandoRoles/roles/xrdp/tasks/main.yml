@@ -1,0 +1,5 @@
+- name: Instalar XRDP
+  apt:
+    name: xrdp
+    state: present
+    update_cache: yes

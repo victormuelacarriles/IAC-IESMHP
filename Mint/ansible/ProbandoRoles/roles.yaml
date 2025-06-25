@@ -1,0 +1,9 @@
+---
+
+# Para ejecutar este playbook:
+#    ansible-playbook -i ../equipos.ini roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
+- hosts: all
+  become: yes
+  roles:
+    - xrdp
+  
