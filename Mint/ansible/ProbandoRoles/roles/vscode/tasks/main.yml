@@ -1,0 +1,26 @@
+- name: Comprobar si VSCode ya está instalado
+  command: code --version
+  register: code_check
+  ignore_errors: yes
+
+- name: Mostrar versión instalada (si hay)
+  debug:
+    msg: "VS Code ya está instalado: {{ code_check.stdout_lines[0] if code_check.rc == 0 else 'no' }}"
+
+- name: Descargar último paquete .deb de VSCode
+  get_url:
+    url: https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64
+    dest: /tmp/vscode_latest.deb
+    mode: '0644'
+  when: code_check.rc != 0
+
+- name: Instalar VSCode
+  apt:
+    deb: /tmp/vscode_latest.deb
+  when: code_check.rc != 0
+
+- name: Eliminar el .deb descargado
+  file:
+    path: /tmp/vscode_latest.deb
+    state: absent
+  when: code_check.rc != 0

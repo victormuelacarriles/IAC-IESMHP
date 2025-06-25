@@ -6,4 +6,8 @@
   become: yes
   roles:
     - xrdp
+    - obs
+    - vscode
+#   vars:
+#     obs_version: "30.0.2"  # versión deseada, personalizable desde el playbook o línea de comandos
   
