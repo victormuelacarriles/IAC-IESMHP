@@ -1,6 +1,6 @@
 declare -A macs=(
     ["SMRD-00"]="bc:fc:e7:05:76:08"
-    # ["SMRD-01"]=""  # Falta en el listado original
+    ["SMRD-01"]="08:bf:b8:40:09:82"
     ["SMRD-02"]="bc:fc:e7:05:73:d1"
     ["SMRD-03"]="bc:fc:e7:05:72:58"
     ["SMRD-04"]="bc:fc:e7:05:70:f8"
