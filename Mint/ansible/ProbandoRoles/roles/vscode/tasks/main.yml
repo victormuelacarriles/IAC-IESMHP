@@ -1,7 +1,7 @@
 - name: Comprobar si VSCode ya está instalado
   command: code --version
   register: code_check
-  ignore_errors: yes
+  ignore_errors: true
 
 - name: Mostrar versión instalada (si hay)
   debug:
