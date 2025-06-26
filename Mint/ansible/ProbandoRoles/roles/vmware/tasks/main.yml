@@ -1,0 +1,23 @@
+- name: Comprobar si VMware está instalado
+  command: vmware --version
+  register: vmware_check
+  ignore_errors: yes
+
+- name: Extraer versión instalada de VMware
+  set_fact:
+    vmware_installed_version: "{{ vmware_check.stdout | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') }}"
+  when: vmware_check.rc == 0
+
+- name: Mostrar versión instalada de VMware
+  debug:
+    msg: "VMware Workstation instalado: {{ vmware_installed_version | default('ninguna') }}"
+
+- name: Hacer ejecutable el instalador .bundle
+  file:
+    path: "{{ vmware_bundle_path }}"
+    mode: '0755'
+  when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
+
+- name: Ejecutar instalador de VMware
+  command: "{{ vmware_bundle_path }} --eulas-agreed --required --console --install-component=all"
+  when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
