@@ -1,7 +1,12 @@
+#Haciendo: hay que poner el path del bundle de VMware Workstation Pro
+#  ya lo he descargado y  tengo que copiarle a la máquina virtual
+
+
+
 - name: Comprobar si VMware está instalado
-  command: vmware --version
+  shell: vmware --version
   register: vmware_check
-  ignore_errors: yes
+  ignore_errors: true
 
 - name: Extraer versión instalada de VMware
   set_fact:

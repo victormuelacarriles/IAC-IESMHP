@@ -1,6 +1,6 @@
 ---
 
-# Para ejecutar este playbook:
+# Para ejecutar este playbook:     ip pruebas 10.0.72.
 #    ansible-playbook -i ../equipos.ini roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
 - hosts: all
   become: yes
