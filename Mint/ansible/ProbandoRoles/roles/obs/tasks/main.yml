@@ -31,14 +31,15 @@
 - name: Mostramos la versión candidata de OBS Studio
   debug:
     msg: "Versión candidata de OBS Studio: {{ obs_version_info.stdout }}" # .split(': ')[1] | trim }}"
-  when: obs_version_info is defined
+  when: obs_instalado.stat.exists 
  
 - name: Instalamos OBS (si no está instalado o la versión no coincide)
   apt:
     name: obs-studio={{ obs_version }}*
     state: present
     update_cache: true
-  when: obs_installed_version is not defined or obs_installed_version != obs_version
+  when: obs_instalado.stat.exists 
+ #TODO:                                        or obs_installed_version != obs_version 
 
 
 # - name: Mostrar la versión instalada después de la instalación
