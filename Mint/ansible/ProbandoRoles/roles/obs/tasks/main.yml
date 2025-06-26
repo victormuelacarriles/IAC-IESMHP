@@ -26,20 +26,23 @@
   shell: apt-cache policy obs-studio | grep Candidat
   register: obs_version_info
   changed_when: false
-  when: not obs_instalado.stat.exists 
+ 
 
 - name: Mostramos la versión candidata de OBS Studio
   debug:
-    msg: "Versión candidata de OBS Studio: {{ obs_version_info.stdout }}" # .split(': ')[1] | trim }}"
-  when: obs_version_info.rc != 0
+    msg: "Versión candidata de OBS Studio: {{ obs_version_info.stdout.split(': ')[1] | trim }}"
+
+- name: Si no se ha especificado una versión de OBS, usamos la última disponible
+  set_fact:
+    obs_version: "{{ obs_version_info.stdout.split(': ')[1] | trim }}"
+  when: obs_version is not defined
  
 - name: Instalamos OBS (si no está instalado o la versión no coincide)
   apt:
     name: obs-studio={{ obs_version }}*
     state: present
     update_cache: true
-  when: obs_instalado.stat.exists 
- #TODO:                                        or obs_installed_version != obs_version 
+  when: not obs_instalado.stat.exists or obs_installed_version != obs_version 
 
 
 # - name: Mostrar la versión instalada después de la instalación
