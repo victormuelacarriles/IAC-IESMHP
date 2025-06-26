@@ -1,23 +1,32 @@
+
+
+- name: Comprobar si el binario de VS Code existe
+  ansible.builtin.stat:
+    path: /usr/bin/obs
+  register: obs_instalado
+
 - name: Comprobar si obs-studio está instalado
   command: obs --version
   register: obs_check
+  changed_when: false
   ignore_errors: true
+  when: obs_instalado.stat.exists
 
 - name: Extraer versión instalada de OBS
   set_fact:
     obs_installed_version: "{{ obs_check.stdout | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') }}"
-  when: obs_check.rc == 0
+  when: obs_instalado.stat.exists 
 
 - name: Mostrar versión instalada
   debug:
     msg: "Versión instalada de OBS: {{ obs_installed_version | default('ninguna') }}"
+  when: obs_instalado.stat.exists 
 
 - name: Averiguamos la última versión de OBS Studio disponible
   shell: apt-cache policy obs-studio | grep Candidat
   register: obs_version_info
   changed_when: false
-  when: obs_installed_version is not defined or obs_installed_version != obs_version  
-
+  when: obs_instalado.stat.exists 
 
 - name: Mostramos la versión candidata de OBS Studio
   debug:
@@ -26,7 +35,7 @@
  
 - name: Instalamos OBS (si no está instalado o la versión no coincide)
   apt:
-    name: obs-studio={{ obs_version }}
+    name: obs-studio={{ obs_version }}*
     state: present
     update_cache: true
   when: obs_installed_version is not defined or obs_installed_version != obs_version

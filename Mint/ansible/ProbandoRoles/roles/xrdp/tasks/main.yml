@@ -1,5 +1,12 @@
+- name: Verificar si XRDP está instalado
+  command: dpkg-query -W xrdp
+  register: xrdp_check
+  failed_when: false
+  changed_when: false
+
 - name: Instalar XRDP
   apt:
     name: xrdp
     state: present
     update_cache: yes
+  when: xrdp_check.rc != 0
