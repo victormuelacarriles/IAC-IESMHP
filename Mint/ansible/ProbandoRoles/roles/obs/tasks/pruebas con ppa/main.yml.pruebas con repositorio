@@ -1,0 +1,79 @@
+- name: Comprobar si obs-studio está instalado
+  command: obs --version
+  register: obs_check
+  ignore_errors: true
+
+- name: Extraer versión instalada de OBS
+  set_fact:
+    obs_installed_version: "{{ obs_check.stdout | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') }}"
+  when: obs_check.rc == 0
+
+- name: Mostrar versión instalada
+  debug:
+    msg: "Versión instalada de OBS: {{ obs_installed_version | default('ninguna') }}"
+
+- name: Instalamos OBS 1-Aseguramos que APT puede usar repositorios https y gestionar PPAs (si no está instalado o la versión no coincide)
+  ansible.builtin.apt:
+    name:
+      - software-properties-common # For add-apt-repository
+      - apt-transport-https      # For https sources
+      - gnupg                    # For GPG key management
+      - dirmngr                  # For GPG to contact keyservers
+    state: present
+    update_cache: yes
+  when: obs_installed_version is not defined or obs_installed_version != obs_version  
+
+- name: Obtener codename base de Ubuntu en Linux Mint
+  command: grep DISTRIB_CODENAME /etc/upstream-release/lsb-release
+  register: ubuntu_codename_raw
+  changed_when: false
+  failed_when: false
+  when: obs_installed_version is not defined or obs_installed_version != obs_version  
+
+- name: Extraer codename de Ubuntu base
+  set_fact:
+    ubuntu_base_codename: "{{ ubuntu_codename_raw.stdout.split('=')[1] }}"
+  when: ubuntu_codename_raw.rc == 0
+
+
+
+- name: Instalamos OBS 2-Añadimos repositorio (si no está instalado o la versión no coincide)
+  apt_repository:
+    repo: "ppa:obsproject/obs-studio"
+    state: present
+    codename: "{{ ubuntu_base_codename }}"
+  when: obs_installed_version is not defined or obs_installed_version != obs_version  
+
+- name: Averiguamos la última versión de OBS Studio disponible
+  command: apt-cache policy obs-studio | grep Candidat
+  register: obs_version_info
+  changed_when: false
+  when: obs_installed_version is not defined or obs_installed_version != obs_version  
+
+
+- name: Mostramos la versión candidata de OBS Studio
+  debug:
+    msg: "Versión candidata de OBS Studio: {{ obs_version_info.stdout.split(': ')[1] | trim }}"
+  when: obs_installed_version is not defined or obs_installed_version != obs_version  
+  
+
+
+- name: Instalamos OBS 3-Instalamos desde repositorio (si no está instalado o la versión no coincide)
+  apt:
+    name: obs-studio {{ obs_version }}
+    state: present
+    update_cache: true
+  when: obs_installed_version is not defined or obs_installed_version != obs_version
+
+
+# - name: Mostrar la versión instalada después de la instalación
+#   command: obs --version
+#   register: obs_version_after_install
+#   when: obs_installed_version is not defined or obs_installed_version != obs_version
+
+# - name: Comprobamnos que se elminna el repositorio de OBS 
+#   apt_repository:
+#     repo: "ppa:obsproject/obs-studio"
+#     state: absent
+#   when: obs_installed_version is not defined or obs_installed_version != obs_version
+    
