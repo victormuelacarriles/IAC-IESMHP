@@ -5,13 +5,13 @@
 - hosts: all
   become: yes
   roles:
-     - vmware
-#     - certificados
-#     - obs
-#     - xrdp
-#     - vscode     
+     - certificados
+     - obs
+     - xrdp
+     - vscode     
+     - vmware#
+#      - contenedres
 
-    
 #   vars:
 #     obs_version: "30.0.2"  # versión deseada, personalizable desde el playbook o línea de comandos
   
