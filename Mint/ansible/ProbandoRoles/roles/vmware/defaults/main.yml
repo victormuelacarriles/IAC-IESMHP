@@ -1,1 +1,6 @@
-#vmware_version: "????" # versión deseada, personalizable desde el playbook o línea de comandos
+vmware_version: "17.6.3"
+
+#Ruta local (desde donde se hace ansible-playbook) del bundle de VMware Workstation Pro
+vmware_bundle_path: "/SSD1/Comparte/OVAS/VMware-Workstation-Full-17.6.3-24583834.x86_64.bundle"
+
+
