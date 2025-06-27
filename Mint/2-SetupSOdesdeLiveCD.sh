@@ -98,6 +98,8 @@ cp $LOCAL_AUTORIZADOS /root/.ssh/authorized_keys
 echoverde "...Leida Mac y autorizados equipos de gestión por SSH"
 
 # Compruebo si la MAC está en el repositorio: si no está, se queda el nombre del equipo por defecto "mint"
+#TODO:  esto me parece que falla.
+
 EQUIPOENMACS="mint"
 if [ ! -f $LOCAL_MACS ]; then
     echorojo "No se ha encontrado el archivo de MACs: $LOCAL_MACS"
