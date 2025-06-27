@@ -5,11 +5,11 @@
 - hosts: all
   become: yes
   roles:
-     - certificados
-     - obs
-     - xrdp
-     - vscode     
-     - vmware#
+    #  - certificados
+      - obs
+    #  - xrdp
+    #  - vscode     
+    #  - vmware
 #      - contenedres
 
 #   vars:

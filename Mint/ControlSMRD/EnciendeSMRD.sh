@@ -1,4 +1,3 @@
-cat EnciendeSMRD.sh
 declare -A macs=(
     ["SMRD-00"]="bc:fc:e7:05:76:08"
     ["SMRD-01"]="08:bf:b8:40:09:82"
