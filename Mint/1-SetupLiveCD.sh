@@ -12,6 +12,7 @@ RAIZSCRIPTS="/opt/iesmhp$DISTRO"
 RAIZLOGS="/var/log/iesmhp$DISTRO"
 SCRIPT2="2-SetupSOdesdeLiveCD.sh"
 
+
 # Funciones de colores
 echoverde() {  
     echo -e "\033[32m$1\033[0m" 
@@ -39,6 +40,13 @@ sleep 1
 echorojo "                                                  (comenzará en 10sg)"
 echoverde "--------------------------------------------------------------------"
 sleep 9
+
+#Carpetas de trabajo 
+mkdir -p $RAIZSCRIPTSLIVE
+mkdir -p $RAIZSCRIPTS
+mkdir -p $RAIZLOGS
+echoverde "Carpetas de trabajo creadas: $RAIZSCRIPTSLIVE, $RAIZSCRIPTS, $RAIZLOGS"
+
 
 # Detectamos discos (ignorando los discos USB y loop0)
 DISCOS_M2=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0| grep -v 'usb'| grep nvme | sort -h -k2 | awk '{print $1}'))
