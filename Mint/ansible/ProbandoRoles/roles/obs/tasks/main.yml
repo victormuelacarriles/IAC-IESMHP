@@ -41,7 +41,7 @@
   apt:
     name: obs-studio={{ obs_version }}*
     state: present
-    update_cache: true
+    update_cache: false
   when: not obs_instalado.stat.exists or obs_installed_version != obs_version 
 
 

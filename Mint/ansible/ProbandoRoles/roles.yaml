@@ -4,13 +4,29 @@
 #    ansible-playbook -i ../equipos.ini roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
 - hosts: all
   become: yes
+
+  pre_tasks:
+    - name: Actualizar cache apt 
+      apt:
+        update_cache: yes
   roles:
-      - certificados
-      - obs
-      - xrdp
-      - vscode     
-      - vmware
-#      - contenedres
+    - nvidia
+    - certificados
+    - obs
+    - xrdp
+    - vscode     
+    - vmware
+
+#POR HACER:
+#      - python  #[python, ansible, pip, pipx] 
+#      - contenedores  #[docker y podman]
+#      - hashicorp     #[terraform, packer, vagrant]
+#      - ¿anaconda? ¿dbeaver?
+#      - virtualbox    #[virtualbox, vagrant] 
+
+
+
+
 
 #   vars:
 #     obs_version: "30.0.2"  # versión deseada, personalizable desde el playbook o línea de comandos
