@@ -148,6 +148,11 @@ if [ "$BNECESARIORESTABLECERRED" == "S" ]; then
     echorojo "Reseteo la red: podría perderse la conexión"
     nmcli con down "$ncCONEXION" && nmcli connection up "$ncCONEXION"
 fi
+
+
+
+
+
 echoverde "Proceso finalizado correctamente."
 
 ###

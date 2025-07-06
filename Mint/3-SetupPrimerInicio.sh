@@ -8,7 +8,9 @@ RAIZSCRIPTS="/opt/iesmhp$DISTRO"
 RAIZDISTRO="$RAIZSCRIPTS/$DISTRO"
 RAIZLOGS="/var/log/iesmhp$DISTRO"
 
-SCRIPT4="$RAIZSCRIPTS/$DISTRO/utiles/NombreIP.sh"
+SCRIPT4nombreip="$RAIZSCRIPTS/$DISTRO/utiles/NombreIP.sh"
+SCRIPT5ansible="$RAIZSCRIPTS/$DISTRO/utiles/Auto-Ansible.sh"
+
 
 VERLOGSCRIPT="/home/usuario/verLog.sh"
 
@@ -79,8 +81,8 @@ apt-get update --fix-missing >> $FLOG
 
 
 #Instalado SSH server
-echoverde "Instalando servidor SSH y limpiando..."
-apt-get install -y ssh beep >> $FLOG
+echoverde "Instalando servidor SSH+ansible y limpiando..."
+apt-get install -y ssh ansible >> $FLOG
 # Configurar SSH para permitir el acceso root
 sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 # Reiniciar el servicio SSH para aplicar los cambios
@@ -113,9 +115,14 @@ systemctl disable 3-SetupPrimerInicio.service
 rm /etc/systemd/system/3-SetupPrimerInicio.service
 rm -- "$0"
 
-
 mostrar_mensaje "Intentamos cambiar IP y nombre de nuevo"
-/bin/bash "$SCRIPT4"  >> $FLOG 
+/bin/bash "$SCRIPT4nombreip"  >> $FLOG 
+
+mostrar_mensaje "Intentamos configurar Ansible y SSH"
+/bin/bash "$SCRIPT5ansible"  >> $FLOG 
+
+
+
 
 
 #Reinciando en 30 segundos y avisando a los usuarios
