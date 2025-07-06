@@ -3,7 +3,6 @@
 # Para ejecutar este playbook:     ip pruebas 10.0.72.
 #    ansible-playbook -i ../equipos.ini roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
 #    ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
-
 - hosts: all
   become: yes
 
@@ -12,16 +11,18 @@
       apt:
         update_cache: yes
   roles:
-    # nvidia: falta que separar en caso de no haber tarjeta nvidia. Ahora mismo detiene todo el playbook. 
-    # - nvidia
-     - certificados
-     - obs
-     - xrdp
-     - vscode     
+    # nvidia: falta que separar en caso de no haber tarjeta nvidia. Ahora mismo detiene todo el playbook si no pongo el ignore_errors 
+     - role: nvidia
+       ignore_errors: yes
+     - role: certificados
+     - role: obs
+     - role: xrdp
+     - role: vscode
      #vmware : falta dejar bundle en un sitio accesible 
-    # - vmware
+     - role: vmware
+       ignore_errors: yes
     #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
-     - virtualbox
+     - role: virtualbox
 #PORHACER: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
      
 
