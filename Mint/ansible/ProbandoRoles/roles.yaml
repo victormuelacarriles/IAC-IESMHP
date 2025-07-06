@@ -12,17 +12,19 @@
         update_cache: yes
   roles:
     # nvidia: falta que separar en caso de no haber tarjeta nvidia. Ahora mismo detiene todo el playbook si no pongo el ignore_errors 
-     - role: nvidia
-       ignore_errors: yes
+    # - role: nvidia
+    #   ignore_errors: yes
      - role: certificados
      - role: obs
      - role: xrdp
      - role: vscode
+    #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
+     - role: virtualbox
      #vmware : falta dejar bundle en un sitio accesible 
      - role: vmware
        ignore_errors: yes
-    #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
-     - role: virtualbox
+    
+     
 #PORHACER: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
      
 
