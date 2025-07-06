@@ -122,7 +122,7 @@ mostrar_mensaje "Intentamos configurar Ansible y SSH"
 /bin/bash "$SCRIPT5ansible"  >> $FLOG 
 
 cd "$RAIZDISTRO/ansible/ProbandoRoles" || exit 1
-ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
+ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no" >> $FLOG
 
 
 
