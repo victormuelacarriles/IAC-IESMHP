@@ -121,6 +121,7 @@ mostrar_mensaje "Intentamos cambiar IP y nombre de nuevo"
 mostrar_mensaje "Intentamos configurar Ansible y SSH"
 /bin/bash "$SCRIPT5ansible"  >> $FLOG 
 
+mostrar_mensaje "Intentamos acabar configuración por roles de Ansible"
 cd "$RAIZDISTRO/ansible/ProbandoRoles" || exit 1
 ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no" >> $FLOG
 
