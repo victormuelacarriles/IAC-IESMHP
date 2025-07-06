@@ -15,6 +15,19 @@
   meta: end_play
   when: not has_nvidia
 
+  # - name: Saltar las tareas de NVIDIA si no hay GPU
+  #   when: not has_nvidia
+  #   block:
+  #     - name: Mensaje informativo
+  #       debug:
+  #         msg: "No se detectó una tarjeta NVIDIA, saltando la configuración del driver."
+
+  # - name: Tareas de instalación de NVIDIA
+  #   when: has_nvidia
+  #   block:
+
+
+
 - name: Comprobar versión actual del kernel
   command: uname -r
   register: current_kernel
