@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -e
 #Instalamos un cerftifico propio, y configuramos SSH para que funcione con Ansible. 
 
 
