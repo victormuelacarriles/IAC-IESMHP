@@ -25,7 +25,7 @@ mostrar_mensaje() {
     MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
 
     local IPMAC="[ $MAC ]  -  $(hostname)\n\n$FLOG\n\n         ó\n\n$VERLOGSCRIPT"
-    MENSAJE="$MENSAJE\n\n$IPMAC"
+    MENSAJE2="$MENSAJE\n\n$IPMAC"
     while read -r sid; do
         USERNAME=$(loginctl show-session "$sid" -p Name --value)
         DISPLAY=$(loginctl show-session "$sid" -p Display --value)
@@ -38,7 +38,7 @@ mostrar_mensaje() {
         DBUS_ADDRESS=$(grep -z DBUS_SESSION_BUS_ADDRESS /proc/$(pgrep -u "$USERNAME" -n gnome-session 2>/dev/null || pgrep -u "$USERNAME" -n xfce4-session 2>/dev/null || echo 0)/environ 2>/dev/null | tr '\0' '\n' | grep DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
         # Ejecutar zenity como el usuario
         sudo -u "$USERNAME" DISPLAY="$DISPLAY" DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDRESS" \
-            zenity --info --text="$MENSAJE" --title="Actualizando ($IP)" --timeout=$TIEMPO &
+            zenity --info --text="$MENSAJE2" --title="Actualizando ($IP)" --timeout=$TIEMPO &
     done < <(loginctl list-sessions --no-legend | awk '{print $1}')
 }
 
