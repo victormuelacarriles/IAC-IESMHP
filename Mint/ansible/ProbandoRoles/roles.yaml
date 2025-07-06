@@ -10,12 +10,12 @@
       apt:
         update_cache: yes
   roles:
-    # - nvidia
-    # - certificados
-    # - obs
-    # - xrdp
-    # - vscode     
-    # - vmware
+     - nvidia
+     - certificados
+     - obs
+     - xrdp
+     - vscode     
+     - vmware
     #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
      - virtualbox
 #PORHACER: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
