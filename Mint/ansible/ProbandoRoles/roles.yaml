@@ -17,21 +17,19 @@
      - role: obs
      - role: xrdp
      - role: vscode
+    #PORHACER: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
     #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
      - role: virtualbox
-     #vmware : falta dejar bundle en un sitio accesible 
+     #vmware : falta dejar bundle en un sitio accesible para que funcione desde el LiveCD
      - role: vmware
     
-     
-#PORHACER: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
-     
+    
 
 #POR HACER:
 #      - python  #[python, ansible, pip, pipx] 
 #      - contenedores  #[docker y podman]
 #      - hashicorp     #[terraform, packer, vagrant]
 #      - ¿anaconda? ¿dbeaver?
-#      - virtualbox    #[virtualbox, vagrant] 
 
 
 

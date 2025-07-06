@@ -2,7 +2,7 @@
 
 #Por hacer:   1- mas elegante la detección de instalación (da error si no está instalado y queda feo)
 #             2- Arreglar redes virtuales (parámetros para crear, crear una por usuario)
-
+#             0 - Definir una carpeta comun desde donde descargar el bundle (o no hacer proceso si no está) 
 
 
 - name: Comprobar si VMware está instalado
