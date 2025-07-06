@@ -11,13 +11,13 @@ chown root:root /root/.ssh
 # Verificar si ya existe la clave privada
 KEY_FILE="/root/.ssh/id_ed25519"
 if [[ ! -f "$KEY_FILE" ]]; then
-    ssh-keygen -t ed25519 -C "root@$(hostname)" -f "$KEY_FILE" -N ""
+    ssh-keygen -t ed25519 -C "root@$(hostname)" -f "$KEY_FILE" -N "" 1>&2 2>/dev/null
 fi
 
 # Leer la clave pública
 PUB_KEY_FILE="${KEY_FILE}.pub"
 if [[ ! -f "$PUB_KEY_FILE" ]]; then
-    echo "ERROR: no se encuentra la clave pública en $PUB_KEY_FILE"
+    echo "ERROR: no se encuentra la clave pública en $PUB_KEY_FILE" 
     exit 1
 fi
 PUB_KEY_CONTENT=$(<"$PUB_KEY_FILE")
@@ -30,18 +30,17 @@ grep -qF "$PUB_KEY_CONTENT" "$AUTHORIZED_KEYS" 2>/dev/null || {
     chown root:root "$AUTHORIZED_KEYS"
 }
 
-# Verificar si el host está en known_hosts
+# Verificar si el host está en known_hosts ####FALLA 
 KNOWN_HOSTS="/root/.ssh/known_hosts"
+touch "$KNOWN_HOSTS"  # Asegurarse de que el archivo existe
 HOSTNAME=$(hostname)
-ssh-keygen -F "$HOSTNAME" > /dev/null 2>&1 || ssh-keygen -F localhost > /dev/null 2>&1
-if [ $? -ne 0 ]; then
-    echo "Añadiendo la clave SSH de localhost a known_hosts..."
-    ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes localhost "exit 0" || \
-    ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$HOSTNAME" "exit 0"
-else
-    echo "La clave de host ya está en known_hosts"
+# Comprobar si la clave ya está
+if ! ssh-keygen -F "$HOSTNAME" -f "$KNOWN_HOSTS" > /dev/null; then
+    echo "Añadiendo la clave SSH de localhost ($HOSTNAME) a known_hosts..."
+    ssh-keyscan -H "$HOSTNAME" >> "$KNOWN_HOSTS" 2>/dev/null || \
+    ssh-keyscan -H localhost >> "$KNOWN_HOSTS" 2>/dev/null
+    chmod 644 "$KNOWN_HOSTS"
 fi
 
-# Instalamos Ansible
-apt update -y 
+#Instalamos Ansible
 apt install -y ansible
