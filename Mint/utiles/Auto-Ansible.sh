@@ -34,7 +34,7 @@ grep -qF "$PUB_KEY_CONTENT" "$AUTHORIZED_KEYS" 2>/dev/null || {
 KNOWN_HOSTS="/root/.ssh/known_hosts"
 HOSTNAME=$(hostname)
 ssh-keygen -F "$HOSTNAME" > /dev/null 2>&1 || ssh-keygen -F localhost > /dev/null 2>&1
-if [[ $? -ne 0 ]]; then
+if [ $? -ne 0 ]; then
     echo "Añadiendo la clave SSH de localhost a known_hosts..."
     ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes localhost "exit 0" || \
     ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$HOSTNAME" "exit 0"

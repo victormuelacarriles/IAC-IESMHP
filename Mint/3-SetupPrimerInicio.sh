@@ -115,6 +115,9 @@ systemctl disable 3-SetupPrimerInicio.service
 rm /etc/systemd/system/3-SetupPrimerInicio.service
 rm -- "$0"
 
+chmod +x "$SCRIPT4nombreip"
+chmod +x "$SCRIPT5ansible"
+
 mostrar_mensaje "Intentamos cambiar IP y nombre de nuevo" >> $FLOG
 /bin/bash "$SCRIPT4nombreip"  >> $FLOG 
 
