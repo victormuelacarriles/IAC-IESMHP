@@ -115,14 +115,15 @@ systemctl disable 3-SetupPrimerInicio.service
 rm /etc/systemd/system/3-SetupPrimerInicio.service
 rm -- "$0"
 
-mostrar_mensaje "Intentamos cambiar IP y nombre de nuevo"
+mostrar_mensaje "Intentamos cambiar IP y nombre de nuevo" >> $FLOG
 /bin/bash "$SCRIPT4nombreip"  >> $FLOG 
 
-mostrar_mensaje "Intentamos configurar Ansible y SSH"
+mostrar_mensaje "Intentamos configurar Ansible y SSH" >> $FLOG
 /bin/bash "$SCRIPT5ansible"  >> $FLOG 
 
+mostrar_mensaje "Intentamos finalizar autoconfiguración con Ansible" >> $FLOG
 cd "$RAIZDISTRO/ansible/ProbandoRoles" || exit 1
-ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no" >> $FLOG
+ansible-playbook -i localhost, --connection=local roles.yaml -e 'ansible_python_interpreter=/usr/bin/python3.12' --ssh-extra-args="-o StrictHostKeyChecking=no" >> $FLOG
 
 
 
