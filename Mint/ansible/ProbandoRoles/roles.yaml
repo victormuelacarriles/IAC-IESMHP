@@ -17,18 +17,19 @@
      - role: obs
      - role: xrdp
      - role: vscode
-    #PORHACER: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
-    #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
-     - role: virtualbox
+     - role: virtualbox #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
+                        #PORHACER: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
      #vmware : falta dejar bundle en un sitio accesible para que funcione desde el LiveCD
      - role: vmware
     
-    
+  
 
 #POR HACER:
-#      - python  #[python, ansible, pip, pipx] 
+#      - basicos      #cosas que debieras estar desde el livecd pero que recomprobamos #[python, ansible, pip, pipx] 
+#      - comparteaula  # en -00 crear una carpeta compartida en /home/Comparte, y en el resto montar esa carpeta compartida en /Comparte
 #      - contenedores  #[docker y podman]
 #      - hashicorp     #[terraform, packer, vagrant]
+#      - predominio    #ficheros necesarios para unir el equipo al dominio  
 #      - ¿anaconda? ¿dbeaver?
 
 

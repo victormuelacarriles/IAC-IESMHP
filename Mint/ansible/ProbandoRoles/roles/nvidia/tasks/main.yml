@@ -1,5 +1,6 @@
 - name: Comprobar si hay una GPU NVIDIA
   command: lspci
+  changed_when: false  #no quiero que marque como cambiado haya o no haya GPU
   register: lspci_output
 
 - name: Verificar si existe una GPU NVIDIA

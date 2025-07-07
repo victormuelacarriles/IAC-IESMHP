@@ -26,10 +26,12 @@
     repo: "{{ virtualbox_apt_repo }}"
     state: absent
   register: repo_check
+  changed_when: false  #no quiero que marque como cambiado haya o no haya repositorio
   ignore_errors: true
 
 #TODO: marca changed todas las veces que se ejecuta, aunque no se cambie nada . CORREGIR
 - name: Añadimos el repositorio de VirtualBox
+  changed_when: false  #no quiero que marque como cambiado haya o no haya repositorio
   apt_repository:
     repo: "{{ virtualbox_apt_repo }}"
     filename: "virtualbox"
