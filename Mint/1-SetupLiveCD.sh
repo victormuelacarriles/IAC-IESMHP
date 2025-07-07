@@ -89,20 +89,35 @@ if [[ "$DISK_SMALL" != *nvme* ]]; then
     exit 1
 fi
 
+#Si existen particiones LVM, primero las eliminamos
+if lsblk -o NAME,TYPE | grep -q "lvm"; then
+    echo "Se han detectado particiones LVM. Eliminando particiones LVM..."
+    # Desactivar LVM
+    vgchange -an || true
+    # Borrar particiones LVM
+    for part in $(lsblk -o NAME,TYPE | grep "lvm" | awk '{print $1}'); do
+        echo "Borrando partición LVM: $part"
+        sgdisk --zap-all "/dev/$part" || true
+    done
+    echoverde "...Particiones LVM eliminadas"
+fi
+
+
+
 echo && echo "Borrando y particionando discos: $DISK_SMALL y $DISK_BIG"
 lsblk -o NAME,SIZE,TYPE
 # Borrar particiones antiguas
 sgdisk --zap-all "$DISK_SMALL"
 sgdisk --zap-all "$DISK_BIG"
-parted -s "$DISK_SMALL" mklabel gpt >/dev/null
+parted -s "$DISK_SMALL" mklabel gpt >/dev/null #error en lvm
 parted -s "$DISK_BIG" mklabel gpt >/dev/null
 # Crear particiones en disco pequeño
 parted -s "$DISK_SMALL" mkpart ESP fat32 1MiB 513MiB >/dev/null
-parted -s "$DISK_SMALL" set 1 esp on >/dev/null
+parted -s "$DISK_SMALL" set 1 esp on >/dev/null   #error en lvm 
 parted -s "$DISK_SMALL" mkpart primary linux-swap 513MiB 8705MiB >/dev/null
 parted -s "$DISK_SMALL" mkpart primary ext4 8705MiB 100% >/dev/null
 # Crear partición en disco grande
-parted -s "$DISK_BIG" mkpart primary ext4 1MiB 100% >/dev/null
+parted -s "$DISK_BIG" mkpart primary ext4 1MiB 100% >/dev/null 
 
 # Esperar a que el kernel detecte los cambios
 echo && echoverde "...Borrados y particidos los discos: $DISK_SMALL y $DISK_BIG" && echo 
