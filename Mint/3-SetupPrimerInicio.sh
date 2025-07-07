@@ -113,7 +113,7 @@ apt-get autoremove -y >> $FLOG
 echoverde "Desactivando y borrando el servicio de actualización en primer arranque..." >> $FLOG
 systemctl disable 3-SetupPrimerInicio.service
 rm /etc/systemd/system/3-SetupPrimerInicio.service
-rm -- "$0"
+mv "$0" "$0.borrado" # Renombrar el script para evitar que se ejecute de nuevo
 
 chmod +x "$SCRIPT4nombreip"
 chmod +x "$SCRIPT5ansible"
@@ -126,9 +126,7 @@ mostrar_mensaje "Intentamos configurar Ansible y SSH" >> $FLOG
 
 mostrar_mensaje "Intentamos finalizar autoconfiguración con Ansible" >> $FLOG
 cd "$RAIZDISTRO/ansible/ProbandoRoles" || exit 1
-ansible-playbook -i localhost, --connection=local roles.yaml -e 'ansible_python_interpreter=/usr/bin/python3.12' --ssh-extra-args="-o StrictHostKeyChecking=no" >> $FLOG
-
-
+ansible-playbook -i localhost, --connection=local roles.yaml -e 'ansible_python_interpreter=/usr/bin/python3.12' --ssh-extra-args="-o StrictHostKeyChecking=no" >> $FLOG || echorojo "Error en la autoconfiguración ansible" && true
 
 #Reinciando en 30 segundos y avisando a los usuarios
 mostrar_mensaje "Sistema actualizado. SSH root/root" 
