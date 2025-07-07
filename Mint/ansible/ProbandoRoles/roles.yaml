@@ -30,7 +30,9 @@
 #      - contenedores  #[docker y podman]
 #      - hashicorp     #[terraform, packer, vagrant]
 #      - predominio    #ficheros necesarios para unir el equipo al dominio  
-#      - ¿anaconda? ¿dbeaver?
+#      - clienteOnedrive
+#      - ¿anaconda? ¿dbeaver?#   
+
 
 
 
