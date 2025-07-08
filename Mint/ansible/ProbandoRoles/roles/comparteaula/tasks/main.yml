@@ -1,0 +1,46 @@
+---
+- name: Instalar servidor NFS
+  apt:
+    name: nfs-kernel-server
+    state: present
+    update_cache: false
+
+- name: Crear carpeta compartida
+  file:
+    path: "{{ carpeta_nfs }}"
+    state: directory
+    owner: nobody
+    group: nogroup
+    mode: '0777'
+    recurse: yes
+
+- name: Configurar export NFS
+  lineinfile:
+    path: /etc/exports
+    line: "{{ carpeta_nfs }} 10.0.72.0/24(rw,sync,no_subtree_check)"
+    create: yes
+    state: present
+
+- name: Aplicar exportfs
+  command: exportfs -a
+
+- name: Reiniciar NFS
+  service:
+    name: nfs-kernel-server
+    state: restarted
+    enabled: true
+
+- name: Permitir NFS en UFW desde la subred
+  ufw:
+    rule: allow
+    from_ip: "{{ subred_nfs }}"
+    port: nfs
+
+- name: Habilitar UFW (si aún no está habilitado)
+  command: ufw enable
+  args:
+    stdin: "s"
+  register: ufw_enable
+  failed_when: false
+  changed_when: "'Firewall is active' in ufw_enable.stdout"
+

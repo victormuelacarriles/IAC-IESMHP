@@ -11,22 +11,23 @@
       apt:
         update_cache: yes
   roles:
+     - comparteaula  # en -00 crear una carpeta compartida en /home/Comparte, y en el resto montar esa carpeta compartida en /Comparte
     # nvidia: falta que separar en caso de no haber tarjeta nvidia. Ahora mismo detiene todo el playbook si no pongo el ignore_errors 
-     - role: nvidia
-     - role: certificados
-     - role: obs
-     - role: xrdp
-     - role: vscode
-     - role: virtualbox #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
-                        #PORHACER: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
-     #vmware : falta dejar bundle en un sitio accesible para que funcione desde el LiveCD
-     - role: vmware
+    #  - role: nvidia
+    #  - role: certificados
+    #  - role: obs
+    #  - role: xrdp
+    #  - role: vscode
+    #  - role: virtualbox #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
+    #                     #PORHACER: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
+    #  #vmware : falta dejar bundle en un sitio accesible para que funcione desde el LiveCD
+    #  - role: vmware
     
   
 
 #POR HACER:
 #      - basicos      #cosas que debieras estar desde el livecd pero que recomprobamos #[python, ansible, pip, pipx] 
-#      - comparteaula  # en -00 crear una carpeta compartida en /home/Comparte, y en el resto montar esa carpeta compartida en /Comparte
+
 #      - contenedores  #[docker y podman]
 #      - hashicorp     #[terraform, packer, vagrant]
 #      - predominio    #ficheros necesarios para unir el equipo al dominio  

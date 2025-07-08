@@ -1,0 +1,4 @@
+---
+disco_hd: "/home"
+carpeta_nfs: "{{ disco_hd }}/Comparte"
+
