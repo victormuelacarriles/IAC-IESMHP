@@ -3,14 +3,15 @@
 #Suponemos un nombre de equipo tipo "pruebas-00". Establezco en una variable el valor 00 a partir del nombre del equipo.
 - set_fact:
     numero_equipo: "{{ inventory_hostname.split('-')[-1] }}"
+    idservidor: "98"
 
 #Si el número de equipo es 00, configuramos el servidor NFS. En caso contrario, montamos la carpeta compartida.
 - name: Configurar servidor NFS si es el equipo 00
-  when: numero_equipo == '00'
+  when: numero_equipo == "{{ idservidor }}"
   block:
     - name: Instalar servidor NFS
       apt:
-        name: nfs-kernel-server
+        name: nfs-common, nfs-kernel-server
         state: present
         update_cache: false
     - name: Crear carpeta compartida
@@ -51,3 +52,39 @@
       failed_when: false
       changed_when: "'Firewall is active' in ufw_enable.stdout"
 
+- name: Configurar servidor NFS si es el equipo 00
+  when: numero_equipo != "{{ idservidor }}"
+  block:
+    - name: Instalar cliente NFS
+      apt:
+        name: nfs-common
+        state: present
+        update_cache: false
+    - name: Crear punto de montaje
+      file:
+        path: "{{ nfs_mount_point }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Añadir entrada a /etc/fstab
+      mount:
+        path: "{{ nfs_mount_point }}"
+        src: "{{ nfs_server_ip }}:{{ nfs_server_path }}"
+        fstype: nfs
+        opts: "{{ nfs_mount_options }}"
+        state: mounted
+
+    - name: Mostrar contenido del punto de montaje
+      command: ls "{{ nfs_mount_point }}"
+      register: ls_output
+
+    - name: Mostrar resultado del listado
+      debug:
+        var: ls_output.stdout_lines
+
+    - name: Reiniciar el sistema
+      reboot:
+        msg: "Reinicio tras configurar NFS"
+        reboot_timeout: 300
