@@ -24,7 +24,8 @@
   copy:
     src: "{{ vmware_bundle_path }}"
     dest: "/tmp/VMware-Workstation.bundle"
-  when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
+    remote_src: true  # Use true if the file is already on the remote machine
+  when: (vmware_installed_version is not defined or vmware_installed_version != vmware_version) 
 
 - name: Hacer ejecutable el instalador .bundle
   file:
