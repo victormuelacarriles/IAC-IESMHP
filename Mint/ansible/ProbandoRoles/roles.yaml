@@ -6,29 +6,26 @@
 - hosts: all
   become: yes
 
-  # pre_tasks:
-  #   - name: Actualizar cache apt 
-  #     apt:
-  #       update_cache: yes
+  pre_tasks:
+    - name: Actualizar cache apt (para no hacerlo en cada rol)
+      apt:
+        update_cache: yes
   roles:
+     - basicos       #cosas que debieras estar desde el livecd pero que recomprobamos #[python, pip, pipx, ansible] 
      - comparteaula  # en -00 crear una carpeta compartida en /home/Comparte, y en el resto montar esa carpeta compartida en /Comparte
     # nvidia: falta que separar en caso de no haber tarjeta nvidia. Ahora mismo detiene todo el playbook si no pongo el ignore_errors 
-     - role: nvidia
-     - role: certificados
-     - role: obs
-     - role: xrdp
-     - role: vscode
-     - role: virtualbox #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
-    #                     #PORHACER: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
-    #  #vmware : falta dejar bundle en un sitio accesible para que funcione desde el LiveCD
-     - role: vmware
-    
+     - nvidia
+     - certificados
+     - obs
+     - xrdp
+     - vscode
+     - virtualbox #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
+    #             #TODO: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
+     - vmware  #TODO: pide compilar (como sudo) en el primer arranque. Hay que evitarlo.
+     - contenedores  #[docker y podman  (+sus compose)]    
   
 
 #POR HACER:
-#      - basicos      #cosas que debieras estar desde el livecd pero que recomprobamos #[python, ansible, pip, pipx] 
-
-#      - contenedores  #[docker y podman]
 #      - hashicorp     #[terraform, packer, vagrant]
 #      - predominio    #ficheros necesarios para unir el equipo al dominio  
 #      - clienteOnedrive
