@@ -30,6 +30,11 @@
         group: nogroup
         mode: '0777'
         recurse: yes
+    - name: Crear enlace simbólico en "/ComparteProfesor" hacia "/home/ComparteProfesor"
+      file:
+        src: "{{ carpeta_nfs }}"
+        dest: "{{ nfs_mount_point }}"
+        state: link 
     - name: Configurar export NFS
       lineinfile:
         path: /etc/exports

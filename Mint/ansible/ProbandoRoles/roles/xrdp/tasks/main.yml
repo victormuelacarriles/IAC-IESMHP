@@ -8,7 +8,7 @@
   apt:
     name: xrdp
     state: present
-    update_cache: yes
+    update_cache: false
 #  when: xrdp_check.rc != 0
 
 #TODO: detectar si está en dominio y configurar los ficheros de configuración
