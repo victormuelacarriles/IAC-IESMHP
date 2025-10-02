@@ -1,4 +1,4 @@
-apt install git -y
+apt update && apt install git -y
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 OUT="/opt/iesmhpMint/"
 cd /opt
