@@ -31,10 +31,10 @@
     command: uname -r
     register: current_kernel
 
-  - name: Abortar si el kernel no es el requerido
-    fail:
-      msg: "El kernel actual ({{ current_kernel.stdout }}) no es el requerido ({{ required_kernel }})."
-    when: current_kernel.stdout != required_kernel
+  #- name: Abortar si el kernel no es el requerido
+  #  fail:
+  #    msg: "El kernel actual ({{ current_kernel.stdout }}) no es el requerido ({{ required_kernel }})."
+  #  when: current_kernel.stdout != required_kernel
 
   #Para pruebas desinstalar primero el drive y reiniciar  ( apt remove nvidia-driver-535 -y ) 
   - name: Instalar el driver NVIDIA específico
