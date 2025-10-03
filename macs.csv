@@ -6,7 +6,6 @@ MAC, Equipo, IPf, Comentario
 #,#,#, ######################################################################################
 #,#,#, ######################################################################################
 #,#,#, AULA CEIABD                                              #############################
-74:56:3c:95:eb:57, IABD-20, 140, probandoIABD
 d8:bb:c1:35:f1:dd, IABD-00, 120, Equipo de profesores 
 d8:bb:c1:38:71:6f, IABD-01, 121, equipo alumno
 d8:bb:c1:38:93:ad, IABD-02, 122, equipo alumno
@@ -27,7 +26,7 @@ d8:bb:c1:38:93:ae, IABD-09, 129, equipo alumno
 74:56:3C:95:EB:87, IABD-17, 137, equipo alumno
 74:56:3C:95:EA:81, IABD-18, 138, equipo alumno
 74:56:3c:95:eb:d5, IABD-19, 139, equipo alumno
-
+74:56:3c:95:eb:57, IABD-20, 140, equipo alumno
 #,#,#, ###pruebasvirtuales###
 00:0C:29:90:7F:D0, IABD-99, 199, virtualProbando
 00:0c:29:d9:75:f4, IABD-98, 198, virtualProbando
