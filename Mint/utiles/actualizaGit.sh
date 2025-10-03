@@ -7,4 +7,4 @@ git clone $GITREPO "$OUT/"
 cd "$OUT/Mint/utiles"
 chmod +x *.sh
 cd "/opt/iesmhpMint/Mint/ansible/ProbandoRoles"
-echo 'ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"'
+#echo 'ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"'
