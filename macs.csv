@@ -27,9 +27,6 @@ d8:bb:c1:38:93:ae, IABD-09, 129, equipo alumno
 74:56:3C:95:EA:81, IABD-18, 138, equipo alumno
 74:56:3c:95:eb:d5, IABD-19, 139, equipo alumno
 74:56:3c:95:eb:57, IABD-20, 140, equipo alumno
-#,#,#, ###pruebasvirtuales###
-00:0C:29:90:7F:D0, IABD-99, 199, virtualProbando
-00:0c:29:d9:75:f4, IABD-98, 198, virtualProbando
 #,#,#, ######################################################################################
 #,#,#, AULA DISTANCIA                                              ##########################
 bc:fc:e7:05:76:08, SMRD-00, 120, equipo docente etiquetado como 1
@@ -52,3 +49,8 @@ bc:fc:e7:04:30:c0, SMRD-16, 136, equipo alumno falla usb delantero
 bc:fc:e7:05:73:d0, SMRD-17, 137, equipo alumno
 bc:fc:e7:05:73:d5, SMRD-18, 138, equipo alumno
 #,#,#, ######################################################################################
+
+
+#,#,#, ###pruebasvirtuales###
+00:0C:29:90:7F:D0, IABD-99, 199, virtualProbando
+00:0c:29:d9:75:f4, IABD-98, 198, virtualProbando
