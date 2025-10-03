@@ -55,19 +55,15 @@
   stat:
     path: "{{ external_keys_file }}"
   register: external_keys_stat
-
-
 - name: Leer claves del archivo externo (si existe)
   slurp:
     src: "{{ external_keys_file }}"
   register: external_keys_raw
   when: external_keys_stat.stat.exists
-
 - name: Convertir claves externas en lista
   set_fact:
     external_keys: "{{ external_keys_raw.content | b64decode | splitlines() }}"
   when: external_keys_stat.stat.exists
-
 - name: Añadir claves externas a authorized_keys si no están
   lineinfile:
     path: /root/.ssh/authorized_keys
@@ -79,7 +75,5 @@
     group: root
   loop: "{{ external_keys }}"
   when: external_keys_stat.stat.exists
-
-
   ####################################################
 #TODO:  eliminar claves que no estén el fichero externo?  (controlar por variable)
