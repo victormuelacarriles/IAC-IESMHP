@@ -1,8 +1,10 @@
 ---
 
-# Para ejecutar este playbook:     ip pruebas 10.0.72.
-#    ansible-playbook -i ../equipos.ini roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
+# Para ejecutar este playbook:     (en la carpeta donde se encuentra)
+#    ansible all -i ../equiposCIABD.ini -m ping
+#    ansible-playbook -i ../equiposCEIABD.ini roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
 #    ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
+
 - hosts: all
   become: yes
 
