@@ -22,7 +22,7 @@
      - virtualbox #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
     #             #TODO: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
      - vmware  #TODO: pide compilar (como sudo) en el primer arranque. Hay que evitarlo.
-     - contenedores  #[docker y podman  (+sus compose)]    
+     #- contenedores  #[docker y podman  (+sus compose)]    #por hacer
   
 
 #POR HACER:
