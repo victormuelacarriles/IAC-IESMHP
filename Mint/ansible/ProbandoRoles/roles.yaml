@@ -1,9 +1,15 @@
 ---
 
 # Para ejecutar este playbook:     (en la carpeta donde se encuentra)
-#    ansible all -i ../equiposCIABD.ini -m ping
-#    ansible-playbook -i ../equiposCEIABD.ini roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
-#    ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
+#  cd /opt/iesmhpMint/Mint/ansible/ProbandoRoles/
+#    ansible-playbook -i ../equiposIABD.ini roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
+#    ansible-playbook -i ../equiposIABD.ini roles.yaml -l IABD-17
+#    ansible-playbook -i localhost, --connection=local roles.yaml 
+
+#Utiles
+#    ansible all -i ../equiposIABD.ini -m ping
+#    ansible all -i ../equiposIABD.ini -m shell -a "sh /opt/iesmhpMint/Mint/utiles/actualizaGit.sh" 
+
 
 - hosts: all
   become: yes
