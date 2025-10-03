@@ -27,10 +27,10 @@
 - name: Tareas de instalación de NVIDIA
   when: has_nvidia
   block:
-  - name: Comprobar versión actual del kernel
-    command: uname -r
-    register: current_kernel
-
+  #Originalmente comprobábamos la versión del kernel y solo lo hacíamos si era uno concreto. Lo ignoramos de momento.
+  #- name: Comprobar versión actual del kernel
+  #  command: uname -r
+  #  register: current_kernel
   #- name: Abortar si el kernel no es el requerido
   #  fail:
   #    msg: "El kernel actual ({{ current_kernel.stdout }}) no es el requerido ({{ required_kernel }})."
