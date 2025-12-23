@@ -1,7 +1,7 @@
 ---
 
 # Para ejecutar este playbook:
-#    ansible-playbook -i ../equipos.ini sencillo.ansible.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
+#    ansible-playbook -i ../../equiposSMRD.ini sencillo.ansible.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
 
 
 # Simple playbook to return machine information (hostname, IP address, and MAC address)
