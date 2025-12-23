@@ -9,6 +9,7 @@
 - name: Crear compartida NFS en clientes
   hosts: all
   become: true
+  gather_facts: no
   tasks:
     - name: Instalar nfs-common
       apt:
@@ -16,13 +17,16 @@
         state: present
         update_cache: true
 
+    - name: Montar carpeta NFS (clientes)
+      command: umount /mnt/nasFast || true
+      ignore_errors: yes
     - name: Crear punto de montaje en clientes
       file:
            path: /mnt/nasFast
            state: directory
            owner: root
            group: root
-           mode: '0755'
+           mode: '0655'  #solo lectura para otros usuarios
 
     - name: Añadir línea a /etc/fstab (clientes)
       lineinfile:

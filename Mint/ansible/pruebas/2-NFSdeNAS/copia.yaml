@@ -1,0 +1,21 @@
+---
+
+# Para ejecutar este playbook:
+#    ansible-playbook -i ../../equiposSMRD.ini copia.yaml
+
+- name: Copiar archivo zip a todos los clientes
+  hosts: all
+  become: yes  # Necesario para escribir en /
+  gather_facts: no
+  tasks:
+    - name: Asegurarse de que el fichero /tmp/destino2.zip no existe antes de copiar
+      ansible.builtin.file:
+        path: /tmp/destino2.tar.gz
+        state: absent
+#/mnt/nasFast/SORD/Plantillas/W11AODSOR2526.tar.gz
+    - name: En cada equipo cliente, ejecuta el comando de copia
+      ansible.builtin.command: cp /mnt/nasFast/SORD/Plantillas/W11AODSOR2526.tar.gz /tmp/destino2.tar.gz
+      
+      
+#Comando ansible para copiar un fichero de configuración a todos los clientes: ????
+# ansible -i ../../equiposSMRD.ini -m copy -a "src=/mnt/nasFast/SORD/Plantillas/W11AODSOR2526.tar.gz dest=/tmp/kk.zip" -b
