@@ -1,18 +1,35 @@
 ---
 
 # Para ejecutar este playbook:
-#    ansible-playbook -i ../equiposSMRD.ini MapeaNFSnas.yaml
+#    ansible-playbook -i ../../equiposSMRD.ini MapeaNFSnas.yaml
 
 
 # Simple playbook to return machine information (hostname, IP address, and MAC address)
-- name: Gather system information
+
+- name: Crear compartida NFS en clientes
   hosts: all
-  gather_facts: yes  # Need to gather facts to get system information
+  become: true
   tasks:
-    - name: Display system information
-      debug:
-        msg: |
-          Hostname: {{ ansible_hostname }}
-          IP Address: {{ ansible_default_ipv4.address }}
-          MAC Address: {{ ansible_default_ipv4.macaddress }}
+    - name: Instalar nfs-common
+      apt:
+        name: nfs-common
+        state: present
+        update_cache: true
+
+    - name: Crear punto de montaje en clientes
+      file:
+           path: /mnt/nasFast
+           state: directory
+           owner: root
+           group: root
+           mode: '0755'
+
+    - name: Añadir línea a /etc/fstab (clientes)
+      lineinfile:
+           path: /etc/fstab
+           line: "10.0.32.253:/mnt/DiscosRapidos/PruebaRapidosX3 /mnt/nasFast nfs defaults 0 0"
+           state: present
+
+    - name: Montar carpeta NFS (clientes)
+      command: mount -a
 
