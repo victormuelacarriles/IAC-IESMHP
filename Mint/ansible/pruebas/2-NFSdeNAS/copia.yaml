@@ -1,7 +1,8 @@
 ---
 
 # Para ejecutar este playbook:
-#    ansible-playbook -i ../../equiposSMRD.ini copia.yaml -l SMRD-00
+#    ansible-playbook -i ../../equiposSMRD.ini copia.yaml -l SMRD-00 --fork 40     #-l limita a 1,  fork 40 se asegura de hacer todos a la vez
+#    ansible-playbook -i ../../equiposSMRD.ini copia.yaml -l SMRD-06,SMRD-07,SMRD-10,SMRD-11,SMRD-12,SMRD-18 --fork 40     #-l limita a 1,  fork 40 se asegura de hacer todos a la vez
 
 - name: Copiar archivo zip a todos los clientes
   hosts: all
@@ -16,8 +17,8 @@
       ansible.builtin.command: date +%s
       register: tiempo_inicial
 
-    - name: En cada equipo cliente, ejecuta el comando de copia
-      command: cp -r /mnt/nasFast/SORD/Plantillas/ /tmp/PRUEBACOPIA
+    # - name: En cada equipo cliente, ejecuta el comando de copia
+    #   command: cp -r /mnt/nasFast/SORD/Plantillas/ /tmp/PRUEBACOPIA
     
     - name: Medimos el tiempo final y calculamos la diferencia
       ansible.builtin.command: date +%s
