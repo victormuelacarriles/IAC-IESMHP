@@ -7,7 +7,7 @@ import platform
 import getpass
 from ldap3 import Server, Connection, ALL, NTLM
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN ---   (ver al final del fichero explicaciones)
 
 # Matriz de datos: [Usuario, NombreEquipo, IP, MAC]
 # Formato MAC: Acepta AA:BB:CC... o AA-BB-CC...
@@ -24,7 +24,7 @@ DATOS_USUARIOS = [
 ]
 
 # Configuración del Dominio
-DOMINIO = "IESMHP.LOCAL" # Cambiar por tu dominio
+DOMINIO = "iesmhp.local" # Cambiar por tu dominio
 SERVIDOR_AD = "10.0.1.48" # IP del Controlador de Dominio
 
 # --- FUNCIONES ---
@@ -39,7 +39,8 @@ def verificar_credenciales(usuario, password):
         
         server = Server(SERVIDOR_AD, get_info=ALL)
         # Formato habitual: DOMINIO\usuario o usuario@dominio
-        user_dn = f"{DOMINIO}\\{usuario}"
+        #user_dn = f"{DOMINIO}\\{usuario}" -----< Formato usado en NTLM, fallaba en SMRD
+        user_dn = f"{usuario}@{DOMINIO}"
         
         conn = Connection(server, user=user_dn, password=password) #, authentication=NTLM)
         if conn.bind():
@@ -158,3 +159,36 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# --- EXPLICACIONES DE CONFIGURACIÓN ---
+# 1. DATOS_USUARIOS: Matriz con los datos de los usuarios y sus equipos.
+#    Cada fila debe tener: [Usuario, NombreEquipo, IP, MAC, NombreReal]
+#    Asegúrate de que las direcciones MAC estén en formato correcto (AA:BB:CC:DD:EE:FF o AA-BB-CC-DD-EE-FF).
+# 2. Debe existir un usario en la máquina linux "alumno", sin password, que automáticamente ejecute este script al iniciar sesión.
+#    ->Para ello
+#      a) Crear usuario: sudo adduser alumno
+#      b) Configurar para que no pida contraseña al iniciar sesión: 
+#           1) sudo passwd -d alumno
+#           2) sudo nano /etc/ssh/sshd_config
+#              Añadir o modificar la línea: PermitEmptyPasswords yes
+#              Luego reiniciar el servicio SSH: sudo systemctl restart ssh   (o sshd según distribución)
+#      c) Configurar un entorno virtual para la ejecución del script
+#         sudo -u alumno -i
+#         python3 -m venv /home/alumno/venv
+#         source /home/alumno/venv/bin/activate
+#         pip install ldap3
+#         pip install pycryptodome  # (si usas autenticación NTLM, sino no es necesario)
+#         deactivate
+#      c) Añadir al archivo .bashrc o .profile la ejecución automática de este script
+                # Ejecutar EnciendeAlumno con el venv "env" al iniciar sesión
+                # if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
+                #     echo "Lanzando EnciendeAlumno..."
+                #     # Navegamos a la carpeta raiz por seguridad
+                #     cd ~
+                #     # Ejecutamos usando el python del entorno virtual
+                #     # No hace falta "activate", basta con llamar a su binario  (exec opcional: hace que se cierre sesión inmediatamente después)
+                #     exec ~/venv/bin/python3 ~/EnciendeAlumno.py
+                #     echo "Script finalizado. Sesión activa."
+                # fi
+#      d) Copiar el fichero EnciendeAlumno.py en /home/alumno/
+             #cp /opt/IAC-IESMHP/utiles/EnciendeAlumno.py /home/alumno/
