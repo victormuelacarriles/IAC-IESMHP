@@ -14,9 +14,11 @@ from ldap3 import Server, Connection, ALL, NTLM
 DATOS_USUARIOS = [
     ["SMRD01", "SMRD-00", "10.0.32.120", "bc:fc:e7:05:76:08", "Aaron"],
     ["SMRD05", "SMRD-04", "10.0.32.124", "bc:fc:e7:05:70:f8", "AlexandraPRUEBAS"],
+    ["SMRD02", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Nicolás"],
     ["SMRV20", "SMRD-06", "10.0.32.126", "bc:fc:e7:04:bb:57", "Carlos"],
     ["SMRV02", "SMRD-07", "10.0.32.127", "bc:fc:e7:05:71:60", "Isabel"],
     ["SMRV05", "SMRD-10", "10.0.32.130", "bc:fc:e7:04:bc:ed", "Juan Manuel"],
+    ["SMRV09", "SMRD-14", "10.0.32.134", "bc:fc:e7:05:73:63", "Natalija"],
     ["SMRV24", "SMRD-10", "10.0.32.130", "bc:fc:e7:04:bc:ed", "Cristina"],
     ["SMRV25", "SMRD-11", "10.0.32.131", "bc:fc:e7:05:73:47", "María Sandra"],
     ["SMRV07", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Jorge"],
