@@ -13,8 +13,8 @@ from ldap3 import Server, Connection, ALL, NTLM
 # Formato MAC: Acepta AA:BB:CC... o AA-BB-CC...
 DATOS_USUARIOS = [
     ["SMRD01", "SMRD-00", "10.0.32.120", "bc:fc:e7:05:76:08", "Aaron"],
-    ["SMRD05", "SMRD-04", "10.0.32.124", "bc:fc:e7:05:70:f8", "AlexandraPRUEBAS"],
     ["SMRD02", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Nicolás"],
+    ["SMRD05", "SMRD-04", "10.0.32.124", "bc:fc:e7:05:70:f8", "AlexandraPRUEBAS"],
     ["SMRV20", "SMRD-06", "10.0.32.126", "bc:fc:e7:04:bb:57", "Carlos"],
     ["SMRV02", "SMRD-07", "10.0.32.127", "bc:fc:e7:05:71:60", "Isabel"],
     ["SMRV05", "SMRD-10", "10.0.32.130", "bc:fc:e7:04:bc:ed", "Juan Manuel"],
@@ -22,6 +22,7 @@ DATOS_USUARIOS = [
     ["SMRV24", "SMRD-10", "10.0.32.130", "bc:fc:e7:04:bc:ed", "Cristina"],
     ["SMRV25", "SMRD-11", "10.0.32.131", "bc:fc:e7:05:73:47", "María Sandra"],
     ["SMRV07", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Jorge"],
+    ["SMRV26", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Hector"],
     ["SMRV13", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Ignacio"],
     ["vmuela", "SMRD-18", "10.0.32.138", "74:56:3C:95:EA:81", "Victor"] # Ejemplo local
 ]
@@ -190,7 +191,7 @@ if __name__ == "__main__":
                 #     cd ~
                 #     # Ejecutamos usando el python del entorno virtual
                 #     # No hace falta "activate", basta con llamar a su binario  (exec opcional: hace que se cierre sesión inmediatamente después)
-                #     exec ~/venv/bin/python3 ~/EnciendeAlumno.py
+                #     exec ~/venv/bin/python3 /opt/IAC-IESMHP/Mint/utiles/EnciendeAlumno.py
                 #     echo "Script finalizado. Sesión activa."
                 # fi
 #      d) Copiar el fichero EnciendeAlumno.py en /home/alumno/
