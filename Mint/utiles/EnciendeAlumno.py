@@ -164,7 +164,7 @@ def main():
             print("------------------------------------------------")
             #Si el tipo de usuario es profesor, preguntar si quiere encender todos los equipos de su clase, donde clase se define como todos los alumnos (tipo "A"), cuya IP empiece por los mismos primeros que la IP física del equipo actual.
             if tipo_usuario.upper() == "P":
-                respuesta = input("¿Desea encender todos los equipos de su clase? (s/n): ").strip().lower()
+                respuesta = input("¿Desea encender todos los equipos de su clase? (s/n): [n]").strip().lower()
                 if respuesta == 's':
                     prefijo_ip = '.'.join(ip_equipo.split('.')[:3]) + '.'
                     print(f"[...] Encendiendo todos los equipos de la clase con prefijo IP {prefijo_ip}...")
