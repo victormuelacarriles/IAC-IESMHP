@@ -13,24 +13,24 @@ from ldap3 import Server, Connection, ALL, NTLM
 # Formato MAC: Acepta AA:BB:CC... o AA-BB-CC...
 DATOS_USUARIOS = [
     ###################################################################### Alumnos
-    ["SMRD01", "SMRD-00", "10.0.32.120", "bc:fc:e7:05:76:08", "Aaron"],
-    ["SMRD02", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Nicolás"],
-    ["SMRD05", "SMRD-04", "10.0.32.124", "bc:fc:e7:05:70:f8", "AlexandraPRUEBAS"],
-    ["SMRV20", "SMRD-06", "10.0.32.126", "bc:fc:e7:04:bb:57", "Carlos"],
-    ["SMRV02", "SMRD-07", "10.0.32.127", "bc:fc:e7:05:71:60", "Isabel"],
-    ["SMRV05", "SMRD-10", "10.0.32.130", "bc:fc:e7:04:bc:ed", "Juan Manuel"],
-    ["SMRV09", "SMRD-14", "10.0.32.134", "bc:fc:e7:05:73:63", "Natalija"],
-    ["SMRV24", "SMRD-10", "10.0.32.130", "bc:fc:e7:04:bc:ed", "Cristina"],
-    ["SMRV25", "SMRD-11", "10.0.32.131", "bc:fc:e7:05:73:47", "María Sandra"],
-    ["SMRV07", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Jorge"],
-    ["SMRV26", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Hector"],
-    ["SMRV13", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Ignacio"],
+    ["SMRD01", "SMRD-00", "10.0.32.120", "bc:fc:e7:05:76:08", "Aaron","A"],
+    ["SMRD02", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Nicolás","A"],
+    ["SMRD05", "SMRD-04", "10.0.32.124", "bc:fc:e7:05:70:f8", "AlexandraPRUEBAS","A"],
+    ["SMRV20", "SMRD-06", "10.0.32.126", "bc:fc:e7:04:bb:57", "Carlos","A"],
+    ["SMRV02", "SMRD-07", "10.0.32.127", "bc:fc:e7:05:71:60", "Isabel","A"],
+    ["SMRV05", "SMRD-10", "10.0.32.130", "bc:fc:e7:04:bc:ed", "Juan Manuel","A"],
+    ["SMRV09", "SMRD-14", "10.0.32.134", "bc:fc:e7:05:73:63", "Natalija","A"],
+    ["SMRV24", "SMRD-10", "10.0.32.130", "bc:fc:e7:04:bc:ed", "Cristina","A"],
+    ["SMRV25", "SMRD-11", "10.0.32.131", "bc:fc:e7:05:73:47", "María Sandra","A"],
+    ["SMRV07", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Jorge","A"],
+    ["SMRV26", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Hector","A"],
+    ["SMRV13", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Ignacio","A"],
     ###################################################################### Profesores
-    ["rmachog", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Roberto"],
-    ["mbalava", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Belén"],
-    ["luis", "SMRD-16", "10.0.32.136", "74:56:3C:95:EC:10", "Luis M.V."],
-    ["afernandez", "SMRD-17", "10.0.32.137", "74:56:3C:95:EB:87", "Angélica"],
-    ["vmuela", "SMRD-18", "10.0.32.138", "74:56:3C:95:EA:81", "Victor"] 
+    ["rmachog", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Roberto","P"],
+    ["mbalava", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Belén","P"],
+    ["luis", "SMRD-16", "10.0.32.136", "74:56:3C:95:EC:10", "Luis M.V.","P"],
+    ["afernandez", "SMRD-17", "10.0.32.137", "74:56:3C:95:EB:87", "Angélica","P"],
+    ["vmuela", "SMRD-18", "10.0.32.138", "74:56:3C:95:EA:81", "Victor","P"] 
 ]
 
 # Configuración del Dominio
@@ -118,6 +118,10 @@ def main():
     nombre_equipo = datos_equipo[1]
     ip_equipo = datos_equipo[2]
     mac_equipo = datos_equipo[3]
+    nombre_real = datos_equipo[4]
+    tipo_usuario = datos_equipo[5]
+
+
 
     # 3. Pedir contraseña y verificar dominio
     password_input = getpass.getpass(f"Contraseña para {DOMINIO}\\{usuario_input}: ")
@@ -158,6 +162,21 @@ def main():
             print("------------------------------------------------")
             print(f"[EXITO] El equipo {nombre_equipo} ya está disponible.")
             print("------------------------------------------------")
+            #Si el tipo de usuario es profesor, preguntar si quiere encender todos los equipos de su clase, donde clase se define como todos los alumnos (tipo "A"), cuya IP empiece por los mismos primeros que la IP física del equipo actual.
+            if tipo_usuario.upper() == "P":
+                respuesta = input("¿Desea encender todos los equipos de su clase? (s/n): ").strip().lower()
+                if respuesta == 's':
+                    prefijo_ip = '.'.join(ip_equipo.split('.')[:3]) + '.'
+                    print(f"[...] Encendiendo todos los equipos de la clase con prefijo IP {prefijo_ip}...")
+                    for fila in DATOS_USUARIOS:
+                        if fila[5].upper() == "A" and fila[2].startswith(prefijo_ip):
+                            try:
+                                print(f"    Enviando WoL a {fila[1]} ({fila[2]}) - MAC: {fila[3]}")
+                                enviar_wol(fila[3])
+                            except Exception as e:
+                                print(f"    [X] Error enviando WoL a {fila[1]}: {e}")
+                    print("[OK] Señales WoL enviadas a todos los equipos de la clase.")
+            
             return
         
         # Esperar 10 segundos para el siguiente intento
