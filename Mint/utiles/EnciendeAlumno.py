@@ -137,55 +137,54 @@ def main():
     # 4. Comprobar estado actual
     if hacer_ping(ip_equipo):
         print(f"[!] El equipo {nombre_equipo} ya está encendido y respondiendo.")
-        return
-
-    # 5. Encender equipo
-    print(f"[...] El equipo está apagado. Enviando señal Wake-on-LAN a {mac_equipo}...")
-    try:
-        enviar_wol(mac_equipo)
-        # Si prefieres usar la utilidad externa instalada, comenta la línea de arriba y usa:
-        # subprocess.run(["wakeonlan", mac_equipo]) 
-    except Exception as e:
-        print(f"[X] Error enviando WoL: {e}")
-        return
-
-    # 6. Bucle de espera (Timeout 5 min = 300 seg)
-    print("[...] Esperando arranque. Primera comprobación en 10 segundos.")
-    time.sleep(10) # Espera inicial obligatoria
-    
-    tiempo_inicio = time.time()
-    tiempo_maximo = 300 # 5 minutos
-    
-    while (time.time() - tiempo_inicio) < tiempo_maximo:
-        print(f" -> Comprobando conectividad con {ip_equipo}...")
-        
-        if hacer_ping(ip_equipo):
-            print("------------------------------------------------")
-            print(f"[EXITO] El equipo {nombre_equipo} ya está disponible.")
-            print("------------------------------------------------")
-            #Si el tipo de usuario es profesor, preguntar si quiere encender todos los equipos de su clase, donde clase se define como todos los alumnos (tipo "A"), cuya IP empiece por los mismos primeros que la IP física del equipo actual.
-            if tipo_usuario.upper() == "P":
-                respuesta = input("¿Desea encender todos los equipos de su clase? (s/n): [n]").strip().lower()
-                if respuesta == 's':
-                    prefijo_ip = '.'.join(ip_equipo.split('.')[:3]) + '.'
-                    print(f"[...] Encendiendo todos los equipos de la clase con prefijo IP {prefijo_ip}...")
-                    for fila in DATOS_USUARIOS:
-                        if fila[5].upper() == "A" and fila[2].startswith(prefijo_ip):
-                            try:
-                                print(f"    Enviando WoL a {fila[1]} ({fila[2]}) - MAC: {fila[3]}")
-                                enviar_wol(fila[3])
-                            except Exception as e:
-                                print(f"    [X] Error enviando WoL a {fila[1]}: {e}")
-                    print("[OK] Señales WoL enviadas a todos los equipos de la clase.")
-            
+    else:
+        # 5. Encender equipo
+        print(f"[...] El equipo está apagado. Enviando señal Wake-on-LAN a {mac_equipo}...")
+        try:
+            enviar_wol(mac_equipo)
+            # Si prefieres usar la utilidad externa instalada, comenta la línea de arriba y usa:
+            # subprocess.run(["wakeonlan", mac_equipo]) 
+        except Exception as e:
+            print(f"[X] Error enviando WoL: {e}")
             return
-        
-        # Esperar 10 segundos para el siguiente intento
-        time.sleep(10)
 
-    # 7. Error por Timeout
-    print("\n[X] Error: Tiempo de espera agotado (5 min).")
-    print("    El equipo no ha respondido al ping. Verifique conexión eléctrica o red.")
+        # 6. Bucle de espera (Timeout 5 min = 300 seg)
+        print("[...] Esperando arranque. Primera comprobación en 10 segundos.")
+        time.sleep(10) # Espera inicial obligatoria
+        
+        tiempo_inicio = time.time()
+        tiempo_maximo = 300 # 5 minutos
+        
+        while (time.time() - tiempo_inicio) < tiempo_maximo:
+            print(f" -> Comprobando conectividad con {ip_equipo}...")
+            
+            if hacer_ping(ip_equipo):
+                print("------------------------------------------------")
+                print(f"[EXITO] El equipo {nombre_equipo} ya está disponible.")
+                print("------------------------------------------------")
+                #Si el tipo de usuario es profesor, preguntar si quiere encender todos los equipos de su clase, donde clase se define como todos los alumnos (tipo "A"), cuya IP empiece por los mismos primeros que la IP física del equipo actual.
+                if tipo_usuario.upper() == "P":
+                    respuesta = input("¿Desea encender todos los equipos de su clase? (s/n): [n]").strip().lower()
+                    if respuesta == 's':
+                        prefijo_ip = '.'.join(ip_equipo.split('.')[:3]) + '.'
+                        print(f"[...] Encendiendo todos los equipos de la clase con prefijo IP {prefijo_ip}...")
+                        for fila in DATOS_USUARIOS:
+                            if fila[5].upper() == "A" and fila[2].startswith(prefijo_ip):
+                                try:
+                                    print(f"    Enviando WoL a {fila[1]} ({fila[2]}) - MAC: {fila[3]}")
+                                    enviar_wol(fila[3])
+                                except Exception as e:
+                                    print(f"    [X] Error enviando WoL a {fila[1]}: {e}")
+                        print("[OK] Señales WoL enviadas a todos los equipos de la clase.")
+                
+                return
+            
+            # Esperar 10 segundos para el siguiente intento
+            time.sleep(10)
+
+        # 7. Error por Timeout
+        print("\n[X] Error: Tiempo de espera agotado (5 min).")
+        print("    El equipo no ha respondido al ping. Verifique conexión eléctrica o red.")
 
 if __name__ == "__main__":
     main()
