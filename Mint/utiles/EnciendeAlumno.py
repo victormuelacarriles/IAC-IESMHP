@@ -30,7 +30,7 @@ DATOS_USUARIOS = [
     ["mbalava", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Belén","P"],
     ["luis", "SMRD-16", "10.0.32.136", "74:56:3C:95:EC:10", "Luis M.V.","P"],
     ["afernandez", "SMRD-17", "10.0.32.137", "74:56:3C:95:EB:87", "Angélica","P"],
-    ["vmuela", "SMRD-18", "10.0.32.138", "74:56:3C:95:EA:81", "Victor","P"] 
+    ["vmuela", "SMRD-18", "10.0.32.138", "74:56:3C:95:EA:81", "Victor", "P"] 
 ]
 
 # Configuración del Dominio
@@ -66,7 +66,7 @@ def buscar_datos_usuario(usuario_input):
     """Busca el usuario en la matriz y devuelve sus datos."""
     for fila in DATOS_USUARIOS:
         if fila[0].lower() == usuario_input.lower():
-            return fila # Retorna [User, Host, IP, MAC]
+            return fila # Retorna [User, Host, IP, MAC, NombreReal, TipoUsuario]
     return None
 
 def hacer_ping(ip):
@@ -121,6 +121,7 @@ def main():
     nombre_real = datos_equipo[4]
     tipo_usuario = datos_equipo[5]
 
+    print(f"[OK] Usuario encontrado: {nombre_real} ({tipo_usuario}). Equipo asignado: {nombre_equipo} ({ip_equipo})")
 
 
     # 3. Pedir contraseña y verificar dominio
