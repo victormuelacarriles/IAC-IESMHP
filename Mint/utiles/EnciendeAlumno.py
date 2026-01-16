@@ -12,6 +12,7 @@ from ldap3 import Server, Connection, ALL, NTLM
 # Matriz de datos: [Usuario, NombreEquipo, IP, MAC]
 # Formato MAC: Acepta AA:BB:CC... o AA-BB-CC...
 DATOS_USUARIOS = [
+    ###################################################################### Alumnos
     ["SMRD01", "SMRD-00", "10.0.32.120", "bc:fc:e7:05:76:08", "Aaron"],
     ["SMRD02", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Nicolás"],
     ["SMRD05", "SMRD-04", "10.0.32.124", "bc:fc:e7:05:70:f8", "AlexandraPRUEBAS"],
@@ -24,7 +25,12 @@ DATOS_USUARIOS = [
     ["SMRV07", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Jorge"],
     ["SMRV26", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Hector"],
     ["SMRV13", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Ignacio"],
-    ["vmuela", "SMRD-18", "10.0.32.138", "74:56:3C:95:EA:81", "Victor"] # Ejemplo local
+    ###################################################################### Profesores
+    ["??????", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Roberto"],
+    ["??????", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Belén"],
+    ["??????", "SMRD-16", "10.0.32.136", "74:56:3C:95:EC:10", "Luis M.V."],
+    ["??????", "SMRD-17", "10.0.32.137", "74:56:3C:95:EB:87", "Angélica"],
+    ["vmuela", "SMRD-18", "10.0.32.138", "74:56:3C:95:EA:81", "Victor"] 
 ]
 
 # Configuración del Dominio
