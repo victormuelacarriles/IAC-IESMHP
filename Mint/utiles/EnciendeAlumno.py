@@ -147,7 +147,7 @@ def main():
                         enviar_wol(fila[3])
                     except Exception as e:
                         print(f"    [X] Error enviando WoL a {fila[1]}: {e}")
-            print("[OK] Señales WoL enviadas a todos los equipos de la clase.")
+            print("[OK] Señales WoL enviadas a todos los equipos asignados de la clase.")
 
 
     # 4. Comprobar estado actual
