@@ -143,7 +143,7 @@ def main():
             for fila in DATOS_USUARIOS:
                 if fila[5].upper() == "A" and fila[2].startswith(prefijo_ip):
                     try:
-                        print(f"    Enviando WoL a {fila[1]} ({fila[2]}) - MAC: {fila[3]}")
+                        print(f"    Enviando WoL para alumno {fila[1]}-{fila[4]} {fila[1]} ({fila[2]}) - MAC: {fila[3]}")
                         enviar_wol(fila[3])
                     except Exception as e:
                         print(f"    [X] Error enviando WoL a {fila[1]}: {e}")
