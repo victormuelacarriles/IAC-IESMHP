@@ -12,7 +12,7 @@ from ldap3 import Server, Connection, ALL, NTLM
 # Matriz de datos: [Usuario, NombreEquipo, IP, MAC]
 # Formato MAC: Acepta AA:BB:CC... o AA-BB-CC...
 DATOS_USUARIOS = [
-    ###################################################################### Alumnos
+    ###################################################################### Alumnos Distancia
     ["SMRD01", "SMRD-00", "10.0.32.120", "bc:fc:e7:05:76:08", "Aaron","A"],
     ["SMRD02", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Nicolás","A"],
     ["SMRD05", "SMRD-04", "10.0.32.124", "bc:fc:e7:05:70:f8", "AlexandraPRUEBAS","A"],
@@ -25,12 +25,32 @@ DATOS_USUARIOS = [
     ["SMRV07", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Jorge","A"],
     ["SMRV26", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Hector","A"],
     ["SMRV13", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Ignacio","A"],
-    ###################################################################### Profesores
+    ###################################################################### Profesores Distancia
     ["rmachog", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Roberto","P"],
     ["mbalava", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Belén","P"],
     ["luis", "SMRD-16", "10.0.32.136", "74:56:3C:95:EC:10", "Luis M.V.","P"],
     ["afernandez", "SMRD-17", "10.0.32.137", "74:56:3C:95:EB:87", "Angélica","P"],
-    ["vmuela", "SMRD-18", "10.0.32.138", "74:56:3C:95:EA:81", "Victor", "P"] 
+    ["vmuela", "SMRD-18", "10.0.32.138", "74:56:3C:95:EA:81", "Víctor", "P"], 
+    ########################################################################################## Alumnos CEIABD
+    ["CEGSIABD09","IABD-01", "10.0.72.121", "d8:bb:c1:38:71:6f", "Canales De la Hera, María del Carmen","A"],
+    ["CEGSIABD04","IABD-02", "10.0.72.122", "d8:bb:c1:38:93:ad", "Carcedo Ruiz, Diego","A"],
+    ["CEGSIABD16","IABD-03", "10.0.72.123", "d8:bb:c1:38:94:25", "Coterillo González, Alberto","A"],
+    ["CEGSIABD12","IABD-04", "10.0.72.124", "d8:bb:c1:38:93:a2", "Díez Torres, Manuel Enrique","A"],
+    ["CEGSIABD11","IABD-06", "10.0.72.126", "d8:bb:c1:38:94:69", "González Collantes, Rodrigo Alberto","A"],
+    ["CEGSIABD15","IABD-07", "10.0.72.127", "d8:bb:c1:38:93:e8", "González Hoyos, Rodrigo","A"],
+    ["CEGSIABD19","IABD-09", "10.0.72.129", "d8:bb:c1:38:93:ae", "González Tresgallo, Bruno","A"],
+    ["CEGSIABD02","IABD-10", "10.0.72.130", "74:56:3C:65:62:C6", "Fuentes Cobo, Carlos","A"],
+    ["CEGSIABD10","IABD-12", "10.0.72.132", "74:56:3C:65:60:7F", "Llano Rebanal, Manuel","A"],
+    ["CEGSIABD13","IABD-14", "10.0.72.134", "74:56:3C:95:ED:21", "Palacio Cobo, Pablo","A"],
+    ["CEGSIABD17","IABD-16", "10.0.72.136", "74:56:3C:95:EC:10", "Pérez Castro, Javier","A"],
+    ["CEGSIABD08","IABD-18", "10.0.72.138", "74:56:3C:95:EA:81", "San Juan Rodrigo, Álvaro","A"],
+    ["CEGSIABD05","IABD-19", "10.0.72.139", "74:56:3c:95:eb:d5", "Sierra Corral, Jesús","A"],
+    ################################################################################# Profesores CEIABD
+    ["omunillaf", "IABD-00", "10.0.72.120", "d8:bb:c1:35:f1:dd", "Óscar Munilla Fernández","P"],
+    ["dblancog",  "IABD-00", "10.0.72.120", "d8:bb:c1:35:f1:dd", "David Blanco González","P"],
+    ["paguirrej", "IABD-00", "10.0.72.120", "d8:bb:c1:35:f1:dd", "Pedro Aguirre Inchaurbe","P"],
+    ["larce",     "IABD-00", "10.0.72.120", "d8:bb:c1:35:f1:dd", "Lorenzo  Arce Gómez","P"],
+    ["vmuela",    "IABD-20", "10.0.72.140", "74:56:3c:95:eb:57", "Víctor","P"]
 ]
 
 # Configuración del Dominio
