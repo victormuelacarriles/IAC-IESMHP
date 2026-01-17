@@ -1,4 +1,4 @@
-EQUIPO=10.0.72.120;ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL root@$EQUIPO poweroff &
+EQUIPO=10.0.72.120;ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NULL root@$EQUIPO poweroff &
 EQUIPO=10.0.72.121;ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL root@$EQUIPO poweroff &
 EQUIPO=10.0.72.122;ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL root@$EQUIPO poweroff &
 EQUIPO=10.0.72.123;ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL root@$EQUIPO poweroff &
