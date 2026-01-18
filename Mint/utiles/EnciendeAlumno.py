@@ -28,6 +28,7 @@ DATOS_USUARIOS = [
     ["SMRV24", "SMRD-10", "10.0.32.130", "bc:fc:e7:04:bc:ed", "Cristina","A"],
     ["SMRV25", "SMRD-11", "10.0.32.131", "bc:fc:e7:05:73:47", "María Sandra","A"],
     ["SMRV09", "SMRD-14", "10.0.32.134", "bc:fc:e7:05:73:63", "Natalija","A"],
+    ["SMRV29", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Aingeru","A"],
     ["SMRV13", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Ignacio","A"],
     ###################################################################### Profesores Distancia
     ["rmachog", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Roberto","P"],
