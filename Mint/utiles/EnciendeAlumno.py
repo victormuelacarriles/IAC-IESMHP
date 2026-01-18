@@ -14,8 +14,9 @@ from ldap3 import Server, Connection, ALL, NTLM
 DATOS_USUARIOS = [
     ###################################################################### Alumnos Distancia
     ["SMRD01", "SMRD-00", "10.0.32.120", "bc:fc:e7:05:76:08", "Aaron","A"],
-    ["SMRD02", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Nicolás","A"],
+    ["SMRV07", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Jorge","A"],
     ["SMRD05", "SMRD-04", "10.0.32.124", "bc:fc:e7:05:70:f8", "AlexandraPRUEBAS","A"],
+    ["SMRD02", "SMRD-05", "10.0.32.125", "bc:fc:e7:05:71:4a", "Nicolás","A"],
     ["SMRV16", "SMRD-02", "10.0.32.122", "d8:bb:c1:38:93:ad", "Victoria", "A"],
     ["SMRV20", "SMRD-06", "10.0.32.126", "bc:fc:e7:04:bb:57", "Carlos","A"],
     ["SMRV02", "SMRD-07", "10.0.32.127", "bc:fc:e7:05:71:60", "Isabel","A"],
@@ -23,7 +24,6 @@ DATOS_USUARIOS = [
     ["SMRV09", "SMRD-14", "10.0.32.134", "bc:fc:e7:05:73:63", "Natalija","A"],
     ["SMRV24", "SMRD-10", "10.0.32.130", "bc:fc:e7:04:bc:ed", "Cristina","A"],
     ["SMRV25", "SMRD-11", "10.0.32.131", "bc:fc:e7:05:73:47", "María Sandra","A"],
-    ["SMRV07", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Jorge","A"],
     ["SMRV26", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Hector","A"],
     ["SMRV13", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Ignacio","A"],
     ###################################################################### Profesores Distancia
