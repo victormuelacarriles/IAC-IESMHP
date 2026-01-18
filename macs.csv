@@ -29,28 +29,23 @@ d8:bb:c1:38:93:ae, IABD-09, 129, equipo alumno
 74:56:3c:95:eb:57, IABD-20, 140, equipo alumno
 #,#,#, ######################################################################################
 #,#,#, AULA DISTANCIA                                              ##########################
-bc:fc:e7:05:76:08, SMRD-00, 120, equipo docente                  ###COMPROBAR!!!!
-08:bf:b8:40:09:82, SMRD-01, 121, equipo alumno                   ###COMPROBAR!!!!
+bc:fc:e7:05:76:08, SMRD-00, 120, equipo alumno
+08:bf:b8:40:09:82, SMRD-01, 121, equipo alumno 
 bc:fc:e7:05:73:d1, SMRD-02, 122, equipo alumno
 bc:fc:e7:05:72:58, SMRD-03, 123, equipo alumno
 bc:fc:e7:05:70:f8, SMRD-04, 124, equipo alumno
 bc:fc:e7:05:71:4a, SMRD-05, 125, equipo alumno
 bc:fc:e7:04:bb:57, SMRD-06, 126, equipo alumno
-bc:fc:e7:05:71:60, SMRD-07, 127, equipo alumno falla disco nvme
+bc:fc:e7:05:71:60, SMRD-07, 127, equipo alumno 
 bc:fc:e7:05:72:e9, SMRD-08, 128, equipo alumno
 bc:fc:e7:05:72:9a, SMRD-09, 129, equipo alumno
 bc:fc:e7:04:bc:ed, SMRD-10, 130, equipo alumno
 bc:fc:e7:05:73:47, SMRD-11, 131, equipo alumno
-bc:fc:e7:05:73:cc, SMRD-12, 132, equipo alumno
+bc:fc:e7:05:73:cc, SMRD-12, 132, equipo alumno-----------------> falla (18/1/2026): NO ENCIENDE POR WOL!
 bc:fc:e7:05:75:7e, SMRD-13, 133, equipo alumno
-bc:fc:e7:05:73:63, SMRD-14, 134, equipo alumno
-bc:fc:e7:05:73:c8, SMRD-15, 135, equipo alumno
-bc:fc:e7:04:30:c0, SMRD-16, 136, equipo alumno falla usb delantero
-bc:fc:e7:05:73:d0, SMRD-17, 137, equipo alumno
-bc:fc:e7:05:73:d5, SMRD-18, 138, equipo alumno
+bc:fc:e7:05:73:63, SMRD-14, 134, equipo alumno+LUIS
+bc:fc:e7:05:73:c8, SMRD-15, 135, equipo alumno+BELEN+ROBERTO
+bc:fc:e7:04:30:c0, SMRD-16, 136, equipo alumno-----------------> falla (18/1/2026): NO ENCIENDE POR WOL!
+bc:fc:e7:05:73:d0, SMRD-17, 137, equipo alumno+ANGELICA--------> falla (18/1/2026): NO conecta por SSH (se bloquea? se suspende?)
+bc:fc:e7:05:73:d5, SMRD-18, 138, equipo alumno+VICTOR
 #,#,#, ######################################################################################
-
-
-#,#,#, ###pruebasvirtuales###
-00:0C:29:90:7F:D0, IABD-99, 199, virtualProbando
-00:0c:29:d9:75:f4, IABD-98, 198, virtualProbando

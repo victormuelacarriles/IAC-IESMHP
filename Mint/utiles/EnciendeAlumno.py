@@ -16,6 +16,7 @@ DATOS_USUARIOS = [
     ["SMRD01", "SMRD-00", "10.0.32.120", "bc:fc:e7:05:76:08", "Aaron","A"],
     ["SMRD02", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Nicolás","A"],
     ["SMRD05", "SMRD-04", "10.0.32.124", "bc:fc:e7:05:70:f8", "AlexandraPRUEBAS","A"],
+    ["SMRV16", "SMRD-02", "10.0.32.122", "d8:bb:c1:38:93:ad", "Victoria", "A"],
     ["SMRV20", "SMRD-06", "10.0.32.126", "bc:fc:e7:04:bb:57", "Carlos","A"],
     ["SMRV02", "SMRD-07", "10.0.32.127", "bc:fc:e7:05:71:60", "Isabel","A"],
     ["SMRV05", "SMRD-10", "10.0.32.130", "bc:fc:e7:04:bc:ed", "Juan Manuel","A"],
