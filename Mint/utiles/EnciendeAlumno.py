@@ -35,7 +35,7 @@ DATOS_USUARIOS = [
     ["mbalava", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Belén","P"],
     ["luis", "SMRD-16", "10.0.32.136", "74:56:3C:95:EC:10", "Luis M.V.","P"],
     ["afernandez", "SMRD-17", "10.0.32.137", "74:56:3C:95:EB:87", "Angélica","P"],
-    ["vmuela", "SMRD-18", "10.0.32.138", "74:56:3C:95:EA:81", "Víctor", "P"], 
+    ["vmuela", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Víctor", "P"], 
     ########################################################################################## Alumnos CEIABD
     ["CEGSIABD09","IABD-01", "10.0.72.121", "d8:bb:c1:38:71:6f", "Canales De la Hera, María del Carmen","A"],
     ["CEGSIABD04","IABD-02", "10.0.72.122", "d8:bb:c1:38:93:ad", "Carcedo Ruiz, Diego","A"],
