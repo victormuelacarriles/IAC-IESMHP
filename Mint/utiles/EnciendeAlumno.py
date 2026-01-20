@@ -250,3 +250,5 @@ if __name__ == "__main__":
                 # fi
 #      d) Copiar el fichero EnciendeAlumno.py en /home/alumno/
              #cp /opt/IAC-IESMHP/utiles/EnciendeAlumno.py /home/alumno/
+
+# ssh root@10.0.32.119 "cd /opt/IAC-IESMHP; git pull"
