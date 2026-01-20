@@ -2,7 +2,7 @@
 for i in {120..138}; do
     #Si contesta al ping, se intenta apagar:
     if ping -c 1 -W 1 10.0.32.$i &> /dev/null; then
-        echo "Intentando apagar 10.0.32.$i ..."
+        echo "Detectado encendido de 10.0.32.$i : comprobando conexiones y apagando si no hay..."
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NULL root@10.0.32.$i "HOSTNAME=\$(hostname); R=\$(ss -Htn state established '( sport = :ssh or sport = :3389 )' | grep -v 10.0.32.119); if [ -z \"\$R\" ]; then echo \"Apagando 10.0.32.$i (\$HOSTNAME)\"; poweroff; else echo \"\$R\"; fi" &
     else
         echo "10.0.32.$i no responde"
