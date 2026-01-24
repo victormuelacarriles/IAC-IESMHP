@@ -48,11 +48,11 @@ MOUNTDIR="$WORKDIR/mount"
 EXTRACTDIR="$WORKDIR/extract"
 SQUASHFS_DIR="$WORKDIR/squashfs"
 NOMBRESCRIPINICIAL="0b-Github.sh"
-SCRIPT_GIT="$RAIZGIT/Mint/$NOMBRESCRIPINICIAL"
+SCRIPT_GIT="$RAIZGIT/Mint/ISO/$NOMBRESCRIPINICIAL"
 RAIZSCRIPTS="/opt/$RAIZGIT"
 RAIZLOGS="/var/log/$RAIZGIT"
 
-echo "Descargo los scripts en /$RAIZMINT desde $RAIZSCRIPTSLIVE/Mint"
+verde "Descargo los scripts en /$RAIZMINT desde $RAIZSCRIPTSLIVE/Mint"
 git clone $GITREPO "$RAIZGIT/"
 #Directorios a crear en el sistema nuevo
 
