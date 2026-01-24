@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="3.00-ZFS"       # Versión ZFS
+VERSIONSCRIPT="2.00"       #Versión del script
 REPO="IAC-IESMHP"
 GITREPO="https://github.com/victormuelacarriles/$REPO.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
@@ -10,53 +10,82 @@ RAIZLOGS="/var/log/$REPO"
 SCRIPT2="2-SetupSOdesdeLiveCD.sh"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 
-# Funciones de colores
-echoverde() { echo -e "\033[32m$1\033[0m"; }
-echorojo()  { echo -e "\033[31m$1\033[0m"; }
-echoamarillo() { echo -e "\033[33m$1\033[0m"; }
 
-# Configuración idioma
+
+
+# Funciones de colores
+echoverde() {  
+    echo -e "\033[32m$1\033[0m" 
+}
+echorojo()  {
+      echo -e "\033[31m$1\033[0m" 
+}  
+echoamarillo() {  
+    echo -e "\033[33m$1\033[0m" 
+}
+
+#Por si hay que depurar, establecemos español 
 setxkbmap es || true && loadkeys es ||true
 
-# --------------------------------------------------------------------------
-# PRE-REQUISITO: ZFS
-# --------------------------------------------------------------------------
-if ! command -v zpool &> /dev/null; then
-    echoamarillo "Herramientas ZFS no detectadas. Instalando zfsutils-linux..."
-    apt-get update && apt-get install -y zfsutils-linux
-    modprobe zfs
-fi
 
-echoverde "1-SetupLiveCD (vs$VERSIONSCRIPT) - MODO ZFS + DEDUP"
-echo         "   Instalación Linux Mint $versionDISTRO sobre ZFS Root"
-echoamarillo "   ADVERTENCIA: La deduplicación requiere mucha RAM."
+
+
+echoverde "1-SetupLiveCD (vs$VERSIONSCRIPT)"
+echo         "   Script personalizado de instalación de "
+echo         "   sistema operativo Linux Mint $versionDISTRO para equipos distancia / CEIABD"
+echoamarillo "   (victor.muelacarriles@educantabria.es)"
 echoverde "--------------------------------------------------------------------"
-sleep 5
+echoverde "       Distancia     ->Disco pequeño: NVMe 0,5TB (/EFI, /swap y /)"
+echoverde "                     ->Disco grande:  NVMe 2,0TB (/home)"
+echoverde "--------------------------------------------------------------------"
+echoverde "       CEIABD        ->Disco pequeño: NVMe 0,5TB (/EFI, /swap y /)"
+echoverde "                     ->Disco grande:  SDa  1,0TB (/home)"
+echoverde "--------------------------------------------------------------------"
+sleep 1
+echoamarillo "                                                  (comenzará en 10sg)"
+echoverde "--------------------------------------------------------------------"
+sleep 9
 
-# Carpetas de trabajo 
+#Carpetas de trabajo 
 mkdir -p $RAIZSCRIPTSLIVE
 mkdir -p $RAIZSCRIPTS
 mkdir -p $RAIZLOGS
+echoverde "Carpetas de trabajo creadas: $RAIZSCRIPTSLIVE, $RAIZSCRIPTS, $RAIZLOGS"
 
-# Detectamos discos
+
+# Detectamos discos (ignorando los discos USB y loop0)
 DISCOS_M2=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0| grep -v 'usb'| grep nvme | sort -h -k2 | awk '{print $1}'))
 DISCOS_SD=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0| grep -v 'usb'| grep sd | sort -h -k2 | awk '{print $1}'))
+lsblk -dno NAME,SIZE | grep -v '^loop0'
+echo "DISCOS_M2[0]: ${DISCOS_M2[0]}"
+echo "DISCOS_M2[1]: ${DISCOS_M2[1]}"
+echo "DISCOS_SD[0]: ${DISCOS_SD[0]}"
+echo "DISCOS_SD[1]: ${DISCOS_SD[1]}"
 
 if [ -z "${DISCOS_M2}" ]; then 
-    echorojo "No se encontraron discos NVMe. Saliendo."
-    sleep 10 && exit 1
+    echorojo "No se encontraron discos NVMe ni discos SD. Asegúrate de que el equipo tiene discos conectados."
+    sleep 1000  && exit 1
+            
 else
     if [ -z "${DISCOS_M2[1]}" ]; then 
+        #Hay un discos NVME, buscamos un sd
         if [ -z "${DISCOS_SD[0]}" ]; then 
-            echorojo "Error: Solo 1 disco detectado. Se requieren 2."
-            sleep 10 && exit 1
+            # Si no hay discos SD no es distancias ni CEIABD: podríamo seguir pero parmos.
+            echorojo "No hay segundo disco SD (hay sólo un NVME sin disco secundario). Detenemos la instalación."
+            sleep 1000  && exit 1
         else
             DISK_SMALL="/dev/${DISCOS_M2[0]}"
             DISK_BIG="/dev/${DISCOS_SD[0]}"
+            echoverde "Equipo con disco NVME+SD: "
+            echoverde "    montaremos /     -> en disco NVME($DISK_SMALL)"
+            echoverde "               /home -> en disco SD  ($DISK_BIG)"
         fi
     else
         DISK_SMALL="/dev/${DISCOS_M2[0]}"
         DISK_BIG="/dev/${DISCOS_M2[1]}"
+        echoverde "Equipo con 2 NMVE: "
+        echoverde "    montaremos /     -> pequeño($DISK_SMALL)"
+        echoverde "               /home -> grande ($DISK_BIG)"
     fi
 fi
 
@@ -65,160 +94,144 @@ if [[ "$DISK_SMALL" != *nvme* ]]; then
     exit 1
 fi
 
-# --------------------------------------------------------------------------
-# LIMPIEZA DE DISCOS (LVM Y ZFS ANTIGUO)
-# --------------------------------------------------------------------------
-echoamarillo "Limpiando rastros de LVM y ZFS previos..."
-
-# Desactivar LVM
-vgchange -an || true
-# Importar y destruir pools ZFS previos si existen para liberar discos
-zpool import -f -aN || true 2>/dev/null
-for pool in $(zpool list -H -o name); do
-    zpool destroy -f "$pool" || true
-done
-
-# Limpieza discos
-sgdisk --zap-all "$DISK_SMALL"
-sgdisk --zap-all "$DISK_BIG"
-wipefs -a "$DISK_SMALL"
-wipefs -a "$DISK_BIG"
-
-# --------------------------------------------------------------------------
-# PARTICIONADO
-# --------------------------------------------------------------------------
-echoamarillo "Particionando $DISK_SMALL (EFI, SWAP, ZFS-ROOT)..."
-parted -s "$DISK_SMALL" mklabel gpt
-parted -s "$DISK_SMALL" mkpart ESP fat32 1MiB 513MiB
-parted -s "$DISK_SMALL" set 1 esp on
-parted -s "$DISK_SMALL" mkpart primary linux-swap 513MiB 8705MiB
-# El resto para ZFS rpool
-parted -s "$DISK_SMALL" mkpart primary 8705MiB 100%
-
-echoamarillo "Particionando $DISK_BIG (ZFS-HOME)..."
-parted -s "$DISK_BIG" mklabel gpt
-parted -s "$DISK_BIG" mkpart primary 1MiB 100%
-
-# Esperar kernel
-partprobe "$DISK_SMALL"
-partprobe "$DISK_BIG"
-sleep 5
-
-# Definir particiones
-EFI="${DISK_SMALL}p1"
-SWAP="${DISK_SMALL}p2"
-PART_RPOOL="${DISK_SMALL}p3"
-
-if [[ "$DISK_BIG" == *sd* ]]; then
-    PART_HPOOL="${DISK_BIG}1"
-else
-    PART_HPOOL="${DISK_BIG}p1"
+#Si existen particiones LVM, primero las eliminamos
+if lsblk -o NAME,TYPE | grep -q "lvm"; then
+    echoamarillo "Se han detectado particiones LVM. Eliminando particiones LVM..."
+    # Desactivar LVM
+    vgchange -an || true
+    # Borrar particiones LVM
+    for part in $(lsblk -o NAME,TYPE | grep "lvm" | awk '{print $1}'); do
+        echoamarillo "Borrando partición LVM: $part"
+        sgdisk --zap-all "/dev/$part" || true
+    done
+    echoverde "...Particiones LVM eliminadas"
 fi
 
-# Formatear EFI y SWAP (ZFS no usa mkfs)
-echoamarillo "Formateando EFI y SWAP..."
-mkfs.fat -F32 "$EFI"
-mkswap "$SWAP"
 
-# --------------------------------------------------------------------------
-# CREACIÓN DE ZFS POOLS Y DATASETS
-# --------------------------------------------------------------------------
-echoamarillo "Creando Pools ZFS con Deduplicación..."
 
-# Opciones comunes: LZ4 compression, Dedup ON, y optimizaciones
-ZFS_OPTS="-o ashift=12 -O acltype=posixacl -O xattr=sa -O dnodesize=auto -O compression=lz4 -O normalization=formD -O dedup=on"
+echo && echoamarillo "Borrando y particionando discos: $DISK_SMALL y $DISK_BIG"
+lsblk -o NAME,SIZE,TYPE
+# Borrar particiones antiguas
+sgdisk --zap-all "$DISK_SMALL"
+sgdisk --zap-all "$DISK_BIG"
+parted -s "$DISK_SMALL" mklabel gpt >/dev/null #error en lvm
+parted -s "$DISK_BIG" mklabel gpt >/dev/null
+# Crear particiones en disco pequeño
+parted -s "$DISK_SMALL" mkpart ESP fat32 1MiB 513MiB >/dev/null
+parted -s "$DISK_SMALL" set 1 esp on >/dev/null   #error en lvm 
+parted -s "$DISK_SMALL" mkpart primary linux-swap 513MiB 8705MiB >/dev/null
+parted -s "$DISK_SMALL" mkpart primary ext4 8705MiB 100% >/dev/null
+# Crear partición en disco grande
+parted -s "$DISK_BIG" mkpart primary ext4 1MiB 100% >/dev/null 
 
-# 1. Crear RPOOL (Sistema) en /mnt
-# Usamos -R /mnt para que todas las operaciones se monten relativas a /mnt
-zpool create -f $ZFS_OPTS -m none -R /mnt rpool "$PART_RPOOL"
+# Esperar a que el kernel detecte los cambios
+echo && echoverde "...Borrados y partidos los discos: $DISK_SMALL y $DISK_BIG" && echo 
+ 
+echo && echoamarillo "Esperando a que el kernel detecte los cambios..." && sleep 5 
 
-# 2. Crear HPOOL (Home) en /mnt
-zpool create -f $ZFS_OPTS -m none -R /mnt hpool "$PART_HPOOL"
+# Asignar particiones
+EFI="${DISK_SMALL}p1"
+SWAP="${DISK_SMALL}p2"
+ROOT="${DISK_SMALL}p3"
+#COMPROBAR! Funciona con NVMe pero no estoy seguro con SD [ Original:   HOME="${DISK_BIG}p1"     ]
+#Si DISK_BIG contiene /sd, entonces la partición de /home es 1
+if [[ "$DISK_BIG" == *sd* ]]; then
+    HOME="${DISK_BIG}1"
+else
+    if [[ "$DISK_BIG" == *nvme* ]]; then
+        HOME="${DISK_BIG}p1"
+    else
+        echorojo "#Error: no se pudo asignar la partición de /home separada"
+        exit 1
+    fi
+fi
+# Formatear particiones
+echoamarillo "Formateando particiones (EFI=$EFI, SWAP=$SWAP, ROOT=$ROOT, HOME=$HOME)..."
+mkfs.fat -F32 "$EFI" >/dev/null
+mkswap "$SWAP" >/dev/null
+mkfs.ext4 -F "$ROOT" >/dev/null
+mkfs.ext4 -F "$HOME" >/dev/null
 
-echoamarillo "Creando Datasets..."
+# Comprobar que las particiones se han formateado correctamente
+if ! blkid "$EFI" || ! blkid "$SWAP" || ! blkid "$ROOT" || ! blkid "$HOME"; then
+    echorojo "#Error: no se pudieron formatear las particiones"
+    sleep 10 && exit 1
+else
+    #TODO: comprobar que las particiones son del tipo correcto
+    echoverde "...Formateadas correctamente las particiones"
+fi
 
-# Crear contenedor ROOT y dataset del sistema operativo
-zfs create -o canmount=off -o mountpoint=none rpool/ROOT
-zfs create -o canmount=noauto -o mountpoint=/ rpool/ROOT/mint
 
-# Montar root manualmente
-zfs mount rpool/ROOT/mint
-
-# Crear dataset para HOME
-zfs create -o canmount=on -o mountpoint=/home hpool/HOME
-
-# Verificación de montaje
-echoamarillo "Verificando puntos de montaje ZFS..."
-zfs list -r -o name,mountpoint,mounted
-lsblk
-
-# --------------------------------------------------------------------------
-# PREPARACIÓN PARA COPIA
-# --------------------------------------------------------------------------
-echoamarillo "Preparando directorios adicionales..."
+# Step 2: Mount target filesystems
+echoamarillo "Montado sistemas de ficheros..."
+mount "$ROOT" /mnt
 mkdir -p /mnt/boot/efi
+mkdir -p /mnt/home
 mount "$EFI" /mnt/boot/efi
+mount "$HOME" /mnt/home
 swapon "$SWAP"
+lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
+echo && echoverde "...Montados sistemas de ficheros" 
 
-# Copia del sistema (SquashFS)
+# Step 3: Copy the live system to the target
+
+# Find the squashfs file (containing the live filesystem)
 SQUASHFS=$(find /cdrom -name "filesystem.squashfs" -o -name "*.squashfs" | head -1)
-echoamarillo "Montando SquashFS y copiando sistema (esto tardará)..."
+# Mount the squashfs
+echoamarillo "Montado sistema squashfs ..."
 mkdir -p /tmp/squashfs
 mount -o loop "$SQUASHFS" /tmp/squashfs
-
+# Copy the filesystem to the target
+echoamarillo "Copiando el sistema de archivos..."
 rsync -av --exclude=/etc/fstab --exclude=/etc/machine-id /tmp/squashfs/ /mnt/
+echoverde "...Copiado el sistema de archivos desde $SQUASHFS a /mnt"
+# Unmount squashfs
 umount /tmp/squashfs
 
-# Generar un fstab básico (ZFS monta automáticamente, pero EFI y SWAP necesitan fstab)
-echoamarillo "Generando fstab para EFI y Swap..."
-echo "# /etc/fstab: static file system information." > /mnt/etc/fstab
-echo "proc /proc proc nodev,noexec,nosuid 0 0" >> /mnt/etc/fstab
-# Añadir EFI UUID
-UUID_EFI=$(blkid -s UUID -o value "$EFI")
-echo "UUID=$UUID_EFI /boot/efi vfat defaults 0 1" >> /mnt/etc/fstab
-# Añadir Swap UUID
-UUID_SWAP=$(blkid -s UUID -o value "$SWAP")
-echo "UUID=$UUID_SWAP none swap sw 0 0" >> /mnt/etc/fstab
-
-# Preparar Chroot
+# Step 4: Prepare chroot environment
 for dir in /dev /proc /sys /run; do
     mount --bind $dir /mnt$dir
 done
 
-# Copiar scripts al destino
+#Por si no existiera, creamos directorio y movemos scripts
 RAIZSCRIPTSDISTRO="/mnt$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
 DISTROLOGS="/mnt$RAIZLOGS" 
 mkdir -p $RAIZSCRIPTSDISTRO
 mkdir -p $DISTROLOGS
 
-cp $RAIZSCRIPTSLIVE/*.* /mnt$RAIZSCRIPTS/ 
-mkdir -p /mnt$RAIZSCRIPTS/Mint
-cp -r $RAIZSCRIPTSLIVE/$DISTRO/* /mnt$RAIZSCRIPTS/Mint/ || true
 
-# --------------------------------------------------------------------------
-# EJECUCIÓN SCRIPT 2 (ATENCIÓN: EL SCRIPT 2 DEBE SOPORTAR ZFS)
-# --------------------------------------------------------------------------
+#Los scripts de GITHUB están en "$RAIZSCRIPTSLIVE/Mint" 
+#Los movemos a /mnt$RAIZSCRIPTS (raiz)
+echo 
+echoamarillo "Copiando a $RAIZSCRIPTSLIVE/*.* a /mnt$RAIZSCRIPTS/" && echo
+cp $RAIZSCRIPTSLIVE/*.* /mnt$RAIZSCRIPTS/ 
+
+echoamarillo "Moviendo '$RAIZSCRIPTSLIVE/$DISTRO/' a '/mnt$RAIZSCRIPTS' " && echo
+cp -r $RAIZSCRIPTSLIVE/$DISTRO/* /mnt$RAIZSCRIPTS/Mint/
+rm -rf $RAIZSCRIPTSLIVE/$DISTRO/
+
+# Paso 2-SetupSOdesdeLiveCD.sh  
+#Comprobamos que el script existe
 if [ ! -f "$RAIZSCRIPTSDISTRO/$SCRIPT2" ]; then
-    echorojo "No se encontró el script 2: $RAIZSCRIPTSDISTRO/$SCRIPT2"
+    echorojo "No se encontró el script de configuración: $RAIZSCRIPTSDISTRO/$SCRIPT2"
     sleep 10 && exit 1
 else
     chmod +x /$RAIZSCRIPTSDISTRO/*.sh
 fi
-
-echoamarillo "Entrando en Chroot para ejecutar $SCRIPT2..."
-# NOTA: El script 2 debe instalar 'zfs-initramfs' y configurar grub para ZFS
+#--------------------------------------------------------------------------------------
+echoamarillo "Ejecutamos $SCRIPT2 en el entorno chroot... ($RAIZSCRIPTS/$SCRIPT2)"
 chroot /mnt ${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2 2>&1 | tee $DISTROLOGS/$SCRIPT2.log
+#---------------------------------------------------------------------------------------
 
-# Finalizar
+echo && echo 
+# Check installation result
 if [[ $(tail -n 1 $DISTROLOGS/$SCRIPT2.log) == "Correcto" ]]; then
-    echoverde "Instalación completada."
-    # Exportar pools para asegurar integridad antes del reboot
-    echoamarillo "Desmontando y exportando pools ZFS..."
-    umount /mnt/boot/efi
-    zfs umount -a
-    zpool export -a
-    sleep 5 && reboot
+    echo -e "\e[32mInstalación completada. Reinicia el sistema para iniciar Linux Mint.\e[0m"
+    sleep 10 && reboot
 else
-    echorojo "Instalación fallida. Revisa los logs."
+    setxkbmap es
+    echo -e "\e[31mInstalación fallida. Revisa logs de instalación: /mnt$RAIZLOGS\e[0m"
     sleep 100000
+    
 fi
+
