@@ -3,11 +3,11 @@
 set -e
 VERSIONSCRIPT="2.00"       #Versión del script
 DISTRO="Mint"
+versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 RAIZSCRIPTS="/opt/iesmhp$DISTRO"
-RAIZDISTRO="$RAIZSCRIPTS/$DISTRO"
+RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
 RAIZLOGS="/var/log/iesmhp$DISTRO"
 SCRIPT3="3-SetupPrimerInicio.sh"
-versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 
 # Funciones de colores
 echoverde() {  
