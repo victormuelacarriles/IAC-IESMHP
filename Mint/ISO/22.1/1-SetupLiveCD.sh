@@ -1,11 +1,6 @@
 #!/bin/bash
-#TODO: - scripts en GITHUB
-#      - git clone a /opt/iesmhpLinux
-#      - Logs en     /var/log/iesmhpLinux/*.log 
-#      - Arreglar este script para que acepte parámentros (isoentrada / isosalida)  y que funcione
 set -e
 VERSIONSCRIPT="2.00"       #Versión del script
-
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
 DISTRO="Mint"
@@ -13,6 +8,8 @@ RAIZSCRIPTS="/opt/iesmhp$DISTRO"
 RAIZLOGS="/var/log/iesmhp$DISTRO"
 SCRIPT2="2-SetupSOdesdeLiveCD.sh"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
+
+
 
 
 # Funciones de colores
