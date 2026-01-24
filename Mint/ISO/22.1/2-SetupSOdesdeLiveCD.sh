@@ -1,7 +1,7 @@
 #!/bin/bash
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
-
+VERSIONSCRIPT="2.00"       #Versión del script
 SCRIPT3="3-SetupPrimerInicio.sh"
 DISTRO="Mint"
 RAIZSCRIPTS="/opt/iesmhp$DISTRO"
@@ -16,9 +16,14 @@ echoverde() {
 echorojo()  {
       echo -e "\033[31m$1\033[0m" 
 }  
+echoamarillo() {  
+    echo -e "\033[33m$1\033[0m" 
+}
+
+echoverde "$0 (vs$VERSIONSCRIPT)"
 
 #Idioma y teclado español
-echo "Configurando el entorno gráfico en español..."
+echoamarillo "Configurando el entorno gráfico en español..."
 sed -i 's/# es_ES.UTF-8/es_ES.UTF-8/g' /etc/locale.gen
 locale-gen es_ES.UTF-8
 
@@ -52,11 +57,11 @@ EOF
 # Esto es común cuando se configura un sistema desde un LiveCD o en entornos de preinstalación.
 dconf update 2>/dev/null || echo "dconf se aplicará en el primer inicio"
 
-echo && echo && echo "....Configurado entorno en español"  
+echo && echo && echoverde "....Configurado entorno en español"  
 
 # Configure fstab
 
-echo "Configurando /etc/fstab..."
+echoamarillo "Configurando /etc/fstab..."
 # Detectar particiones y asignar variables
 EFI=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/boot/efi" {print $1}')
 SWAP=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "[SWAP]" {print $1}')
@@ -73,7 +78,7 @@ UUID=$(blkid -s UUID -o value "/dev/$HOME") /home ext4 defaults 0 2
 UUID=$(blkid -s UUID -o value "/dev/$SWAP") none swap sw 0 0
 EOF
 cat /etc/fstab
-echo && echo && echo "...Configurado /etc/fstab"  
+echo && echo && echoverde "...Configurado /etc/fstab"  
 
 #Para si no reponde un ping a 1.1.1.1, pausar la instalación, y vuelve a comprobar en bucle
 while ! ping -c 1 1.1.1.1; do
@@ -83,13 +88,12 @@ done
 
 
 # Remove live-specific packages and configurations
-echoverde "Eliminando paquetes innecesarios..."
+echoamarillo "Eliminando paquetes innecesarios..."
 #apt-get update
 apt-get remove -y --purge casper ubiquity ubiquity-frontend-* live-boot live-boot-initramfs-tools 
-echo "...Eliminados paquetes innecesarios..."  
+echoverde "...Eliminados paquetes innecesarios..."  
 
-#FALLA AQUí 23/06/2025 19:00
-#Me quedo con la mac de la primera tarjeta de red
+echoamarillo "Averiguando MAC y autorizando equipos de gestión por SSH..."
 MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
 mkdir -p /root/.ssh
 LOCAL_MACS="$RAIZSCRIPTS/macs.csv"
