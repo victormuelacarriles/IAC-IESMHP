@@ -2,11 +2,12 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
 VERSIONSCRIPT="2.00"       #Versión del script
+REPO="IAC-IESMHP"
 DISTRO="Mint"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
-RAIZSCRIPTS="/opt/iesmhp$DISTRO"
+RAIZSCRIPTS="/opt/$REPO"
+RAIZLOGS="/var/log/$REPO"
 RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
-RAIZLOGS="/var/log/iesmhp$DISTRO"
 SCRIPT3="3-SetupPrimerInicio.sh"
 
 # Funciones de colores

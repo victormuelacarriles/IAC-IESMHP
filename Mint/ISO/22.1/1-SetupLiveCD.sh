@@ -1,11 +1,12 @@
 #!/bin/bash
 set -e
 VERSIONSCRIPT="2.00"       #Versión del script
-GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
+REPO="IAC-IESMHP"
+GITREPO="https://github.com/victormuelacarriles/$REPO.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
 DISTRO="Mint"
-RAIZSCRIPTS="/opt/iesmhp$DISTRO"
-RAIZLOGS="/var/log/iesmhp$DISTRO"
+RAIZSCRIPTS="/opt/$REPO"
+RAIZLOGS="/var/log/$REPO"
 SCRIPT2="2-SetupSOdesdeLiveCD.sh"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 
