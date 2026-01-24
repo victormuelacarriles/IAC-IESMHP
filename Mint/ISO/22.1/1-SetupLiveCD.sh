@@ -33,8 +33,9 @@ setxkbmap es || true && loadkeys es ||true
 
 
 echoverde "1-SetupLiveCD (vs$VERSIONSCRIPT)"
-echo      "   Script personalizado de instalación de "
-echo      "   sistema operativo Linux Mint $versionDISTRO para equipos distancia / CEIABD"
+echo         "   Script personalizado de instalación de "
+echo         "   sistema operativo Linux Mint $versionDISTRO para equipos distancia / CEIABD"
+echoamarillo "   (victor.muelacarriles@educantabria.es)"
 echoverde "--------------------------------------------------------------------"
 echoverde "       Distancia     ->Disco pequeño: NVMe 0,5TB (/EFI, /swap y /)"
 echoverde "                     ->Disco grande:  NVMe 2,0TB (/home)"
