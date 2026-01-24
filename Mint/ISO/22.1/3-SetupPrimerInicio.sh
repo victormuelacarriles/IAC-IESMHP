@@ -2,14 +2,15 @@
 
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
-SCRIPT3="3-SetupPrimerInicio.sh"
+REPO="IAC-IESMHP"
 DISTRO="Mint"
-RAIZSCRIPTS="/opt/iesmhp$DISTRO"
-RAIZDISTRO="$RAIZSCRIPTS/$DISTRO"
-RAIZLOGS="/var/log/iesmhp$DISTRO"
+versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
+RAIZSCRIPTS="/opt/$REPO"
+RAIZLOGS="/var/log/$REPO"
+RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
 
-SCRIPT4nombreip="$RAIZSCRIPTS/$DISTRO/utiles/NombreIP.sh"
-SCRIPT5ansible="$RAIZSCRIPTS/$DISTRO/utiles/Auto-Ansible.sh"
+SCRIPT4nombreip="$RAIZDISTRO/utiles/NombreIP.sh"
+SCRIPT5ansible="$RAIZDISTRO/utiles/Auto-Ansible.sh"
 
 
 VERLOGSCRIPT="/home/usuario/verLog.sh"
