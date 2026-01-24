@@ -4,7 +4,7 @@
 #      - Logs en     /var/log/iesmhpLinux/*.log 
 #      - Arreglar este script para que acepte parámentros (isoentrada / isosalida)  y que funcione
 set -e
-$VERSIONSCRIPT="2.00"       #Versión del script
+VERSIONSCRIPT="2.00"       #Versión del script
 
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
