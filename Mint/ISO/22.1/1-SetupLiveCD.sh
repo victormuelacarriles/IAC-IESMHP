@@ -205,9 +205,12 @@ mkdir -p $DISTROLOGS
 #Los scripts de GITHUB están en "$RAIZSCRIPTSLIVE/Mint" 
 #Los movemos a /mnt$RAIZSCRIPTS (raiz)
 echo 
-echoamarillo "Moviendo auxiliares a '/mnt$RAIZSCRIPTS' desde '$RAIZSCRIPTSLIVE'" && echo
+echoamarillo "Copiando a $RAIZSCRIPTSLIVE/*.* a /mnt$RAIZSCRIPTS/" && echo
 cp $RAIZSCRIPTSLIVE/*.* /mnt$RAIZSCRIPTS/ 
-mv $RAIZSCRIPTSLIVE/$DISTRO/ /mnt$RAIZSCRIPTS
+
+echoamarillo "Moviendo '$RAIZSCRIPTSLIVE/$DISTRO/' a '/mnt$RAIZSCRIPTS' " && echo
+cp -r $RAIZSCRIPTSLIVE/$DISTRO/* /mnt$RAIZSCRIPTS/Mint/
+rm -rf $RAIZSCRIPTSLIVE/$DISTRO/
 
 # Paso 2-SetupSOdesdeLiveCD.sh  
 #Comprobamos que el script existe
@@ -218,8 +221,8 @@ else
     chmod +x /$RAIZSCRIPTSDISTRO/*.sh
 fi
 #--------------------------------------------------------------------------------------
-echoverde "Ejecutamos $SCRIPT2 en el entorno chroot... ($RAIZSCRIPTS/$SCRIPT2)"
-chroot /mnt $RAIZSCRIPTS/$DISTRO/$SCRIPT2 2>&1 | tee $DISTROLOGS/$SCRIPT2.log
+echoamarillo "Ejecutamos $SCRIPT2 en el entorno chroot... ($RAIZSCRIPTS/$SCRIPT2)"
+chroot /mnt ${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2 2>&1 | tee $DISTROLOGS/$SCRIPT2.log
 #---------------------------------------------------------------------------------------
 
 echo && echo 
