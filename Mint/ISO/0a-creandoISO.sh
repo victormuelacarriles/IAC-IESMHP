@@ -1,18 +1,17 @@
 #!/bin/bash
 
 ##Asegurar la última vesrión de este script mediante: git -C /opt/IAC-IESMHP pull
-
 set -e
-
-
-
-VERSION="22.1"
+VERSIONSCRIPT="2.00"       #Versión del script
+VERSION="22.1"             #Versión de la ISO Mint Cinnamon base
 NOMBREISOFINAL="Mint-CEIABD-SMRV-v$VERSION"
 
 
 # Funciones de colores
 verde() { echo -e "\033[32m$1\033[0m"; }
 rojo() { echo -e "\033[31m$1\033[0m"; }
+
+verde "(vs $VERSIONSCRIPT)Iniciando creación de ISO personalizada Linux Mint $VERSION..."
 
 # Verifica si es root
 if [ "$EUID" -ne 0 ]; then
@@ -43,7 +42,7 @@ apt install -y xorriso isolinux syslinux-utils
 WORKDIR=$(mktemp -d ./livecd.XXXXXX) && chmod 755 "$WORKDIR"
 #Sobre el directorio de trabajo, creamos los subdirectorios necesarios
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
-RAIZGIT="$WORKDIR/ISO-IESMHP"
+RAIZGIT="$WORKDIR/IAC-IESMHP"
 MOUNTDIR="$WORKDIR/mount" 
 EXTRACTDIR="$WORKDIR/extract"
 SQUASHFS_DIR="$WORKDIR/squashfs"
