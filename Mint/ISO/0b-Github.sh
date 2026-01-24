@@ -2,10 +2,12 @@
 #Script que descarga desde GIT la última versión de los scripts de instalación de IESMHP
 #y los copia a /LiveCDiesmhp, y ejecuta el script de configuración del LiveCD
 set -e
+VERSIONSCRIPT="2.00"       #Versión del script
 SCRIPT1NOMBRE="1-SetupLiveCD.sh"
 DISTRO="Mint"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
-SCRIPT1="$RAIZSCRIPTSLIVE/$DISTRO/$SCRIPT1NOMBRE"
+RAIZSCRIPTSLIVEISOS="$RAIZSCRIPTSLIVE/$DISTRO/ISO"
+SCRIPT1="$RAIZSCRIPTSLIVEISOS/$SCRIPT1NOMBRE"
 RAIZLOG="/var/log/iesmhp$DISTRO"
 LOG0="$RAIZLOG/$0.log"
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
@@ -16,7 +18,7 @@ echoverde() {
     echo $TEXTO >> $LOG0
 }
 
-echoverde "($0) $RAIZLOG"
+echoverde "($0 vs $VERSIONSCRIPT) $RAIZLOG"
 
 echoverde "En español (si se puede) y con usuarios mint:mint root:root por si hay que depurar"
 setxkbmap es || true && loadkeys es ||true
@@ -30,11 +32,11 @@ rm /etc/apt/sources.list 2>/dev/null || true
 apt-get update 2>&1 | tee -a $LOG0
 
 echoverde "Instalamos ssh y git"
-apt-get install -y ssh git beep 2>&1 | tee -a $LOG0
+apt-get install -y ssh git 2>&1 | tee -a $LOG0
 
 rm -r $RAIZSCRIPTSLIVE 2>/dev/null || true
 git clone $GITREPO $RAIZSCRIPTSLIVE 2>&1 | tee -a $LOG0
-chmod +x $RAIZSCRIPTSLIVE/Mint/*.sh
+chmod +x $RAIZSCRIPTSLIVEISOS/*.sh
 mkdir -p $RAIZLOG 2>&1 | tee -a $LOG0
 
 LOGSig="$RAIZLOG/$SCRIPT1NOMBRE.log"
