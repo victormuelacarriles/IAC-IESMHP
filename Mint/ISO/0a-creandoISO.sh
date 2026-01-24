@@ -1,8 +1,13 @@
 #!/bin/bash
+
+##Asegurar la última vesrión de este script mediante: git -C /opt/IAC-IESMHP pull
+
 set -e
 
-VERSION="1.0"
-NOMBREISOFINAL="linux-CEIABD-DISTANCIA-v$VERSION"
+
+
+VERSION="22.1"
+NOMBREISOFINAL="Mint-CEIABD-SMRV-v$VERSION"
 
 
 # Funciones de colores
@@ -17,7 +22,7 @@ fi
 
 # Verifica que se pasó una ISO
 if [ -z "$1" ]; then
-    ISO="linux.iso"
+    ISO="/tmp/linuxmint-22.1-cinnamon-64bit.iso"
     rojo "No se ha especificado una ISO. Se usará $ISO."
 else
     ISO="$1"
@@ -38,7 +43,7 @@ apt install -y xorriso isolinux syslinux-utils
 WORKDIR=$(mktemp -d ./livecd.XXXXXX) && chmod 755 "$WORKDIR"
 #Sobre el directorio de trabajo, creamos los subdirectorios necesarios
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
-RAIZGIT="$WORKDIR/iesmhp"
+RAIZGIT="$WORKDIR/ISO-IESMHP"
 MOUNTDIR="$WORKDIR/mount" 
 EXTRACTDIR="$WORKDIR/extract"
 SQUASHFS_DIR="$WORKDIR/squashfs"
