@@ -4,6 +4,7 @@
 #      - Logs en     /var/log/iesmhpLinux/*.log 
 #      - Arreglar este script para que acepte parámentros (isoentrada / isosalida)  y que funcione
 set -e
+$VERSIONSCRIPT="2.00"       #Versión del script
 
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
@@ -11,6 +12,7 @@ DISTRO="Mint"
 RAIZSCRIPTS="/opt/iesmhp$DISTRO"
 RAIZLOGS="/var/log/iesmhp$DISTRO"
 SCRIPT2="2-SetupSOdesdeLiveCD.sh"
+versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 
 
 # Funciones de colores
@@ -20,15 +22,19 @@ echoverde() {
 echorojo()  {
       echo -e "\033[31m$1\033[0m" 
 }  
+echoamarillo() {  
+    echo -e "\033[33m$1\033[0m" 
+}
+
 #Por si hay que depurar, establecemos español 
 setxkbmap es || true && loadkeys es ||true
 
 
 
 
-echoverde "1-SetupLiveCD -"
+echoverde "1-SetupLiveCD (vs$VERSIONSCRIPT)"
 echo      "   Script personalizado de instalación de "
-echo      "   sistema operativo Linux Mint 22.1 para equipos distancia / CEIABD"
+echo      "   sistema operativo Linux Mint $versionDISTRO para equipos distancia / CEIABD"
 echoverde "--------------------------------------------------------------------"
 echoverde "       Distancia     ->Disco pequeño: NVMe 0,5TB (/EFI, /swap y /)"
 echoverde "                     ->Disco grande:  NVMe 2,0TB (/home)"
@@ -37,7 +43,7 @@ echoverde "       CEIABD        ->Disco pequeño: NVMe 0,5TB (/EFI, /swap y /)"
 echoverde "                     ->Disco grande:  SDa  1,0TB (/home)"
 echoverde "--------------------------------------------------------------------"
 sleep 1
-echorojo "                                                  (comenzará en 10sg)"
+echoamarillo "                                                  (comenzará en 10sg)"
 echoverde "--------------------------------------------------------------------"
 sleep 9
 
@@ -91,12 +97,12 @@ fi
 
 #Si existen particiones LVM, primero las eliminamos
 if lsblk -o NAME,TYPE | grep -q "lvm"; then
-    echo "Se han detectado particiones LVM. Eliminando particiones LVM..."
+    echoamarillo "Se han detectado particiones LVM. Eliminando particiones LVM..."
     # Desactivar LVM
     vgchange -an || true
     # Borrar particiones LVM
     for part in $(lsblk -o NAME,TYPE | grep "lvm" | awk '{print $1}'); do
-        echo "Borrando partición LVM: $part"
+        echoamarillo "Borrando partición LVM: $part"
         sgdisk --zap-all "/dev/$part" || true
     done
     echoverde "...Particiones LVM eliminadas"
@@ -104,7 +110,7 @@ fi
 
 
 
-echo && echo "Borrando y particionando discos: $DISK_SMALL y $DISK_BIG"
+echo && echoamarillo "Borrando y particionando discos: $DISK_SMALL y $DISK_BIG"
 lsblk -o NAME,SIZE,TYPE
 # Borrar particiones antiguas
 sgdisk --zap-all "$DISK_SMALL"
@@ -120,9 +126,9 @@ parted -s "$DISK_SMALL" mkpart primary ext4 8705MiB 100% >/dev/null
 parted -s "$DISK_BIG" mkpart primary ext4 1MiB 100% >/dev/null 
 
 # Esperar a que el kernel detecte los cambios
-echo && echoverde "...Borrados y particidos los discos: $DISK_SMALL y $DISK_BIG" && echo 
+echo && echoverde "...Borrados y partidos los discos: $DISK_SMALL y $DISK_BIG" && echo 
  
-echo && echo "Esperando a que el kernel detecte los cambios..." && sleep 5 
+echo && echoamarillo "Esperando a que el kernel detecte los cambios..." && sleep 5 
 
 # Asignar particiones
 EFI="${DISK_SMALL}p1"
@@ -141,7 +147,7 @@ else
     fi
 fi
 # Formatear particiones
-echo "Formateando particiones (EFI=$EFI, SWAP=$SWAP, ROOT=$ROOT, HOME=$HOME)..."
+echoamarillo "Formateando particiones (EFI=$EFI, SWAP=$SWAP, ROOT=$ROOT, HOME=$HOME)..."
 mkfs.fat -F32 "$EFI" >/dev/null
 mkswap "$SWAP" >/dev/null
 mkfs.ext4 -F "$ROOT" >/dev/null
@@ -158,7 +164,7 @@ fi
 
 
 # Step 2: Mount target filesystems
-echo "Montado sistemas de ficheros..."
+echoamarillo "Montado sistemas de ficheros..."
 mount "$ROOT" /mnt
 mkdir -p /mnt/boot/efi
 mkdir -p /mnt/home
@@ -169,20 +175,19 @@ lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
 echo && echoverde "...Montados sistemas de ficheros" 
 
 # Step 3: Copy the live system to the target
-#TODO: acelerar? copiar el filesystem.squashfs a /tmp antes de montar el CD, y luego montarlo desde /tmp 
+
 # Find the squashfs file (containing the live filesystem)
 SQUASHFS=$(find /cdrom -name "filesystem.squashfs" -o -name "*.squashfs" | head -1)
 # Mount the squashfs
-echo "Montado sistema squashfs ..."
+echoamarillo "Montado sistema squashfs ..."
 mkdir -p /tmp/squashfs
 mount -o loop "$SQUASHFS" /tmp/squashfs
 # Copy the filesystem to the target
-echo "Copiando el sistema de archivos..."
+echoamarillo "Copiando el sistema de archivos..."
 rsync -av --exclude=/etc/fstab --exclude=/etc/machine-id /tmp/squashfs/ /mnt/
 echoverde "...Copiado el sistema de archivos desde $SQUASHFS a /mnt"
 # Unmount squashfs
 umount /tmp/squashfs
-
 
 # Step 4: Prepare chroot environment
 for dir in /dev /proc /sys /run; do
@@ -190,7 +195,7 @@ for dir in /dev /proc /sys /run; do
 done
 
 #Por si no existiera, creamos directorio y movemos scripts
-RAIZSCRIPTSDISTRO="/mnt$RAIZSCRIPTS/$DISTRO"
+RAIZSCRIPTSDISTRO="/mnt$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
 DISTROLOGS="/mnt$RAIZLOGS" 
 mkdir -p $RAIZSCRIPTSDISTRO
 mkdir -p $DISTROLOGS
@@ -199,7 +204,7 @@ mkdir -p $DISTROLOGS
 #Los scripts de GITHUB están en "$RAIZSCRIPTSLIVE/Mint" 
 #Los movemos a /mnt$RAIZSCRIPTS (raiz)
 echo 
-echo "Moviendo auxiliares a '/mnt$RAIZSCRIPTS' desde '$RAIZSCRIPTSLIVE'" && echo
+echoamarillo "Moviendo auxiliares a '/mnt$RAIZSCRIPTS' desde '$RAIZSCRIPTSLIVE'" && echo
 cp $RAIZSCRIPTSLIVE/*.* /mnt$RAIZSCRIPTS/ 
 mv $RAIZSCRIPTSLIVE/$DISTRO/ /mnt$RAIZSCRIPTS
 
