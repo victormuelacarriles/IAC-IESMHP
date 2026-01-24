@@ -7,7 +7,6 @@ SCRIPT1NOMBRE="1-SetupLiveCD.sh"
 DISTRO="Mint"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
 RAIZSCRIPTSLIVEISOS="$RAIZSCRIPTSLIVE/$DISTRO/ISO"
-SCRIPT1="$RAIZSCRIPTSLIVEISOS/$SCRIPT1NOMBRE"
 RAIZLOG="/var/log/iesmhp$DISTRO"
 LOG0="$RAIZLOG/$0.log"
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
@@ -17,8 +16,10 @@ echoverde() {
     echo -e "\033[32m$TEXTO\033[0m"
     echo $TEXTO >> $LOG0
 }
-
 echoverde "($0 vs $VERSIONSCRIPT) $RAIZLOG"
+
+versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
+SCRIPT1="$RAIZSCRIPTSLIVEISOS/$versionDISTRO/$SCRIPT1NOMBRE"
 
 echoverde "En español (si se puede) y con usuarios mint:mint root:root por si hay que depurar"
 setxkbmap es || true && loadkeys es ||true
