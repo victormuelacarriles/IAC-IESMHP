@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.1-20260126-09:55"       #Versión del script
+VERSIONSCRIPT="22.1-20260126-10:17"       #Versión del script
 REPO="IAC-IESMHP"
 GITREPO="https://github.com/victormuelacarriles/$REPO.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
@@ -237,6 +237,5 @@ else
     setxkbmap es
     echo -e "\e[31mInstalación fallida. Revisa logs de instalación: /mnt$RAIZLOGS\e[0m"
     sleep 100000
-    
 fi
 
