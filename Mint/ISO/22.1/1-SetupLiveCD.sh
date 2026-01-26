@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.1-20260126-10:45"       #Versión del script
+VERSIONSCRIPT="22.1-20260126-11:06"       #Versión del script
 REPO="IAC-IESMHP"
 GITREPO="https://github.com/victormuelacarriles/$REPO.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
@@ -222,8 +222,6 @@ fi
 
 #Copiamos el log de este script a la carpeta de logs del destino
 echoamarillo "Copiando log de $0 a $DISTROLOGS [ cp $RAIZLOG/1-SetupLiveCD.sh.log $DISTROLOGS/1-SetupLiveCD.sh.log ]"
-#cp /var/log/IAC-IESMHP/1-SetupLiveCD.sh.log /mnt/var/log/IAC-IESMHP/1-SetupLiveCD.sh.log
-
 cp "$RAIZLOG/1-SetupLiveCD.sh.log" "$DISTROLOGS/1-SetupLiveCD.sh.log"
 
 #--------------------------------------------------------------------------------------
