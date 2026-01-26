@@ -3,7 +3,7 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e # lo desactivamos para que no se pare en errores de 
 
-VERSIONSCRIPT="22.1-20260126-13:22"       #Versión del script
+VERSIONSCRIPT="22.1-20260126-17:05"       #Versión del script
 SCRIPT3=$(basename "$0")
 echo "$SCRIPT3 (vs$VERSIONSCRIPT)"
 #Nos quedamos solo con el nombre del script sin ruta
