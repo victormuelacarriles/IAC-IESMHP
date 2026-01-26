@@ -2,7 +2,7 @@
 #Script que descarga desde GIT la última versión de los scripts de instalación de IESMHP
 #y los copia a /LiveCDiesmhp, y ejecuta el script de configuración del LiveCD
 set -e
-VERSIONSCRIPT="22.1-20260126-10:00"       #Versión del script
+VERSIONSCRIPT="22.1-20260126-10:15"       #Versión del script
 SCRIPT1NOMBRE="1-SetupLiveCD.sh"
 DISTRO="Mint"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
