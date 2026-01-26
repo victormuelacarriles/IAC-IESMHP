@@ -218,6 +218,11 @@ if [ ! -f "$RAIZSCRIPTSDISTRO/$SCRIPT2" ]; then
 else
     chmod +x /$RAIZSCRIPTSDISTRO/*.sh
 fi
+
+#Copiamos el log de este script a la carpeta de logs del destino
+echoamarillo "Copiando log de $0 a $DISTROLOGS [ cp $RAIZLOGS/1-SetupLiveCD.sh.log $DISTROLOGS/1-SetupLiveCD.sh.log ]"
+cp "$RAIZLOGS/1-SetupLiveCD.sh.log" "$DISTROLOGS/1-SetupLiveCD.sh.log"
+
 #--------------------------------------------------------------------------------------
 echoamarillo "Ejecutamos $SCRIPT2 en el entorno chroot... ($RAIZSCRIPTS/$SCRIPT2)"
 chroot /mnt ${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2 2>&1 | tee $DISTROLOGS/$SCRIPT2.log
