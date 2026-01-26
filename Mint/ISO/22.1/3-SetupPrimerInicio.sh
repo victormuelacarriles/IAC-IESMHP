@@ -133,13 +133,12 @@ systemctl disable 3-SetupPrimerInicio.service
 rm /etc/systemd/system/3-SetupPrimerInicio.service
 mv "$0" "$0.borrado" # Renombrar el script para evitar que se ejecute de nuevo
 
-chmod +x "$SCRIPT4nombreip"
-chmod +x "$SCRIPT5ansible"
-
 mostrar_mensaje "Intentamos cambiar IP y nombre de nuevo" >> $FLOG
+chmod +x "$SCRIPT4nombreip"
 /bin/bash "$SCRIPT4nombreip"  >> $FLOG 
 
 mostrar_mensaje "Intentamos configurar Ansible y SSH" >> $FLOG
+chmod +x "$SCRIPT5ansible"
 /bin/bash "$SCRIPT5ansible"  >> $FLOG 
 
 mostrar_mensaje "Intentamos finalizar autoconfiguración con Ansible" >> $FLOG
