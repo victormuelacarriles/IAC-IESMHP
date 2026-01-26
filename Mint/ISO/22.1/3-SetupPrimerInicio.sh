@@ -94,13 +94,16 @@ if [ "$IP3" == "72" ]; then
     echoverde "Estamos en aula IABD, configuramos proxy 10.0.72.140:3128"
     rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
     ##OJO!!! ->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> repetir   -------->>>>>>>       aqui!!!!!!!!!!!!!
-    echo Acquire::http::Proxy-Auto-Detect "/bin/bash -c 'nc -z -w1 10.0.72.140 3128 && echo http://10.0.72.140:3128 || echo DIRECT'";
-Acquire::https::Proxy "DIRECT"; > /etc/apt/apt.conf.d/00aptproxy
+    echo 'Acquire::http::Proxy-Auto-Detect "/bin/bash -c 'nc -z -w1 10.0.72.140 3128 && echo http://10.0.72.140:3128 || echo DIRECT'";
+Acquire::https::Proxy "DIRECT"'; > /etc/apt/apt.conf.d/00aptproxy
 elif [ "$IP3" == "32" ]; then
     echoverde "Estamos en aula SMRV, configuramos proxy  10.0.32.253:3128"
     rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
-    ##OJO!!! ->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> repetir   -------->>>>>>>       aqui!!!!!!!!!!!!!
-    echo Acquire::http::Proxy-Auto-Detect "/bin/bash -c 'nc -z -w1 10.0.32.253 3128 && echo http://10.0.32.253:3128 || echo DIRECT'";
+    ##OJO!!! ->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> repetir   -------->>>>>>>       aqui!!!!!!!!!!!!!
+    cat << 'EOF' | tee /etc/apt/apt.conf.d/00aptproxy
+Acquire::http::Proxy-Auto-Detect "/bin/bash -c 'nc -z -w1 10.0.32.140 3128 && echo http://10.0.32.140:3128 || echo DIRECT'";
+Acquire::https::Proxy "DIRECT";
+EOF
 Acquire::https::Proxy "DIRECT"; > /etc/apt/apt.conf.d/00aptproxy
 fi
 
