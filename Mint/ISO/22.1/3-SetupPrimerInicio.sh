@@ -14,7 +14,6 @@ RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
 SCRIPT4nombreip="$RAIZDISTRO/utiles/NombreIP.sh"
 SCRIPT5ansible="$RAIZDISTRO/utiles/Auto-Ansible.sh"
 
-
 VERLOGSCRIPT="/home/usuario/verLog.sh"
 
 #Fichero de log del servicio
