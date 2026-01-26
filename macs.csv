@@ -49,4 +49,4 @@ bc:fc:e7:04:30:c0, SMRD-16, 136, equipo alumno-----------------> falla (18/1/202
 bc:fc:e7:05:73:d0, SMRD-17, 137, equipo alumno+ANGELICA--------> falla (18/1/2026): NO conecta por SSH (se bloquea? se suspende?)
 bc:fc:e7:05:73:d5, SMRD-18, 138, equipo alumno+VICTOR
 #,#,#, ######################################################################################
-00:0c:29:30:70:e2, VM-01, 117, Máquina virtual pruebas
+00:0c:29:81:19:48, VM-01, 117, Máquina virtual pruebas

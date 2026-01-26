@@ -11,7 +11,7 @@ RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
 SCRIPT3="3-SetupPrimerInicio.sh"
 
 # Funciones de colores
-echoverde() {  
+echoverde() {
     echo -e "\033[32m$1\033[0m" 
 }
 echorojo()  {
@@ -228,4 +228,5 @@ echo "$CONTENIDOSERVICIO" > /etc/systemd/system/3-SetupPrimerInicio.service
 # Habilito el servicio
 systemctl enable 3-SetupPrimerInicio.service
 echo && echo && echoverde "...Servicio de actualización en primer arranque configurado." 
+echo $CONTENIDOSERVICIO
 echo && echo "Correcto"
