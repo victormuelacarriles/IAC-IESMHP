@@ -24,7 +24,7 @@
      #- comparteaula  # en -00 crear una carpeta compartida en /home/Comparte, y en el resto montar esa carpeta compartida en /Comparte
     # nvidia: falta que separar en caso de no haber tarjeta nvidia. Ahora mismo detiene todo el playbook si no pongo el ignore_errors 
      
-     #Condicional: si es la red 72, -comparteaula
+     #Role Comparte aula: roles distintos para aulas distintas (72-IABD y 32-SMRV)
      - { role: comparteaula72, when: "'72' in ansible_default_ipv4.address" }
      - { role: comparteaula32, when: "'32' in ansible_default_ipv4.address" }
      - nvidia
