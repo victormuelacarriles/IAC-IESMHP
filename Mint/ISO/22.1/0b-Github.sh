@@ -2,11 +2,11 @@
 #Script que descarga desde GIT la última versión de los scripts de instalación de IESMHP
 #y los copia a /LiveCDiesmhp, y ejecuta el script de configuración del LiveCD
 set -e
-VERSIONSCRIPT="3.22.1.01"       #Versión del script
+VERSIONSCRIPT="3.22.1.02"       #Versión del script
 SCRIPT1NOMBRE="1-SetupLiveCD.sh"
 DISTRO="Mint"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
-RAIZSCRIPTSLIVEISOS="$RAIZSCRIPTSLIVE/$DISTRO/ISO"
+
 RAIZLOG="/var/log/iesmhp$DISTRO"
 LOG0="$RAIZLOG/$0.log"
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
@@ -20,6 +20,7 @@ echoverde "($0 vs $VERSIONSCRIPT) $RAIZLOG"
 
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 SCRIPT1="$RAIZSCRIPTSLIVEISOS/$versionDISTRO/$SCRIPT1NOMBRE"
+RAIZSCRIPTSLIVEISOS="$RAIZSCRIPTSLIVE/$DISTRO/ISO/$versionDISTRO"
 
 echoverde "En español (si se puede) y con usuarios mint:mint root:root por si hay que depurar"
 setxkbmap es || true && loadkeys es ||true
@@ -43,8 +44,11 @@ apt-get update 2>&1 | tee -a $LOG0
 echoverde "Instalamos ssh y git"
 apt-get install -y ssh git 2>&1 | tee -a $LOG0
 
+echoverde "Clonamos:  git clone $GITREPO $RAIZSCRIPTSLIVE "
 rm -r $RAIZSCRIPTSLIVE 2>/dev/null || true
 git clone $GITREPO $RAIZSCRIPTSLIVE 2>&1 | tee -a $LOG0
+
+echoverde "Hacemos ejecutables los scripts del directorio ( chmod +x $RAIZSCRIPTSLIVEISOS/*.sh )"
 chmod +x $RAIZSCRIPTSLIVEISOS/*.sh
 mkdir -p $RAIZLOG 2>&1 | tee -a $LOG0
 
