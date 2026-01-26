@@ -112,7 +112,7 @@ if [ "$IP3" == "72" ]; then
 elif [ "$IP3" == "32" ]; then
     echoverde "Estamos en aula SMRV, configuramos proxy  10.0.32.253:3128"
     rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
-    echo 'Acquire::http::Proxy "http://10.0.32.253:3128";'> /etc/apt/apt.conf.d/00aptproxy
+    echo 'Acquire::http::Proxy "http://10.0.32.119:3128";'> /etc/apt/apt.conf.d/00aptproxy
     echo 'Acquire::https::Proxy "DIRECT";'> /etc/apt/apt.conf.d/00aptproxy
 fi
 
