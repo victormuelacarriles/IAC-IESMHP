@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.1-3.00"       #Versión del script
+VERSIONSCRIPT="22.1-20260126-09:35"       #Versión del script
 REPO="IAC-IESMHP"
 GITREPO="https://github.com/victormuelacarriles/$REPO.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
