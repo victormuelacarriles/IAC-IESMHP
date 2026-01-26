@@ -2,7 +2,7 @@
 #Script que descarga desde GIT la última versión de los scripts de instalación de IESMHP
 #y los copia a /LiveCDiesmhp, y ejecuta el script de configuración del LiveCD
 set -e
-VERSIONSCRIPT="22.1-20260126-10:15"       #Versión del script
+VERSIONSCRIPT="22.1-20260126-10:38"       #Versión del script
 SCRIPT1NOMBRE="1-SetupLiveCD.sh"
 DISTRO="Mint"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
@@ -30,13 +30,14 @@ echo "root:prov" | chpasswd
 echo "mint:mint" | chpasswd
 echo "root:root" | chpasswd
 
-#Si el tercer octeto de la IP es 32=>estamos en aula SMRDV:  activamos proxy
-IP3=$(ip addr show $(ip route | grep default | awk '{print $5}') | grep 'inet ' | awk '{print $2}' | cut -d'.' -f3)
-if [ "$IP3" == "32" ]; then
-    echoverde "Estamos en aula SMRDV, configuramos proxy"
-    rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
-    echo 'Acquire::http::Proxy "http://10.0.32.119:3128/";' > /etc/apt/apt.conf.d/00aptproxy
-fi
+# COMENTAMOS: ya probaremos en versiones siguientes. 
+# #Si el tercer octeto de la IP es 32=>estamos en aula SMRDV:  activamos proxy
+# IP3=$(ip addr show $(ip route | grep default | awk '{print $5}') | grep 'inet ' | awk '{print $2}' | cut -d'.' -f3)
+# if [ "$IP3" == "32" ]; then
+#     echoverde "Estamos en aula SMRDV, configuramos proxy"
+#     rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
+#     echo 'Acquire::http::Proxy "http://10.0.32.119:3128/";' > /etc/apt/apt.conf.d/00aptproxy
+# fi
 
 echoverde "Actualizamos..."
 rm /etc/apt/sources.list 2>/dev/null || true

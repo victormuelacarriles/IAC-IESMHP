@@ -1,12 +1,14 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.1-20260126-10:17"       #Versión del script
+VERSIONSCRIPT="22.1-20260126-10:38"       #Versión del script
 REPO="IAC-IESMHP"
 GITREPO="https://github.com/victormuelacarriles/$REPO.git"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
 DISTRO="Mint"
 RAIZSCRIPTS="/opt/$REPO"
-RAIZLOGS="/var/log/$REPO"
+
+RAIZLOG="/var/log/IAC-IESMHP/$DISTRO"
+
 SCRIPT2="2-SetupSOdesdeLiveCD.sh"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 
@@ -49,8 +51,8 @@ sleep 9
 #Carpetas de trabajo 
 mkdir -p $RAIZSCRIPTSLIVE
 mkdir -p $RAIZSCRIPTS
-mkdir -p $RAIZLOGS
-echoverde "Carpetas de trabajo creadas: $RAIZSCRIPTSLIVE, $RAIZSCRIPTS, $RAIZLOGS"
+mkdir -p $RAIZLOG
+echoverde "Carpetas de trabajo creadas: $RAIZSCRIPTSLIVE, $RAIZSCRIPTS, $RAIZLOG"
 
 
 # Detectamos discos (ignorando los discos USB y loop0)
@@ -195,7 +197,7 @@ done
 
 #Por si no existiera, creamos directorio y movemos scripts
 RAIZSCRIPTSDISTRO="/mnt$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
-DISTROLOGS="/mnt$RAIZLOGS" 
+DISTROLOGS="/mnt$RAIZLOG" 
 mkdir -p $RAIZSCRIPTSDISTRO
 mkdir -p $DISTROLOGS
 
@@ -220,8 +222,10 @@ else
 fi
 
 #Copiamos el log de este script a la carpeta de logs del destino
-echoamarillo "Copiando log de $0 a $DISTROLOGS [ cp $RAIZLOGS/1-SetupLiveCD.sh.log $DISTROLOGS/1-SetupLiveCD.sh.log ]"
-cp "$RAIZLOGS/1-SetupLiveCD.sh.log" "$DISTROLOGS/1-SetupLiveCD.sh.log"
+echoamarillo "Copiando log de $0 a $DISTROLOGS [ cp $RAIZLOG/1-SetupLiveCD.sh.log $DISTROLOGS/1-SetupLiveCD.sh.log ]"
+#cp /var/log/IAC-IESMHP/1-SetupLiveCD.sh.log /mnt/var/log/IAC-IESMHP/1-SetupLiveCD.sh.log
+
+cp "$RAIZLOG/1-SetupLiveCD.sh.log" "$DISTROLOGS/1-SetupLiveCD.sh.log"
 
 #--------------------------------------------------------------------------------------
 echoamarillo "Ejecutamos $SCRIPT2 en el entorno chroot... ($RAIZSCRIPTS/$SCRIPT2)"
@@ -235,7 +239,7 @@ if [[ $(tail -n 1 $DISTROLOGS/$SCRIPT2.log) == "Correcto" ]]; then
     sleep 10 && reboot
 else
     setxkbmap es
-    echo -e "\e[31mInstalación fallida. Revisa logs de instalación: /mnt$RAIZLOGS\e[0m"
+    echo -e "\e[31mInstalación fallida. Revisa logs de instalación: /mnt$RAIZLOG\e[0m"
     sleep 100000
 fi
 
