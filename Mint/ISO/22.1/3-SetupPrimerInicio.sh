@@ -13,6 +13,7 @@ versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 RAIZSCRIPTS="/opt/$REPO"
 RAIZLOG="/var/log/$REPO/$DISTRO"
 RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
+RAIZANSIBLE="$RAIZSCRIPTS/ansible"
 
 SCRIPT4nombreip="$RAIZDISTRO/utiles/NombreIP.sh"
 SCRIPT5ansible="$RAIZDISTRO/utiles/Auto-Ansible.sh"
@@ -84,14 +85,14 @@ timedatectl set-ntp true
 echoverde "Arreglando posibles problemas de configuración de paquetes..." 
 dpkg --configure -a >> $FLOG
 
-echoverde "Configuramos proxy de aula si procede..." 
-#Si el tercer octeto de la IP es 32=>estamos en aula SMRDV:  activamos proxy
-IP3=$(ip addr show $(ip route | grep default | awk '{print $5}') | grep 'inet ' | awk '{print $2}' | cut -d'.' -f3)
-if [ "$IP3" == "32" ]; then
-    echoverde "Estamos en aula SMRDV, configuramos proxy"
-    rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
-    echo 'Acquire::http::Proxy "http://10.0.32.119:3128/";' > /etc/apt/apt.conf.d/00aptproxy
-fi
+# echoverde "Configuramos proxy de aula si procede..." 
+# #Si el tercer octeto de la IP es 32=>estamos en aula SMRDV:  activamos proxy
+# IP3=$(ip addr show $(ip route | grep default | awk '{print $5}') | grep 'inet ' | awk '{print $2}' | cut -d'.' -f3)
+# if [ "$IP3" == "32" ]; then
+#     echoverde "Estamos en aula SMRDV, configuramos proxy"
+#     rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
+#     echo 'Acquire::http::Proxy "http://10.0.32.119:3128/";' > /etc/apt/apt.conf.d/00aptproxy
+# fi
 
 echoverde "Voy a actualizar lista de paquetes" 
 apt-get update --fix-missing >> $FLOG
@@ -143,7 +144,7 @@ chmod +x "$SCRIPT5ansible"
 /bin/bash "$SCRIPT5ansible"  >> $FLOG 
 
 mostrar_mensaje "Intentamos finalizar autoconfiguración con Ansible" >> $FLOG
-cd "$RAIZDISTRO/ansible/ProbandoRoles" || exit 1
+cd "$RAIZANSIBLE/ProbandoRoles" || exit 1
 ansible-playbook -i localhost, --connection=local roles.yaml -e 'ansible_python_interpreter=/usr/bin/python3.12' --ssh-extra-args="-o StrictHostKeyChecking=no" >> $FLOG || echorojo "Error en la autoconfiguración ansible" && true
 
 #Reinciando en 30 segundos y avisando a los usuarios
