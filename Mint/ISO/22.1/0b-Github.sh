@@ -28,7 +28,7 @@ echo "root:prov" | chpasswd
 echo "mint:mint" | chpasswd
 echo "root:root" | chpasswd
 
-#Si el tercer octeto de la IP es 32=>estamos en aula SMRDV
+#Si el tercer octeto de la IP es 32=>estamos en aula SMRDV:  activamos proxy
 IP3=$(ip addr show $(ip route | grep default | awk '{print $5}') | grep 'inet ' | awk '{print $2}' | cut -d'.' -f3)
 if [ "$IP3" == "32" ]; then
     echoverde "Estamos en aula SMRDV, configuramos proxy"

@@ -52,12 +52,17 @@ echoverde() {
     fi
 }
 echorojo()  {
-    
     echo -e "\033[31m$1\033[0m"
     echo $1 >> $FLOG 
-    
     mostrar_mensaje "ERROR!!! :  $1"
-    
+}
+echoamarillo() {  
+        local MENSAJE_EN_GUI="${3:-'N'}"  
+    echo -e "\033[33m$1\033[0m" 
+    echo $1 >> $FLOG
+    if [[ "$MENSAJE_EN_GUI" == "S" ]]; then
+        mostrar_mensaje "$1"
+    fi
 }
 
 echo "tail -f $FLOG" > $VERLOGSCRIPT
@@ -74,6 +79,15 @@ timedatectl set-ntp true
 
 echoverde "Arreglando posibles problemas de configuración de paquetes..." 
 dpkg --configure -a >> $FLOG
+
+echoverde "Configuramos proxy de aula si procede..." 
+#Si el tercer octeto de la IP es 32=>estamos en aula SMRDV:  activamos proxy
+IP3=$(ip addr show $(ip route | grep default | awk '{print $5}') | grep 'inet ' | awk '{print $2}' | cut -d'.' -f3)
+if [ "$IP3" == "32" ]; then
+    echoverde "Estamos en aula SMRDV, configuramos proxy"
+    rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
+    echo 'Acquire::http::Proxy "http://10.0.32.119:3128/";' > /etc/apt/apt.conf.d/00aptproxy
+fi
 
 echoverde "Voy a actualizar lista de paquetes" 
 apt-get update --fix-missing >> $FLOG
