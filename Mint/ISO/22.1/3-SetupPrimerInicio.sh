@@ -13,7 +13,7 @@ versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 RAIZSCRIPTS="/opt/$REPO"
 RAIZLOG="/var/log/$REPO/$DISTRO"
 RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
-RAIZANSIBLE="$RAIZSCRIPTS/ansible"
+RAIZANSIBLE="$RAIZSCRIPTS/$DISTRO/ansible"
 
 SCRIPT4nombreip="$RAIZDISTRO/utiles/NombreIP.sh"
 SCRIPT5ansible="$RAIZDISTRO/utiles/Auto-Ansible.sh"
@@ -144,7 +144,7 @@ chmod +x "$SCRIPT5ansible"
 /bin/bash "$SCRIPT5ansible"  >> $FLOG 
 
 mostrar_mensaje "Intentamos finalizar autoconfiguración con Ansible" >> $FLOG
-cd "$RAIZANSIBLE/ProbandoRoles" || exit 1
+cd "$RAIZANSIBLE/" || exit 1
 ansible-playbook -i localhost, --connection=local roles.yaml -e 'ansible_python_interpreter=/usr/bin/python3.12' --ssh-extra-args="-o StrictHostKeyChecking=no" >> $FLOG || echorojo "Error en la autoconfiguración ansible" && true
 
 #Reinciando en 30 segundos y avisando a los usuarios
