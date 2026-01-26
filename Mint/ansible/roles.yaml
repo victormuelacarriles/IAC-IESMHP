@@ -32,6 +32,7 @@
      - obs
      - xrdp
      - vscode
+     #TODO: virtualbox falla. A raiz de poner el servidor de caches apt, no instala la versión concreta que le digo
      - virtualbox #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
     #             #TODO: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
      - vmware  #TODO: pide compilar (como sudo) en el primer arranque. Hay que evitarlo.
