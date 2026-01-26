@@ -1,7 +1,8 @@
 #!/bin/bash
 
 #"set -e" significa que el script se detendrá si ocurre un error
-set -e
+set -e # lo desactivamos para que no se pare en errores de 
+
 VERSIONSCRIPT="22.1-20260126-13:22"       #Versión del script
 SCRIPT3=$(basename "$0")
 echo "$SCRIPT3 (vs$VERSIONSCRIPT)"
@@ -85,13 +86,22 @@ timedatectl set-ntp true
 echoverde "Arreglando posibles problemas de configuración de paquetes..." 
 dpkg --configure -a >> $FLOG
 
-# echoverde "Configuramos proxy de aula si procede..." 
-# #Si el tercer octeto de la IP es 72=>estamos en aula IABD:  activamos proxy
+echoverde "Configuramos proxy de aula si procede..." 
+# #Si el tercer octeto de la IP es 72=>estamos en aula IABD:
+# #                                32=>estamos en aula IABD
 IP3=$(ip addr show $(ip route | grep default | awk '{print $5}') | grep 'inet ' | awk '{print $2}' | cut -d'.' -f3)
 if [ "$IP3" == "72" ]; then
-    echoverde "Estamos en aula IABD, configuramos proxy"
+    echoverde "Estamos en aula IABD, configuramos proxy 10.0.72.140:3128"
     rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
-    echo 'Acquire::http::Proxy "http://10.0.72.140:3128/";' > /etc/apt/apt.conf.d/00aptproxy
+    ##OJO!!! ->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> repetir   -------->>>>>>>       aqui!!!!!!!!!!!!!
+    echo Acquire::http::Proxy-Auto-Detect "/bin/bash -c 'nc -z -w1 10.0.72.140 3128 && echo http://10.0.72.140:3128 || echo DIRECT'";
+Acquire::https::Proxy "DIRECT"; > /etc/apt/apt.conf.d/00aptproxy
+elif [ "$IP3" == "32" ]; then
+    echoverde "Estamos en aula SMRV, configuramos proxy  10.0.32.253:3128"
+    rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
+    ##OJO!!! ->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> repetir   -------->>>>>>>       aqui!!!!!!!!!!!!!
+    echo Acquire::http::Proxy-Auto-Detect "/bin/bash -c 'nc -z -w1 10.0.32.253 3128 && echo http://10.0.32.253:3128 || echo DIRECT'";
+Acquire::https::Proxy "DIRECT"; > /etc/apt/apt.conf.d/00aptproxy
 fi
 
 echoverde "Voy a actualizar lista de paquetes" 
@@ -144,6 +154,7 @@ chmod +x "$SCRIPT5ansible"
 /bin/bash "$SCRIPT5ansible"  >> $FLOG 
 
 mostrar_mensaje "Intentamos finalizar autoconfiguración con Ansible" >> $FLOG
+set +e # desactivamos para que no se pare en errores de ansible
 cd "$RAIZANSIBLE/" || exit 1
 ansible-playbook -i localhost, --connection=local roles.yaml -e 'ansible_python_interpreter=/usr/bin/python3.12' --ssh-extra-args="-o StrictHostKeyChecking=no" >> $FLOG || echorojo "Error en la autoconfiguración ansible" && true
 
