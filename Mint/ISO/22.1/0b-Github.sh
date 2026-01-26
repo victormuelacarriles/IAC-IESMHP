@@ -2,7 +2,7 @@
 #Script que descarga desde GIT la última versión de los scripts de instalación de IESMHP
 #y los copia a /LiveCDiesmhp, y ejecuta el script de configuración del LiveCD
 set -e
-VERSIONSCRIPT="3.22.1.03 08:50"       #Versión del script
+VERSIONSCRIPT="3.22.1.04"       #Versión del script
 SCRIPT1NOMBRE="1-SetupLiveCD.sh"
 DISTRO="Mint"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
@@ -19,8 +19,9 @@ echoverde() {
 echoverde "($0 vs $VERSIONSCRIPT) $RAIZLOG"
 
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
-SCRIPT1="$RAIZSCRIPTSLIVEISOS/$SCRIPT1NOMBRE"
 RAIZSCRIPTSLIVEISOS="$RAIZSCRIPTSLIVE/$DISTRO/ISO/$versionDISTRO"
+SCRIPT1="$RAIZSCRIPTSLIVEISOS/$SCRIPT1NOMBRE"
+
 
 echoverde "En español (si se puede) y con usuarios mint:mint root:root por si hay que depurar"
 setxkbmap es || true && loadkeys es ||true
