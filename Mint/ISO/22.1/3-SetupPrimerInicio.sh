@@ -3,9 +3,10 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
 VERSIONSCRIPT="22.1-20260126-12:15"       #Versión del script
-echo "$0 (vs$VERSIONSCRIPT)"
-#Nos quedamos solo con el nombre del script sin ruta
 SCRIPT3=$(basename "$0")
+echo "$SCRIPT3 (vs$VERSIONSCRIPT)"
+#Nos quedamos solo con el nombre del script sin ruta
+
 REPO="IAC-IESMHP"
 DISTRO="Mint"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
