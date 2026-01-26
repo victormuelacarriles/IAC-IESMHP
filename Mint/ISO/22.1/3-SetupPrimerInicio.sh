@@ -4,6 +4,8 @@
 set -e
 VERSIONSCRIPT="22.1-20260126-11:45"       #Versión del script
 echo "$0 (vs$VERSIONSCRIPT)"
+#Nos quedamos solo con el nombre del script sin ruta
+SCRIPT3=$(basename "$0")
 REPO="IAC-IESMHP"
 DISTRO="Mint"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
