@@ -1,7 +1,7 @@
 #!/bin/bash
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
-VERSIONSCRIPT="22.1-3.00"       #Versión del script
+VERSIONSCRIPT="22.1-20260126-09:35"       #Versión del script
 REPO="IAC-IESMHP"
 DISTRO="Mint"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)

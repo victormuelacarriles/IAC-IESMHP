@@ -2,7 +2,7 @@
 
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e
-VERSIONSCRIPT="22.1-3.00"       #Versión del script
+VERSIONSCRIPT="22.1-20260126-09:35"       #Versión del script
 echoverde "$0 (vs$VERSIONSCRIPT)"
 REPO="IAC-IESMHP"
 DISTRO="Mint"
