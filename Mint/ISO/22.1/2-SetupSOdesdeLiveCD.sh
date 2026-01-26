@@ -6,8 +6,8 @@ REPO="IAC-IESMHP"
 DISTRO="Mint"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 RAIZSCRIPTS="/opt/$REPO"
-RAIZLOGS="/var/log/$REPO"
 RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
+RAIZLOG="/var/log/$REPO/$DISTRO"
 SCRIPT3="3-SetupPrimerInicio.sh"
 
 # Funciones de colores
@@ -215,8 +215,8 @@ Conflicts=shutdown.target
 Type=always
 Environment=LC_ALL=es_ES.UTF-8
 ExecStart=sudo /bin/bash $RAIZDISTRO/$SCRIPT3 
-StandardOutput=append: $RAIZLOGS/$SCRIPT3.log
-StandardError=append: $RAIZLOGS/$SCRIPT3.log
+StandardOutput=append: $RAIZLOG/$SCRIPT3.log
+StandardError=append: $RAIZLOG/$SCRIPT3.log
 TimeoutSec=0
 RemainAfterExit=yes
 
