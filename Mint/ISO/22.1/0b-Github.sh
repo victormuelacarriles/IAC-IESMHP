@@ -7,7 +7,7 @@ SCRIPT1NOMBRE="1-SetupLiveCD.sh"
 DISTRO="Mint"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
 
-RAIZLOG="/var/log/iesmhp$DISTRO"
+RAIZLOG="/var/log/IAC-IESMHMP/$DISTRO"
 LOG0="$RAIZLOG/$0.log"
 GITREPO="https://github.com/victormuelacarriles/IAC-IESMHP.git"
 mkdir -p $RAIZLOG
