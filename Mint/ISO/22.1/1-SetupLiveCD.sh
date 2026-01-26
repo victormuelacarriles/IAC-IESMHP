@@ -226,9 +226,6 @@ chroot /mnt ${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2 2>&1 | tee $DISTROLOGS/$SCRIPT2.l
 echo && echo 
 # Check installation result
 if [[ $(tail -n 1 $DISTROLOGS/$SCRIPT2.log) == "Correcto" ]]; then
-    echoamarillo "Copiamos logs [cp $DISTROLOGS/*.log /mnt$RAIZLOGS ]"
-    cp "$DISTROLOGS/*.log" "/mnt$RAIZLOGS"
-    
     echo -e "\e[32mInstalación completada. Reinicia el sistema para iniciar Linux Mint.\e[0m"
     sleep 10 && reboot
 else
