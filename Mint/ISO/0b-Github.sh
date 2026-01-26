@@ -28,6 +28,14 @@ echo "root:prov" | chpasswd
 echo "mint:mint" | chpasswd
 echo "root:root" | chpasswd
 
+#Si el tercer octeto de la IP es 32=>estamos en aula SMRDV
+IP3=$(ip addr show $(ip route | grep default | awk '{print $5}') | grep 'inet ' | awk '{print $2}' | cut -d'.' -f3)
+if [ "$IP3" == "32" ]; then
+    echoverde "Estamos en aula SMRDV, configuramos proxy"
+    rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
+    echo 'Acquire::http::Proxy "http://10.0.32.119:3128/";' > /etc/apt/apt.conf.d/00aptproxy
+fi
+
 echoverde "Actualizamos..."
 rm /etc/apt/sources.list 2>/dev/null || true
 apt-get update 2>&1 | tee -a $LOG0
