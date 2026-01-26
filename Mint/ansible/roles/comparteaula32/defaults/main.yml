@@ -1,0 +1,10 @@
+---
+#Variables para el servidor NFS
+disco_hd: "/home"
+carpeta_nfs: "{{ disco_hd }}/ComparteProfesor"
+
+#Variables del cliente NFS
+nfs_server_ip: "10.0.32.119"
+nfs_server_path: "/mnt/DiscosRapidos/PruebaRapidosX3"
+nfs_mount_point: "/mnt/nasFAST"
+nfs_mount_options: "ro,defaults,_netdev 0 0"
