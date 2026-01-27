@@ -1,8 +1,11 @@
 #!/bin/bash
 #Script que descarga desde GIT la última versión de los scripts de instalación de IESMHP
 #y los copia a /LiveCDiesmhp, y ejecuta el script de configuración del LiveCD
+
+# POR HACER: meter una espera de 10 segundos antes de empezar el proceso de update (para dar tiempo a que arranque la red. Avisar si no hay internet)
+
 set -e
-VERSIONSCRIPT="22.1-20260126-10:45"       #Versión del script
+VERSIONSCRIPT="22.1-20260127-09:09"       #Versión del script
 SCRIPT1NOMBRE="1-SetupLiveCD.sh"
 DISTRO="Mint"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
@@ -38,6 +41,10 @@ echo "root:root" | chpasswd
 #     rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
 #     echo 'Acquire::http::Proxy "http://10.0.32.119:3128/";' > /etc/apt/apt.conf.d/00aptproxy
 # fi
+
+#TODO: comprobar si hay conexión a internet antes de seguir. Hacer ping a google.com o similar
+
+
 
 echoverde "Actualizamos..."
 rm /etc/apt/sources.list 2>/dev/null || true
