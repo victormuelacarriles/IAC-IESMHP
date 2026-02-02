@@ -15,7 +15,7 @@ VERSION="2026.02.02 9:20"
 DATOS_USUARIOS = [
     ###################################################################### Alumnos Distancia
     ["SMRD01", "SMRD-00", "10.0.32.120", "bc:fc:e7:05:76:08", "Aaron","A"],
-    ["SMRV07", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Jorge","A"],
+    ["SMRV07", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Jorge Zatón","A"],
     ["SMRV16", "SMRD-02", "10.0.32.122", "bc:fc:e7:05:73:d1", "Victoria","A"],
     ["SMRV17", "SMRD-03", "10.0.32.123", "bc:fc:e7:05:72:58", "Nerea","A"],
     ["SMRD05", "SMRD-04", "10.0.32.124", "bc:fc:e7:05:70:f8", "AlexandraPRUEBAS","A"],
@@ -32,7 +32,7 @@ DATOS_USUARIOS = [
     ["SMRV29", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Aingeru","A"],
     ["SMRV13", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Ignacio","A"],
     ["SMRV08", "SMRD-13", "10.0.32.133", "bc:fc:e7:05:75:7e", "DAniel Karol","A"],
-    ["SMRV30", "SMRD-16", "10.0.32.136", "bc:fc:e7:05:30:c0", "Jorge","A"],
+    ["SMRV30", "SMRD-16", "10.0.32.136", "bc:fc:e7:05:30:c0", "Jorge Amigo","A"],
     ["SMRV32", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Flavio","A"],
     ["SMRV21", "SMRD-07", "10.0.32.127", "bc:fc:e7:05:71:60", "Alvaro G. Niebla","A"],
     ###################################################################### Profesores Distancia
