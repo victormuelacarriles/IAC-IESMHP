@@ -7,7 +7,7 @@ import platform
 import getpass
 from ldap3 import Server, Connection, ALL, NTLM
 
-VERSION="2026.02.02 9:20"
+VERSION="2026.02.03 9:50"
 # --- CONFIGURACIÓN ---   (ver al final del fichero explicaciones)
 
 # Matriz de datos: [Usuario, NombreEquipo, IP, MAC]
@@ -32,15 +32,17 @@ DATOS_USUARIOS = [
     ["SMRV29", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Aingeru","A"],
     ["SMRV13", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Ignacio","A"],
     ["SMRV08", "SMRD-13", "10.0.32.133", "bc:fc:e7:05:75:7e", "DAniel Karol","A"],
-    ["SMRV30", "SMRD-16", "10.0.32.136", "bc:fc:e7:05:30:c0", "Jorge Amigo","A"],
+    ["SMRV30", "SMRD-16", "10.0.32.136", "bc:fc:e7:04:30:c0", "Jorge Amigo","A"],
     ["SMRV32", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Flavio","A"],
     ["SMRV21", "SMRD-07", "10.0.32.127", "bc:fc:e7:05:71:60", "Alvaro G. Niebla","A"],
+    ["SMRV12", "SMRD-17", "10.0.32.137", "bc:fc:e7:05:73:d0", "Janire Billalabeitia","A"],
+    ["SMRV04", "SMRD-13", "10.0.32.133", "bc:fc:e7:05:75:7e", "Christian de la","A"],
     ###################################################################### Profesores Distancia
-    ["rmachog", "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Roberto","P"],
-    ["mbalava", "SMRD-14", "10.0.32.134", "bc:fc:e7:05:73:63", "Belén","P"],
-    ["luis", "SMRD-16", "10.0.32.136", "74:56:3C:95:EC:10", "Luis M.V.","P"],
+    ["rmachog",    "SMRD-15", "10.0.32.135", "bc:fc:e7:05:73:c8", "Roberto","P"],
+    ["mbalava",    "SMRD-14", "10.0.32.134", "bc:fc:e7:05:73:63", "Belén","P"],
+    ["luis",       "SMRD-16", "10.0.32.136", "74:56:3C:95:EC:10", "Luis M.V.","P"],
     ["afernandez", "SMRD-17", "10.0.32.137", "74:56:3C:95:EB:87", "Angélica","P"],
-    ["vmuela", "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Víctor", "P"],
+    ["vmuela",     "SMRD-18", "10.0.32.138", "bc:fc:e7:05:73:d5", "Víctor", "P"],
     ########################################################################################## Alumnos CEIABD
     ["CEGSIABD09","IABD-01", "10.0.72.121", "d8:bb:c1:38:71:6f", "Canales De la Hera, María del Carmen","A"],
     ["CEGSIABD04","IABD-02", "10.0.72.122", "d8:bb:c1:38:93:ad", "Carcedo Ruiz, Diego","A"],
