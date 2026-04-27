@@ -21,12 +21,8 @@
         update_cache: yes
   roles:
      - basicos       #cosas que debieras estar desde el livecd pero que recomprobamos #[python, pip, pipx, ansible] 
-     #- comparteaula  # en -00 crear una carpeta compartida en /home/Comparte, y en el resto montar esa carpeta compartida en /Comparte
-    # nvidia: falta que separar en caso de no haber tarjeta nvidia. Ahora mismo detiene todo el playbook si no pongo el ignore_errors 
-     
-     #Role Comparte aula: roles distintos para aulas distintas (72-IABD y 32-SMRV)
-     - { role: comparteaula72, when: "'72' in ansible_default_ipv4.address" }
-     - { role: comparteaula32, when: "'32' in ansible_default_ipv4.address" }
+     - comparteaula  # Rol unificado: detecta aula por IP (72/32) y configura servidor/cliente NFS según corresponda
+     # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml
      - nvidia
      - certificados
      - obs
