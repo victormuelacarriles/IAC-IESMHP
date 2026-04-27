@@ -5,9 +5,9 @@
 # POR HACER: meter una espera de 10 segundos antes de empezar el proceso de update (para dar tiempo a que arranque la red. Avisar si no hay internet)
 
 set -e
-VERSIONSCRIPT="22.1-20260127-09:09"       #Versión del script
+VERSIONSCRIPT="26.04-Ubuntu-20260427-09:44"       #Versión del script
 SCRIPT1NOMBRE="1-SetupLiveCD.sh"
-DISTRO="Mint"
+DISTRO="Ubuntu"
 RAIZSCRIPTSLIVE="/LiveCDiesmhp"
 REPO="IAC-IESMHP"
 RAIZLOG="/var/log/$REPO/$DISTRO"
@@ -25,6 +25,7 @@ versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 RAIZSCRIPTSLIVEISOS="$RAIZSCRIPTSLIVE/$DISTRO/ISO/$versionDISTRO"
 SCRIPT1="$RAIZSCRIPTSLIVEISOS/$SCRIPT1NOMBRE"
 
+#A partir de aquí tengo que corregir!!!!!
 
 echoverde "En español (si se puede) y con usuarios mint:mint root:root por si hay que depurar"
 setxkbmap es || true && loadkeys es ||true
