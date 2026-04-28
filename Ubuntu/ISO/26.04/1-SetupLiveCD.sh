@@ -231,6 +231,7 @@ cp "$RAIZLOG/1-SetupLiveCD.sh.log" "$DISTROLOGS/1-SetupLiveCD.sh.log"
 
 # ─────────────── Ejecutar SCRIPT2 ──────
 echoamarillo "Ejecutando $SCRIPT2 en chroot... (${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2)"
+echo "chroot /mnt ${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2 2>&1 | tee $DISTROLOGS/$SCRIPT2.log" 
 chroot /mnt "${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2" 2>&1 | tee "$DISTROLOGS/$SCRIPT2.log"
 
 # ─────────────── Resultado ─────────────
