@@ -200,8 +200,7 @@ done
 
 # ─────────────── Copiar scripts al destino ─
 # RAIZSCRIPTSDISTRO: ruta dentro del sistema instalado donde estarán los scripts
-# CAMBIO: corregido $Distro (minúscula, indefinida) → $DISTRO; eliminado /ISO/ redundante
-RAIZSCRIPTSDISTRO="/mnt${RAIZSCRIPTS}/${DISTRO}/${versionDISTRO}"
+RAIZSCRIPTSDISTRO="/mnt${RAIZSCRIPTS}/${DISTRO}/ISO/${versionDISTRO}"
 DISTROLOGS="/mnt${RAIZLOG}"
 
 mkdir -p "$RAIZSCRIPTSDISTRO"
