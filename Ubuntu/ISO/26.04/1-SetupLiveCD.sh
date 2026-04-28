@@ -194,6 +194,7 @@ umount /tmp/squashfs
 
 # ─────────────── Preparar chroot ───────
 for dir in /dev /proc /sys /run; do
+    mkdir -p "/mnt$dir"
     mount --bind $dir /mnt$dir
 done
 

@@ -122,7 +122,7 @@ autoinstall:
   # toque los discos. 0b-Github.sh clona el repo y lanza 1-SetupLiveCD.sh,
   # que realiza la instalación completa y reinicia. Subiquity no continúa.
   early-commands:
-    - bash /cdrom/autoinstall/0b-Github.sh >&2 | tee /var/log/0b-Github.log
+    - bash /cdrom/autoinstall/0b-Github.sh 2>&1 | tee /var/log/0b-Github.log > /dev/tty1
 EOF
     touch "${AUTOINSTALL_DIR}/meta-data"
     log "user-data (early-command) y meta-data generados"
@@ -151,13 +151,11 @@ menuentry "Ubuntu Desktop — Instalación automatizada (IAC-IESMHP)" --id=autoi
     linux   /casper/vmlinuz \
                 autoinstall \
                 "ds=nocloud;s=/cdrom/autoinstall/" \
-                quiet splash \
                 ---
     initrd  /casper/initrd
 }
 menuentry "Ubuntu Desktop — Live / Interactivo (Debug)" --id=interactive {
     linux   /casper/vmlinuz \
-                quiet splash \
                 ---
     initrd  /casper/initrd
 }
