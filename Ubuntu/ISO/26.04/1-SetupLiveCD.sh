@@ -10,9 +10,7 @@
 # =============================================================================
 set -e
 
-export DISPLAY=:0
-export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/999/bus
-notify-send "Prueba" "probando" -i dialog-information -t 5000
+
 
 VERSIONSCRIPT="22.2-20260428-Ubuntu"
 REPO="IAC-IESMHP"
