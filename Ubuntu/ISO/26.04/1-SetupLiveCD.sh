@@ -195,7 +195,7 @@ echoverde "Sistema de archivos copiado desde $SQUASHFS"
 umount /tmp/squashfs
 
 # ─────────────── Preparar chroot ───────
-for dir in /dev /proc /sys /run; do
+for dir in /bin /dev /proc /sys /run; do
     mkdir -p "/mnt$dir"
     mount --bind $dir /mnt$dir
 done
