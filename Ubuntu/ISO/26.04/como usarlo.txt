@@ -2,4 +2,4 @@ sudo apt install xorriso mtools gdisk -y
 
 # 2. Dar permisos y ejecutar
 chmod +x create_custom_iso.sh
-./create_custom_iso.sh ubuntu-26.04-desktop-amd64.iso perso.sh mi-ubuntu.iso
+./create_custom_iso.sh ubuntu-26.04-desktop-amd64.iso 0b-Github.sh mi-ubuntu.iso
