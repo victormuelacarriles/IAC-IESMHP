@@ -122,7 +122,7 @@ autoinstall:
   # toque los discos. 0b-Github.sh clona el repo y lanza 1-SetupLiveCD.sh,
   # que realiza la instalación completa y reinicia. Subiquity no continúa.
   early-commands:
-    - bash /cdrom/autoinstall/0b-Github.sh
+    - bash /cdrom/autoinstall/0b-Github.sh >&2 | tee /var/log/0b-Github.log
 EOF
     touch "${AUTOINSTALL_DIR}/meta-data"
     log "user-data (early-command) y meta-data generados"
