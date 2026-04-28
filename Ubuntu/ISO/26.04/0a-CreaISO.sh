@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  create_custom_iso.sh
+#  0a-CreaISO.sh
 #  Genera una ISO de Ubuntu Desktop personalizada con instalación automática UEFI.
 #
 #  Uso:
-#    ./create_custom_iso.sh <iso_origen> <0b-Github.sh> [iso_salida]
+#    ./0a-CreaISO.sh <iso_origen> <0b-Github.sh> [iso_salida]
 #
 #  ARQUITECTURA:
 #    El autoinstall de Ubuntu solo actúa como disparador de arranque:

