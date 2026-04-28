@@ -10,7 +10,7 @@ set -euo pipefail
 REPO="IAC-IESMHP"
 GITREPO="https://github.com/victormuelacarriles/${REPO}.git"
 DESTDIR="/opt/${REPO}"
-SCRIPT_INSTALL="${DESTDIR}/Ubuntu/26.04/1-SetupLiveCD.sh"
+SCRIPT_INSTALL="${DESTDIR}/Ubuntu/ISO/26.04/1-SetupLiveCD.sh"
 LOG_DIR="/var/log/${REPO}"
 LOG_FILE="${LOG_DIR}/0b-Github.sh.log"
 
