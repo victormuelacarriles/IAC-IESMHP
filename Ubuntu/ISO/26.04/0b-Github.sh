@@ -12,9 +12,9 @@ GITREPO="https://github.com/victormuelacarriles/${REPO}.git"
 DESTDIR="/opt/${REPO}"
 SCRIPT_INSTALL="${DESTDIR}/Ubuntu/ISO/26.04/1-SetupLiveCD.sh"
 
-#export DISPLAY=:0
-#export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/999/bus
-
+export DISPLAY=:0
+export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/999/bus
+zenity --info --text="Configurando..." --timeout=3 || true
 
 
 # ─────────────── Colores ───────────────
@@ -57,7 +57,7 @@ fi
 chmod +x "${SCRIPT_INSTALL}"
 
 # ─────────────── Lanzar instalación ────
-#notify-send "0b-Github.sh" "arrancando script de instalación ${SCRIPT_INSTALL}" -i dialog-information -t 5000
+
 
 log "Ejecutando ${SCRIPT_INSTALL} ..."
 bash "${SCRIPT_INSTALL}"
