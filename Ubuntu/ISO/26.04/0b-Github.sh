@@ -11,18 +11,12 @@ REPO="IAC-IESMHP"
 GITREPO="https://github.com/victormuelacarriles/${REPO}.git"
 DESTDIR="/opt/${REPO}"
 SCRIPT_INSTALL="${DESTDIR}/Ubuntu/ISO/26.04/1-SetupLiveCD.sh"
-LOG_DIR="/var/log/${REPO}"
-LOG_FILE="${LOG_DIR}/0b-Github.sh.log"
 
 # ─────────────── Colores ───────────────
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[perso][+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[perso][!]${NC} $*"; }
 err()  { echo -e "${RED}[perso][✗]${NC} $*" >&2; exit 1; }
-
-# ─────────────── Log ───────────────────
-mkdir -p "${LOG_DIR}"
-exec > >(tee -a "${LOG_FILE}") 2>&1
 log "=== 0b-Github.sh iniciado: $(date) ==="
 
 # ─────────────── Red: esperar DHCP ─────
