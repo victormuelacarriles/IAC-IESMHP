@@ -15,7 +15,7 @@ SCRIPT_INSTALL="${DESTDIR}/Ubuntu/ISO/26.04/1-SetupLiveCD.sh"
 export DISPLAY=:0
 export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/999/bus
 
-notify-send "Arrancando 0b-Github.sh" "Clonando repositorio y lanzando instalación..." -i dialog-information -t 5000
+
 
 # ─────────────── Colores ───────────────
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
@@ -57,5 +57,6 @@ fi
 chmod +x "${SCRIPT_INSTALL}"
 
 # ─────────────── Lanzar instalación ────
+notify-send "0b-Github.sh" "arrancando script de instalación ${SCRIPT_INSTALL}" -i dialog-information -t 5000
 log "Ejecutando ${SCRIPT_INSTALL} ..."
 bash "${SCRIPT_INSTALL}"
