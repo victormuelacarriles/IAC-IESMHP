@@ -193,10 +193,12 @@ echoverde "Sistema de archivos copiado desde $SQUASHFS"
 umount /tmp/squashfs
 
 # ─────────────── Preparar chroot ───────
-for dir in /bin /lib /dev /proc /sys /run; do
+# Solo los filesystems virtuales del kernel; /bin y /lib vienen del squashfs instalado
+for dir in /dev /proc /sys /run; do
     mkdir -p "/mnt$dir"
-    mount --bind $dir /mnt$dir
+    mount --bind "$dir" "/mnt$dir"
 done
+mount --bind /dev/pts /mnt/dev/pts 2>/dev/null || true
 
 # ─────────────── Copiar scripts al destino ─
 # RAIZSCRIPTSDISTRO: ruta dentro del sistema instalado donde estarán los scripts
