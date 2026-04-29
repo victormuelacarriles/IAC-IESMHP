@@ -6,7 +6,7 @@
 #  Clona el repositorio IAC-IESMHP y lanza 1-SetupLiveCD.sh.
 # =============================================================================
 set -euo pipefail
-
+exit 0
 
 REPO="IAC-IESMHP"
 GITREPO="https://github.com/victormuelacarriles/${REPO}.git"
