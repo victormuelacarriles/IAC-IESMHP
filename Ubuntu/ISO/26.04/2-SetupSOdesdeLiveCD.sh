@@ -63,13 +63,25 @@ echo && echo && echoverde "....Configurado entorno en español"
 # Configure fstab
 
 echoamarillo "Configurando /etc/fstab..."
-# Detectar particiones y asignar variables
-EFI=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/boot/efi" {print $1}')
-SWAP=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "[SWAP]" {print $1}')
-ROOT=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/" {print $1}')
-HOME=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/home" {print $1}')
-#HOME=$(lsblk | grep ─ | grep -v SWAP | grep -v efi | grep -v '/' | awk '{gsub(/^[^a-zA-Z0-9]*/, "", $1); print $1}')
+# lsblk dentro del chroot ve mount points del HOST (/mnt, /mnt/boot/efi...),
+# no los del sistema instalado. Las particiones se leen del fichero creado por 1-SetupLiveCD.sh.
+PARTS_FILE=/tmp/.iac-partitions.env
+if [ -f "$PARTS_FILE" ]; then
+    source "$PARTS_FILE"
+    EFI="${PART_EFI##*/}"
+    SWAP="${PART_SWAP##*/}"
+    ROOT="${PART_ROOT##*/}"
+    HOME="${PART_HOME##*/}"
+    echoverde "Particiones leídas del fichero: EFI=$EFI SWAP=$SWAP ROOT=$ROOT HOME=$HOME"
+else
+    echorojo "AVISO: $PARTS_FILE no encontrado — detección automática puede fallar en chroot"
+    EFI=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/boot/efi" {print $1}')
+    SWAP=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "[SWAP]" {print $1}')
+    ROOT=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt" {print $1}')
+    HOME=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/home" {print $1}')
+fi
 echo "EFI= $EFI SWAP= $SWAP ROOT= $ROOT HOME= $HOME"
+[ -n "$ROOT" ] || { echorojo "ERROR: no se pudo determinar la partición root"; exit 1; }
 
 cat > /etc/fstab << EOF
 # /etc/fstab
@@ -171,6 +183,11 @@ echo && echo && echo "..Generada  machine-id"
 
 # Update initramfs
 echoverde "Actualizando initramfs (lo que hace que el sistema arranque)..."
+# MODULES=most: en chroot la detección de módulos falla; sin esto el driver NVMe
+# puede no incluirse y el kernel no encuentra el disco → kernel panic al arrancar.
+mkdir -p /etc/initramfs-tools/conf.d
+echo "MODULES=most"  > /etc/initramfs-tools/conf.d/modules
+echo "RESUME=none"   > /etc/initramfs-tools/conf.d/resume
 update-initramfs -u -k all
 echo && echo && echoverde "...Actualizado initramfs" 
 

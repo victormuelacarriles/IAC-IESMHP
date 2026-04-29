@@ -282,6 +282,18 @@ echoverde "  OK: chroot funcional — $(chroot /mnt /bin/bash --version 2>&1 | h
 echoamarillo "Copiando log a $DISTROLOGS/1-SetupLiveCD.sh.log"
 cp "$RAIZLOG/1-SetupLiveCD.sh.log" "$DISTROLOGS/1-SetupLiveCD.sh.log"
 
+# ─────────────── Pasar particiones al chroot ──
+# lsblk dentro del chroot ve los mount points del HOST (/mnt, /mnt/boot/efi...),
+# no los del sistema instalado (/,/boot/efi...). Se pasa la info en un fichero.
+mkdir -p /mnt/tmp
+cat > /mnt/tmp/.iac-partitions.env << EOF
+PART_EFI=$EFI
+PART_SWAP=$SWAP
+PART_ROOT=$ROOT
+PART_HOME=$HOME_PART
+EOF
+echoverde "Particiones escritas para el chroot: EFI=$EFI SWAP=$SWAP ROOT=$ROOT HOME=$HOME_PART"
+
 # ─────────────── Ejecutar SCRIPT2 ──────
 echoamarillo "Ejecutando $SCRIPT2 en chroot... (${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2)"
 echo "chroot /mnt ${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2 2>&1 | tee $DISTROLOGS/$SCRIPT2.log" 
