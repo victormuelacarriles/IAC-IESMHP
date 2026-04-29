@@ -53,10 +53,8 @@ echoverde "--------------------------------------------------------------------"
 echoverde "       CEIABD        ->Disco pequeño: NVMe 0,5TB (/EFI, /swap y /)"
 echoverde "                     ->Disco grande:  SDa  1,0TB (/home)"
 echoverde "--------------------------------------------------------------------"
-sleep 1
-echoamarillo "                                                  (comenzará en 10sg)"
-echoverde "--------------------------------------------------------------------"
-sleep 9
+
+
 
 # ─────────────── Carpetas de trabajo ───
 mkdir -p "$RAIZSCRIPTSLIVE"   # ya existe (clonado por perso.sh), mkdir -p es seguro

@@ -22,8 +22,8 @@ GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[perso][+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[perso][!]${NC} $*"; }
 err()  { echo -e "${RED}[perso][✗]${NC} $*" >&2; exit 1; }
-log "=== 0b-Github.sh iniciado: $(date) (esperamos 20 segundos)==="
-sleep 20  #vamos a hacer pruebas
+log "=== 0b-Github.sh iniciado: $(date) ==="
+
 # ─────────────── Red: esperar DHCP ─────
 log "Comprobando conectividad..."
 for i in $(seq 1 12); do
