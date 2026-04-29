@@ -238,8 +238,8 @@ sudo systemctl stop snap.ubuntu-desktop-bootstrap.subiquity-server.service 2>/de
 pkill -f "ubuntu-desktop-bootstrap" 2>/dev/null || true
 
 echo "Actualizamos repositorios e instalamos git en el entorno live... "
-DEBIAN_FRONTEND=noninteractive apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install git -y -qq
+sudo apt-get update -qq
+sudo DEBIAN_FRONTEND=noninteractive apt-get install git -y -qq
 
 echo "Lanzamos el script github de instalación (0b-Github.sh)..."
 sudo /bin/bash /0b-Github.sh 2>&1 | tee "${LOG_FILE}"
