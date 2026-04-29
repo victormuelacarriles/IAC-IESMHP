@@ -38,11 +38,17 @@ ping -c1 -W2 github.com &>/dev/null || err "No hay conexión a Internet. Abortan
 
 # ─────────────── git ───────────────────
 log "Asegurando que git está instalado..."
-# Deshabilitar man-db auto-update: en el live tarda 3-8 min reconstruyendo
-# la base de datos de man pages, que no necesitamos para la instalación.
 rm -f /var/lib/man-db/auto-update
 DEBIAN_FRONTEND=noninteractive apt-get update -qq
-DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends git
+# --no-triggers: omite TODOS los triggers dpkg (man-db, ldconfig, systemd…)
+# --force-unsafe-io: evita fsync sobre overlayfs (más rápido y sin bloqueos)
+# Los triggers se procesan en background; git queda funcional de inmediato.
+DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    -o "Dpkg::Options::=--no-triggers" \
+    -o "Dpkg::Options::=--force-unsafe-io" \
+    --no-install-recommends git
+dpkg --triggers-only -a --force-unsafe-io 2>/dev/null &
+log "git instalado."
 
 # ─────────────── Clonar repo ───────────
 if [[ -d "${DESTDIR}/.git" ]]; then
