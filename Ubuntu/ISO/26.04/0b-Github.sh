@@ -38,8 +38,11 @@ ping -c1 -W2 github.com &>/dev/null || err "No hay conexión a Internet. Abortan
 
 # ─────────────── git ───────────────────
 log "Asegurando que git está instalado..."
-apt-get update -qq
-apt-get install -y -qq git
+# Deshabilitar man-db auto-update: en el live tarda 3-8 min reconstruyendo
+# la base de datos de man pages, que no necesitamos para la instalación.
+rm -f /var/lib/man-db/auto-update
+DEBIAN_FRONTEND=noninteractive apt-get update -qq
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends git
 
 # ─────────────── Clonar repo ───────────
 if [[ -d "${DESTDIR}/.git" ]]; then
