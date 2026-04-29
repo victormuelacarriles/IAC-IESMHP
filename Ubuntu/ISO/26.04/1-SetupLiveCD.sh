@@ -179,8 +179,16 @@ echoverde "Sistemas de ficheros montados"
 
 # ─────────────── Copiar squashfs ───────
 # Ubuntu Desktop 26.04 usa casper/filesystem.squashfs (igual que versiones anteriores)
-SQUASHFS=$(find /cdrom -name "filesystem.squashfs" -o -name "*.squashfs" 2>/dev/null | head -1)
-[[ -n "$SQUASHFS" ]] || { echorojo "No se encontró filesystem.squashfs en /cdrom"; exit 1; }
+SQUASHFS=$(find /cdrom -name "filesystem.squashfs" 2>/dev/null | head -1)
+if [[ -z "$SQUASHFS" ]]; then
+    SQUASHFS=$(find /cdrom -name "*.squashfs" ! -name "minimal*" 2>/dev/null | head -1)
+fi
+if [[ -z "$SQUASHFS" ]]; then
+    echorojo "No se encontró filesystem.squashfs en /cdrom. Squashfs disponibles:"
+    find /cdrom -name "*.squashfs" 2>/dev/null || true
+    sleep 10 && exit 1
+fi
+echoverde "Squashfs seleccionado: $SQUASHFS"
 
 echoamarillo "Montando squashfs: $SQUASHFS ..."
 mkdir -p /tmp/squashfs
