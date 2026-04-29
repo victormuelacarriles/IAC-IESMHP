@@ -6,7 +6,7 @@
 #  Clona el repositorio IAC-IESMHP y lanza 1-SetupLiveCD.sh.
 # =============================================================================
 set -euo pipefail
-sleep 500000  #vamos a hacer pruebas
+sleep 10  #vamos a hacer pruebas
 
 REPO="IAC-IESMHP"
 GITREPO="https://github.com/victormuelacarriles/${REPO}.git"
@@ -38,8 +38,8 @@ done
 ping -c1 -W2 github.com &>/dev/null || err "No hay conexión a Internet. Abortando."
 
 # ─────────────── git ───────────────────
-log "Asegurando que git está instalado..."
-rm -f /var/lib/man-db/auto-update
+
+
 
 #####FALLA AQUí!    Se queda bloqueado y no avanza. 
 #                    PROBAR: rehacer 0a-CreaISO.sh para que abra un terminal sin mas. 
@@ -55,11 +55,12 @@ export PATH="/usr/local/sbin:$PATH"
 ln -sf /bin/true /usr/sbin/update-initramfs
 log "update-initramfs enmascarado (no-op en entorno live)."
 
+log "Desactivamos actualización de man-db"
+rm -f /var/lib/man-db/auto-update
+log "Actualizando paquetes..."
 DEBIAN_FRONTEND=noninteractive apt-get update -qq
-# --force-unsafe-io: evita fsync sobre overlayfs (más rápido y sin bloqueos)
-DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    -o "Dpkg::Options::=--force-unsafe-io" \
-    --no-install-recommends git
+log "Asegurando que git está instalado..."
+DEBIAN_FRONTEND=noninteractive apt-get install  git -y
 log "git instalado."
 
 
