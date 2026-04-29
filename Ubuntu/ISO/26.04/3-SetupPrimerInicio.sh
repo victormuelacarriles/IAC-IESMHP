@@ -171,7 +171,15 @@ cd "$RAIZANSIBLE/" || exit 1
 ansible-playbook -i localhost, --connection=local roles.yaml -e 'ansible_python_interpreter=/usr/bin/python3.12' --ssh-extra-args="-o StrictHostKeyChecking=no" >> $FLOG || echorojo "Error en la autoconfiguración ansible" && true
 
 #Reinciando en 30 segundos y avisando a los usuarios
-mostrar_mensaje "Sistema actualizado. SSH root/root" 
+mostrar_mensaje "Sistema actualizado. SSH root/root"
+
+# Comprobaciones finales del sistema
+SCRIPT4="$RAIZDISTRO/4-Comprobaciones.sh"
+if [ -f "$SCRIPT4" ]; then
+    echoverde "Ejecutando comprobaciones finales del sistema..."
+    chmod +x "$SCRIPT4"
+    bash "$SCRIPT4" 2>&1 | tee -a "$FLOG" || true
+fi
 
 echoverde "Reiniciando el sistema en 30 segundos..." >> $FLOG
 sleep 30

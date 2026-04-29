@@ -232,6 +232,17 @@ WantedBy=multi-user.target"
 echo "$CONTENIDOSERVICIO" > /etc/systemd/system/3-SetupPrimerInicio.service
 # Habilito el servicio
 systemctl enable 3-SetupPrimerInicio.service
-echo && echo && echoverde "...Servicio de actualización en primer arranque configurado." 
+echo && echo && echoverde "...Servicio de actualización en primer arranque configurado."
 echo $CONTENIDOSERVICIO
+
+# ─────────────── Comprobaciones antes del reboot ────────────────────────────
+SCRIPT4="$RAIZDISTRO/4-Comprobaciones.sh"
+if [ -f "$SCRIPT4" ]; then
+    echoamarillo "Ejecutando comprobaciones del sistema instalado..."
+    chmod +x "$SCRIPT4"
+    bash "$SCRIPT4" || true   # no detener el script aunque haya errores detectados
+else
+    echoamarillo "4-Comprobaciones.sh no encontrado en $SCRIPT4 — omitiendo diagnóstico"
+fi
+
 echo && echo "Correcto"
