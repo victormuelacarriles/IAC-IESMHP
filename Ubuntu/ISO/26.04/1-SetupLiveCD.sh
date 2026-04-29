@@ -225,6 +225,28 @@ else
     chmod +x "${RAIZSCRIPTSDISTRO}"/*.sh
 fi
 
+# ─────────────── Verificar entorno chroot ──
+echoamarillo "Verificando entorno chroot..."
+if [ ! -f /mnt/usr/bin/bash ]; then
+    echorojo "Error: /mnt/usr/bin/bash no existe — el squashfs no se copió correctamente"
+    sleep 10 && exit 1
+fi
+echoverde "  OK: /mnt/usr/bin/bash existe $(ls -la /mnt/usr/bin/bash | awk '{print $5, $9}')"
+
+if [ ! -e /mnt/lib64 ]; then
+    echorojo "Error: /mnt/lib64 no existe — falta el intérprete ELF en el chroot"
+    sleep 10 && exit 1
+fi
+echoverde "  OK: /mnt/lib64 → $(readlink /mnt/lib64 2>/dev/null || echo '(directorio)')"
+
+if ! chroot /mnt /bin/bash --version &>/dev/null; then
+    echorojo "Error: chroot /mnt /bin/bash falla — el entorno chroot no es funcional"
+    echoamarillo "  Intérprete ELF: $(readelf -l /mnt/usr/bin/bash 2>/dev/null | grep interpreter | awk -F'[][]' '{print $2}' || echo 'no se pudo leer')"
+    sleep 10 && exit 1
+fi
+echoverde "  OK: chroot funcional — $(chroot /mnt /bin/bash --version 2>&1 | head -1)"
+
+
 # ─────────────── Log de este script ────
 echoamarillo "Copiando log a $DISTROLOGS/1-SetupLiveCD.sh.log"
 cp "$RAIZLOG/1-SetupLiveCD.sh.log" "$DISTROLOGS/1-SetupLiveCD.sh.log"
