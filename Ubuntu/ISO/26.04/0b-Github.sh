@@ -46,6 +46,9 @@ rm -f /var/lib/man-db/auto-update
 mkdir -p /usr/local/sbin
 ln -sf /bin/true /usr/local/sbin/update-initramfs
 export PATH="/usr/local/sbin:$PATH"
+# Los scripts postinst del kernel llaman a /usr/sbin/update-initramfs con ruta
+# absoluta, ignorando el PATH. Hay que enmascarar también el binario real.
+ln -sf /bin/true /usr/sbin/update-initramfs
 log "update-initramfs enmascarado (no-op en entorno live)."
 
 DEBIAN_FRONTEND=noninteractive apt-get update -qq
