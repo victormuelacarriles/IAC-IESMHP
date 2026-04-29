@@ -89,10 +89,10 @@ done
 
 
 # Remove live-specific packages and configurations
-echoamarillo "Eliminando paquetes innecesarios..."
+#echoamarillo "Eliminando paquetes innecesarios..."
 #apt-get update
-apt-get remove -y --purge casper ubiquity ubiquity-frontend-* 
-echoverde "...Eliminados paquetes innecesarios..."  
+#apt-get remove -y --purge casper ubiquity ubiquity-frontend-* 
+#echoverde "...Eliminados paquetes innecesarios..."  
 
 echoamarillo "Averiguando MAC y autorizando equipos de gestión por SSH..."
 MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
