@@ -40,6 +40,9 @@ ping -c1 -W2 github.com &>/dev/null || err "No hay conexión a Internet. Abortan
 log "Asegurando que git está instalado..."
 rm -f /var/lib/man-db/auto-update
 
+#####FALLA AQUí!    Se queda bloqueado y no avanza. 
+#                    PROBAR: rehacer 0a-CreaISO.sh para que abra un terminal sin mas. 
+
 # update-initramfs tarda 2-4 min reconstruyendo el initramfs del kernel.
 # En un live CD no sirve para nada; lo sustituimos por un no-op antes de
 # llamar a apt para que dpkg no lo ejecute al procesar los triggers pendientes.
