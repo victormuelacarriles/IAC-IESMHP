@@ -25,7 +25,7 @@ OUTPUT_ISO="${3:-ubuntu-custom-desktop-uefi.iso}"
 
 WORK_DIR="$(mktemp -d /tmp/iso_build_XXXXXX)"
 ISO_DIR="${WORK_DIR}/iso"
-AUTOINSTALL_DIR="${ISO_DIR}/autoinstall"
+SQUASHFS_DIR="${WORK_DIR}/squashfs"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # COLORES Y LIMPIEZA
@@ -49,7 +49,7 @@ trap cleanup EXIT
 check_deps() {
     step "Verificando dependencias"
     local missing=()
-    for dep in xorriso mtools file openssl sfdisk; do
+    for dep in xorriso mtools file openssl sfdisk squashfs-tools; do
         if command -v "$dep" &>/dev/null; then
             log "  $dep → OK"
         else
@@ -57,7 +57,7 @@ check_deps() {
         fi
     done
     if [[ ${#missing[@]} -gt 0 ]]; then
-        err "Faltan dependencias: ${missing[*]}\n  Instálalas con: sudo apt install util-linux ${missing[*]}"
+        err "Faltan dependencias: ${missing[*]}\n  Instálalas con: sudo apt install ${missing[*]}"
     fi
 }
 
@@ -85,54 +85,45 @@ extract_iso() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. AÑADIR 0b-Github.sh A LA ISO
+# 2. PERSONALIZAR ENTORNO LIVE (SQUASHFS)
 # ─────────────────────────────────────────────────────────────────────────────
-copy_perso_script() {
-    step "Añadiendo 0b-Github.sh a /autoinstall/ en la ISO"
-    mkdir -p "${AUTOINSTALL_DIR}"
-    cp "$PERSO_SCRIPT" "${AUTOINSTALL_DIR}/0b-Github.sh"
-    chmod +x "${AUTOINSTALL_DIR}/0b-Github.sh"
-    log "0b-Github.sh copiado en ${AUTOINSTALL_DIR}/0b-Github.sh"
-}
+customize_squashfs() {
+    step "Personalizando el entorno Live (SquashFS)"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. GENERAR user-data Y meta-data
-#
-#    CAMBIO respecto a la versión anterior:
-#    ► Se elimina la sección "storage" (lvm): la partición la realiza
-#      1-SetupLiveCD.sh, que es lanzado por 0b-Github.sh.
-#    ► Se elimina la sección "identity": la crea 2-SetupSOdesdeLiveCD.sh
-#      en el chroot.
-#    ► Se sustituye "late-commands" por "early-commands": el autoinstall
-#      de Ubuntu solo sirve para arrancar el entorno live y lanzar 0b-Github.sh.
-#      Subiquity nunca llega a particionar ni a instalar el sistema base.
-# ─────────────────────────────────────────────────────────────────────────────
-generate_user_data() {
-    step "Generando user-data — early-command → 0b-Github.sh"
+    log "Desempaquetando SquashFS..."
+    unsquashfs -d "${SQUASHFS_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" || err "Fallo al desempaquetar SquashFS."
 
-    cat > "${AUTOINSTALL_DIR}/user-data" << 'EOF'
-#cloud-config
-autoinstall:
-  version: 1
-  locale: es_ES.UTF-8
-  keyboard:
-    layout: es
-    variant: ""
-  # early-commands se ejecutan en el entorno live ANTES de que Subiquity
-  # toque los discos. 0b-Github.sh clona el repo y lanza 1-SetupLiveCD.sh,
-  # que realiza la instalación completa y reinicia. Subiquity no continúa.
-  early-commands:
-    - bash /cdrom/autoinstall/0b-Github.sh 2>&1 | tee /var/log/0b-Github.log > /dev/tty1
+    log "Copiando 0b-Github.sh al sistema Live"
+    cp "${PERSO_SCRIPT}" "${SQUASHFS_DIR}/0b-Github.sh"
+    chmod +x "${SQUASHFS_DIR}/0b-Github.sh"
+
+    log "Creando entrada de autostart para ejecutar el script en un terminal"
+    # El usuario live en Ubuntu es 'ubuntu', su home se crea desde /etc/skel
+    local autostart_dir="${SQUASHFS_DIR}/etc/skel/.config/autostart"
+    mkdir -p "${autostart_dir}"
+    cat > "${autostart_dir}/iac-iesmhp-setup.desktop" << EOF
+[Desktop Entry]
+Type=Application
+Name=Instalacion IAC-IESMHP
+Comment=Lanza el script de instalacion
+Exec=gnome-terminal -- /bin/bash -c "echo 'Lanzando script de instalación...'; sudo /bin/bash /0b-Github.sh; echo 'Script finalizado. Puede cerrar este terminal.'; exec bash"
+Terminal=false
+X-GNOME-Autostart-enabled=true
 EOF
-    touch "${AUTOINSTALL_DIR}/meta-data"
-    log "user-data (early-command) y meta-data generados"
+    log "Fichero .desktop creado en ${autostart_dir}/iac-iesmhp-setup.desktop"
+
+    log "Reempaquetando SquashFS..."
+    rm "${ISO_DIR}/casper/filesystem.squashfs"
+    mksquashfs "${SQUASHFS_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" -noappend || err "Fallo al reempaquetar SquashFS."
+
+    log "Entorno Live personalizado."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. CONFIGURAR GRUB PARA ARRANQUE AUTOMÁTICO
 # ─────────────────────────────────────────────────────────────────────────────
 configure_grub() {
-    step "Configurando GRUB para arranque automático (Desktop)"
+    step "Configurando GRUB para arranque en modo Live CD"
     local grub_cfg="${ISO_DIR}/boot/grub/grub.cfg"
 
     if [[ ! -f "$grub_cfg" ]]; then
@@ -147,20 +138,19 @@ set timeout=5
 set timeout_style=countdown
 set gfxpayload=text
 
-menuentry "Ubuntu Desktop — Instalación automatizada (IAC-IESMHP)" --id=autoinstall {
-    linux   /casper/vmlinuz \
-                autoinstall \
-                "ds=nocloud;s=/cdrom/autoinstall/" \
-                ---
+menuentry "Instalar Ubuntu Personalizado (IAC-IESMHP)" {
+    linux   /casper/vmlinuz  boot=casper quiet splash ---
     initrd  /casper/initrd
 }
-menuentry "Ubuntu Desktop — Live / Interactivo (Debug)" --id=interactive {
-    linux   /casper/vmlinuz \
-                ---
+menuentry "Probar Ubuntu (Live)" {
+    linux   /casper/vmlinuz boot=casper ---
     initrd  /casper/initrd
+}
+menuentry 'UEFI Firmware Settings' {
+    fwsetup
 }
 GRUBEOF
-    log "GRUB configurado."
+    log "GRUB configurado para arrancar en modo Live."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -266,8 +256,7 @@ main() {
     check_deps
     check_inputs
     extract_iso
-    copy_perso_script
-    generate_user_data
+    customize_squashfs
     configure_grub
     remove_bios_boot
     get_efi_boot_params
