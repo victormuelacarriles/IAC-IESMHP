@@ -91,7 +91,7 @@ done
 # Remove live-specific packages and configurations
 echoamarillo "Eliminando paquetes innecesarios..."
 #apt-get update
-apt-get remove -y --purge casper ubiquity ubiquity-frontend-* live-boot live-boot-initramfs-tools
+apt-get remove -y --purge casper ubiquity ubiquity-frontend-* 
 echoverde "...Eliminados paquetes innecesarios..."  
 
 echoamarillo "Averiguando MAC y autorizando equipos de gestión por SSH..."
