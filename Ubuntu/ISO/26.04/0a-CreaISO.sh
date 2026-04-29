@@ -4,13 +4,14 @@
 #  Genera una ISO de Ubuntu Desktop personalizada con instalación automática UEFI.
 #
 #  Uso:
-#    ./0a-CreaISO.sh <iso_origen> <0b-Github.sh> [iso_salida]
+#    sudo ./0a-CreaISO.sh <iso_origen> <0b-Github.sh> [iso_salida]
 #
 #  ARQUITECTURA:
 #    El autoinstall de Ubuntu solo actúa como disparador de arranque:
 #    early-commands lanza 0b-Github.sh, que clona el repo y ejecuta
 #    1-SetupLiveCD.sh (instalación completa manual desde el entorno live).
 #    Subiquity nunca particiona ni instala nada por su cuenta.
+
 # =============================================================================
 
 set -euo pipefail
@@ -46,10 +47,18 @@ trap cleanup EXIT
 # ─────────────────────────────────────────────────────────────────────────────
 # 0. VERIFICACIONES
 # ─────────────────────────────────────────────────────────────────────────────
+check_root() {
+    step "Verificando permisos de ejecucion"
+    if [[ "$EUID" -ne 0 ]]; then
+        err "Este script debe ejecutarse como root.\n  Uso: sudo $0 ${SOURCE_ISO} ${PERSO_SCRIPT} ${OUTPUT_ISO}"
+    fi
+    log "Ejecutando como root: OK"
+}
+
 check_deps() {
     step "Verificando dependencias"
     local missing=()
-    for dep in xorriso mtools file openssl sfdisk squashfs-tools; do
+    for dep in xorriso mtools file openssl sfdisk unsquashfs; do
         if command -v "$dep" &>/dev/null; then
             log "  $dep → OK"
         else
@@ -57,7 +66,7 @@ check_deps() {
         fi
     done
     if [[ ${#missing[@]} -gt 0 ]]; then
-        err "Faltan dependencias: ${missing[*]}\n  Instálalas con: sudo apt install ${missing[*]}"
+        err "Faltan dependencias: ${missing[*]}\n  Instálalas con: sudo apt install squashfs-tools ${missing[*]}"
     fi
 }
 
@@ -69,7 +78,7 @@ check_inputs() {
         err "La ISO de origen y la de salida son el mismo fichero."
     fi
     log "ISO origen   : ${SOURCE_ISO}"
-    log "0b-Github.sh     : ${PERSO_SCRIPT}"
+    log "0b-Github.sh : ${PERSO_SCRIPT}"
     log "ISO salida   : ${OUTPUT_ISO}"
 }
 
@@ -90,31 +99,212 @@ extract_iso() {
 customize_squashfs() {
     step "Personalizando el entorno Live (SquashFS)"
 
+    # ── Localizar el/los ficheros .squashfs ───────────────────────────────
+    # Ubuntu cambia el nombre según versión:
+    #   <= 23.04  -> casper/filesystem.squashfs
+    #   24.04+    -> casper/ubuntu-desktop.squashfs  (u otro nombre)
+    log "Buscando ficheros .squashfs en la ISO..."
+    local all_squashfs=()
+    mapfile -t all_squashfs < <(find "${ISO_DIR}" -type f -name "*.squashfs" | sort)
+
+    if [[ ${#all_squashfs[@]} -eq 0 ]]; then
+        warn "No se encontro ningun .squashfs. Estructura real de la ISO extraida:"
+        find "${ISO_DIR}" -maxdepth 3 | sort | sed "s|${ISO_DIR}||" | head -60 | sed 's/^/    /'
+        warn "Ficheros grandes (>100 MB):"
+        find "${ISO_DIR}" -size +100M -printf "    %s  %p\n" 2>/dev/null | sort -rn | head -10
+        err "No se encontro ningun .squashfs. Revisa la estructura listada arriba."
+    fi
+
+    local squashfs_path
+    if [[ ${#all_squashfs[@]} -eq 1 ]]; then
+        squashfs_path="${all_squashfs[0]}"
+        log "SquashFS encontrado: ${squashfs_path#"${ISO_DIR}/"}"
+    else
+        info "Se encontraron ${#all_squashfs[@]} ficheros .squashfs:"
+        for f in "${all_squashfs[@]}"; do
+            info "  $(du -sh "$f" | cut -f1)  ->  ${f#"${ISO_DIR}/"}"
+        done
+
+        # Ubuntu 24.04+ usa capas superpuestas (overlayfs):
+        #   minimal.squashfs              → sistema base (~3 GB)
+        #   minimal.standard.squashfs    → paquetes estándar
+        #   minimal.standard.live.squashfs → escritorio GNOME + sesión live  ← aquí está gnome-terminal y autostart
+        #   minimal.*.squashfs           → paquetes de idioma
+        #
+        # Para añadir un autostart de escritorio debemos modificar la capa LIVE,
+        # no la base. Buscamos primero *.live.squashfs (sin enhanced-secureboot).
+        local live_layer
+        live_layer=$(printf "%s\n" "${all_squashfs[@]}" \
+            | grep -v "enhanced-secureboot" \
+            | grep "\.live\.squashfs$" \
+            | head -1)
+
+        if [[ -n "$live_layer" ]]; then
+            squashfs_path="$live_layer"
+            log "Capa live seleccionada: ${squashfs_path#"${ISO_DIR}/"}"
+        else
+            # Fallback: la mayor (Ubuntu < 24.04 con filesystem.squashfs unico)
+            squashfs_path=$(du -s "${all_squashfs[@]}" | sort -rn | head -1 | awk '{print $2}')
+            warn "No se encontro capa live especifica, usando la mayor: ${squashfs_path#"${ISO_DIR}/"}"
+        fi
+    fi
+
     log "Desempaquetando SquashFS..."
-    unsquashfs -d "${SQUASHFS_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" || err "Fallo al desempaquetar SquashFS."
+    unsquashfs -d "${SQUASHFS_DIR}" "${squashfs_path}" || err "Fallo al desempaquetar SquashFS."
 
     log "Copiando 0b-Github.sh al sistema Live"
     cp "${PERSO_SCRIPT}" "${SQUASHFS_DIR}/0b-Github.sh"
     chmod +x "${SQUASHFS_DIR}/0b-Github.sh"
 
-    log "Creando entrada de autostart para ejecutar el script en un terminal"
-    # El usuario live en Ubuntu es 'ubuntu', su home se crea desde /etc/skel
-    local autostart_dir="${SQUASHFS_DIR}/etc/skel/.config/autostart"
-    mkdir -p "${autostart_dir}"
-    cat > "${autostart_dir}/iac-iesmhp-setup.desktop" << EOF
+    # ── Desactivar el instalador predeterminado de Ubuntu ──────────────────
+    # Ubuntu 22.04 y anteriores: ubiquity / installer lanzados desde /etc/xdg/autostart/
+    # Ubuntu 24.04+: ubuntu-desktop-bootstrap es un snap; su .desktop está en
+    #   /snap/ubuntu-desktop-bootstrap/<rev>/meta/gui/ y se activa via xdg-autostart.
+    #   Se neutraliza creando un override en /etc/xdg/autostart/ con Hidden=true.
+    step "Desactivando instalador predeterminado de Ubuntu"
+
+    # Instaladores legacy (ubiquity / subiquity / calamares)
+    local installer_desktops=(
+        "${SQUASHFS_DIR}/etc/xdg/autostart/ubiquity.desktop"
+        "${SQUASHFS_DIR}/etc/xdg/autostart/installer.desktop"
+        "${SQUASHFS_DIR}/etc/xdg/autostart/install-ubuntu.desktop"
+        "${SQUASHFS_DIR}/etc/xdg/autostart/io.calamares.calamares.desktop"
+    )
+    for f in "${installer_desktops[@]}"; do
+        if [[ -f "$f" ]]; then
+            if grep -q "X-GNOME-Autostart-enabled" "$f"; then
+                sed -i 's/^X-GNOME-Autostart-enabled=.*/X-GNOME-Autostart-enabled=false/' "$f"
+            else
+                echo "X-GNOME-Autostart-enabled=false" >> "$f"
+            fi
+            log "  Instalador legacy desactivado: $(basename "$f")"
+        fi
+    done
+
+    # ubuntu-desktop-bootstrap (snap, Ubuntu 24.04+)
+    # Su .desktop real está dentro del snap (solo lectura); lo anulamos con un
+    # override en /etc/xdg/autostart/ que GNOME session lee con prioridad.
+    mkdir -p "${SQUASHFS_DIR}/etc/xdg/autostart"
+    cat > "${SQUASHFS_DIR}/etc/xdg/autostart/ubuntu-desktop-bootstrap.desktop" << 'BSEOF'
+[Desktop Entry]
+Type=Application
+Name=Ubuntu Desktop Bootstrap
+X-GNOME-Autostart-enabled=false
+Hidden=true
+BSEOF
+    log "  ubuntu-desktop-bootstrap desactivado vía override en /etc/xdg/autostart/"
+
+    # ── Deshabilitar snapd completamente ──────────────────────────────────
+    # En Ubuntu 26.04 live, snapd tarda 2-3 minutos en el seeding (14+ snaps).
+    # Para nuestro caso de uso (solo ejecutar el script de instalación), no
+    # necesitamos ningún snap. Al deshabilitar snapd:
+    #   - El arranque pasa de ~3 min a ~10 s
+    #   - ubuntu-desktop-bootstrap (instalador) queda bloqueado definitivamente
+    #     porque es un snap gestionado por snapd
+    step "Desactivando snapd para acelerar el arranque"
+
+    mkdir -p "${SQUASHFS_DIR}/etc/systemd/system"
+    ln -sf /dev/null "${SQUASHFS_DIR}/etc/systemd/system/snapd.service"
+    ln -sf /dev/null "${SQUASHFS_DIR}/etc/systemd/system/snapd.socket"
+    ln -sf /dev/null "${SQUASHFS_DIR}/etc/systemd/system/snapd.seeded.service"
+    log "  snapd.service, snapd.socket y snapd.seeded.service enmascarados"
+
+    # ── Script wrapper: se copia al sistema live y lo llama el .desktop ────
+    # Usar un script separado evita los problemas de comillas anidadas en
+    # el campo Exec= del .desktop.
+    log "Creando script wrapper /usr/local/bin/iac-iesmhp-run.sh en el squashfs"
+    mkdir -p "${SQUASHFS_DIR}/usr/local/bin"
+    cat > "${SQUASHFS_DIR}/usr/local/bin/iac-iesmhp-run.sh" << 'WRAPEOF'
+#!/usr/bin/env bash
+# Lanzado por el autostart de GNOME al arrancar el Live CD.
+# Ejecuta 0b-Github.sh mostrando toda la salida en el terminal.
+set -uo pipefail
+
+LOG_FILE="/tmp/iac-install.log"
+
+echo ""
+echo "╔══════════════════════════════════════════╗"
+echo "║   IAC-IESMHP  —  Script de instalación   ║"
+echo "╚══════════════════════════════════════════╝"
+echo ""
+echo "  Log: ${LOG_FILE}"
+echo "  Script: /0b-Github.sh"
+echo "  Inicio: $(date)"
+echo ""
+echo "──────────────────────────────────────────"
+
+# Cerrar el instalador estándar si todavía está activo
+sudo systemctl stop snap.ubuntu-desktop-bootstrap.subiquity-server.service 2>/dev/null || true
+pkill -f "ubuntu-desktop-bootstrap" 2>/dev/null || true
+
+sudo /bin/bash /0b-Github.sh 2>&1 | tee "${LOG_FILE}"
+EXIT_CODE=${PIPESTATUS[0]}
+
+echo ""
+echo "──────────────────────────────────────────"
+if [[ "${EXIT_CODE}" -eq 0 ]]; then
+    echo "✓  Script finalizado correctamente ($(date))."
+else
+    echo "✗  El script terminó con error — código de salida: ${EXIT_CODE}"
+    echo "   Log completo en: ${LOG_FILE}"
+fi
+echo ""
+echo "  Este terminal permanece abierto. Escribe 'exit' para cerrarlo."
+exec bash
+WRAPEOF
+    chmod +x "${SQUASHFS_DIR}/usr/local/bin/iac-iesmhp-run.sh"
+    log "Script wrapper creado."
+
+    # ── Script de lanzamiento de terminal (auto-detección) ─────────────────
+    # Necesario porque kgx (GNOME Console) puede no estar en todas las ISOs.
+    log "Creando script de lanzamiento de terminal /usr/local/bin/iac-iesmhp-launch.sh"
+    cat > "${SQUASHFS_DIR}/usr/local/bin/iac-iesmhp-launch.sh" << 'LAUNCHEOF'
+#!/usr/bin/env bash
+SCRIPT=/usr/local/bin/iac-iesmhp-run.sh
+if command -v gnome-terminal >/dev/null 2>&1; then
+    exec gnome-terminal -- "$SCRIPT"
+elif command -v kgx >/dev/null 2>&1; then
+    exec kgx -- "$SCRIPT"
+elif command -v xterm >/dev/null 2>&1; then
+    exec xterm -e "$SCRIPT"
+elif command -v x-terminal-emulator >/dev/null 2>&1; then
+    exec x-terminal-emulator -e "$SCRIPT"
+fi
+LAUNCHEOF
+    chmod +x "${SQUASHFS_DIR}/usr/local/bin/iac-iesmhp-launch.sh"
+    log "Script de lanzamiento creado."
+
+    # ── Autostart .desktop ─────────────────────────────────────────────────
+    # Ubuntu live: el home del usuario 'ubuntu' puede preexistir en el squashfs
+    # o crearse desde /etc/skel al primer login. Se escribe en ambos sitios
+    # para cubrir los dos casos.
+    #
+    # NOTA: Ubuntu 23.10+ reemplaza gnome-terminal por GNOME Console (kgx).
+    # Se usa 'kgx' como terminal. Si la ISO es anterior a 23.10 y no tiene kgx,
+    # sustituye 'kgx' por 'gnome-terminal --maximize' en el campo Exec= siguiente.
+    log "Creando entrada de autostart en squashfs"
+    local autostart_locations=(
+        "${SQUASHFS_DIR}/etc/skel/.config/autostart"
+        "${SQUASHFS_DIR}/home/ubuntu/.config/autostart"
+    )
+    for autostart_dir in "${autostart_locations[@]}"; do
+        mkdir -p "${autostart_dir}"
+        cat > "${autostart_dir}/iac-iesmhp-setup.desktop" << 'DESKTOPEOF'
 [Desktop Entry]
 Type=Application
 Name=Instalacion IAC-IESMHP
-Comment=Lanza el script de instalacion
-Exec=gnome-terminal -- /bin/bash -c "echo 'Lanzando script de instalación...'; sudo /bin/bash /0b-Github.sh; echo 'Script finalizado. Puede cerrar este terminal.'; exec bash"
+Comment=Lanza el script de configuracion con salida visible en terminal
+Exec=/usr/local/bin/iac-iesmhp-launch.sh
 Terminal=false
 X-GNOME-Autostart-enabled=true
-EOF
-    log "Fichero .desktop creado en ${autostart_dir}/iac-iesmhp-setup.desktop"
+X-GNOME-Autostart-Delay=5
+DESKTOPEOF
+        log "  .desktop escrito en: ${autostart_dir}"
+    done
 
     log "Reempaquetando SquashFS..."
-    rm "${ISO_DIR}/casper/filesystem.squashfs"
-    mksquashfs "${SQUASHFS_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" -noappend || err "Fallo al reempaquetar SquashFS."
+    rm "${squashfs_path}"
+    mksquashfs "${SQUASHFS_DIR}" "${squashfs_path}" -noappend || err "Fallo al reempaquetar SquashFS."
 
     log "Entorno Live personalizado."
 }
@@ -132,6 +322,9 @@ configure_grub() {
     fi
 
     cp "$grub_cfg" "${grub_cfg}.orig"
+    # locale=es_ES.UTF-8  → casper carga automaticamente las capas *.es.squashfs
+    # keyboard-configuration/layoutcode=es → teclado español desde el arranque
+    # console-setup/layoutcode=es          → idem para la consola de texto
     cat > "$grub_cfg" << 'GRUBEOF'
 set default=0
 set timeout=5
@@ -139,18 +332,18 @@ set timeout_style=countdown
 set gfxpayload=text
 
 menuentry "Instalar Ubuntu Personalizado (IAC-IESMHP)" {
-    linux   /casper/vmlinuz  boot=casper quiet splash ---
+    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es ---
     initrd  /casper/initrd
 }
-menuentry "Probar Ubuntu (Live)" {
-    linux   /casper/vmlinuz boot=casper ---
+menuentry "Probar Ubuntu en Espanol (Live)" {
+    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es ---
     initrd  /casper/initrd
 }
 menuentry 'UEFI Firmware Settings' {
     fwsetup
 }
 GRUBEOF
-    log "GRUB configurado para arrancar en modo Live."
+    log "GRUB configurado: locale=es_ES.UTF-8, teclado español."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -158,17 +351,17 @@ GRUBEOF
 # ─────────────────────────────────────────────────────────────────────────────
 remove_bios_boot() {
     step "Eliminando componentes BIOS/Legacy"
-    
+
     if [[ -d "${ISO_DIR}/isolinux" ]]; then
         rm -rf "${ISO_DIR}/isolinux"
         log "  isolinux/ eliminado"
     fi
-    
+
     if [[ -d "${ISO_DIR}/boot/grub/i386-pc" ]]; then
         rm -rf "${ISO_DIR}/boot/grub/i386-pc"
         log "  boot/grub/i386-pc/ eliminado"
     fi
-    
+
     if [[ -f "${ISO_DIR}/boot/grub/boot_hybrid.img" ]]; then
         rm -f "${ISO_DIR}/boot/grub/boot_hybrid.img"
         log "  boot_hybrid.img eliminado"
@@ -194,7 +387,7 @@ get_efi_boot_params() {
     else
         local appended_file
         appended_file=$(echo "$EFI_PARAMS" | grep -oP '(?<=-append_partition 2 [a-f0-9-]+ )\S+' | head -1 || true)
-        
+
         if [[ -n "$appended_file" ]] && xorriso -osirrox on -indev "$SOURCE_ISO" -extract "$appended_file" "${WORK_DIR}/efi.img" 2>/dev/null; then
             EFI_IMG_FILE="${WORK_DIR}/efi.img"
             log "Partición adjunta EFI extraída exitosamente con xorriso."
@@ -202,12 +395,12 @@ get_efi_boot_params() {
             warn "xorriso falló. Extrayendo sectores a bajo nivel con sfdisk+dd..."
             local part_info
             part_info=$(sfdisk -d "$SOURCE_ISO" 2>/dev/null | grep -i -E 'type=ef|type=C12A7328' | head -1)
-            
+
             if [[ -n "$part_info" ]]; then
                 local efi_start efi_size
                 efi_start=$(echo "$part_info" | grep -oP 'start=\s*\K[0-9]+')
                 efi_size=$(echo "$part_info" | grep -oP 'size=\s*\K[0-9]+')
-                
+
                 if [[ -n "$efi_start" ]] && [[ -n "$efi_size" ]]; then
                     dd if="$SOURCE_ISO" of="${WORK_DIR}/efi.img" bs=512 skip="$efi_start" count="$efi_size" 2>/dev/null
                     EFI_IMG_FILE="${WORK_DIR}/efi.img"
@@ -253,6 +446,7 @@ repack_iso() {
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
+    check_root
     check_deps
     check_inputs
     extract_iso
