@@ -12,10 +12,10 @@ GITREPO="https://github.com/victormuelacarriles/${REPO}.git"
 DESTDIR="/opt/${REPO}"
 SCRIPT_INSTALL="${DESTDIR}/Ubuntu/ISO/26.04/1-SetupLiveCD.sh"
 
-export DISPLAY=:0
-export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/999/bus
-zenity --info --text="Configurando..." --timeout=3 || true
-
+#export DISPLAY=:0
+#export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/999/bus
+#zenity --info --text="Configurando..." --timeout=3 || true
+# Authorization required, but no authorization protocol specified
 
 # ─────────────── Colores ───────────────
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'

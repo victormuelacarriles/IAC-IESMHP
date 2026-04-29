@@ -189,7 +189,7 @@ mkdir -p /tmp/squashfs
 mount -o loop "$SQUASHFS" /tmp/squashfs
 
 echoamarillo "Copiando sistema de archivos a /mnt ..."
-rsync -av --exclude=/etc/fstab --exclude=/etc/machine-id /tmp/squashfs/ /mnt/
+rsync -av --exclude=/etc/fstab --exclude=/etc/machine-id /tmp/squashfs/ /mnt/  
 echoverde "Sistema de archivos copiado desde $SQUASHFS"
 
 umount /tmp/squashfs

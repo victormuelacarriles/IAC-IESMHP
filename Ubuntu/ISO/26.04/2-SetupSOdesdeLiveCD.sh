@@ -3,7 +3,7 @@
 set -e
 VERSIONSCRIPT="22.1-20260126-09:55"       #Versión del script
 REPO="IAC-IESMHP"
-DISTRO="Mint"
+DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 RAIZSCRIPTS="/opt/$REPO"
 RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
@@ -91,7 +91,7 @@ done
 # Remove live-specific packages and configurations
 echoamarillo "Eliminando paquetes innecesarios..."
 #apt-get update
-apt-get remove -y --purge casper ubiquity ubiquity-frontend-* live-boot live-boot-initramfs-tools 
+apt-get remove -y --purge casper ubiquity ubiquity-frontend-* live-boot live-boot-initramfs-tools
 echoverde "...Eliminados paquetes innecesarios..."  
 
 echoamarillo "Averiguando MAC y autorizando equipos de gestión por SSH..."
@@ -99,11 +99,11 @@ MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
 mkdir -p /root/.ssh
 LOCAL_MACS="$RAIZSCRIPTS/macs.csv"
 LOCAL_AUTORIZADOS="$RAIZSCRIPTS/Autorizados.txt"
-cp $LOCAL_AUTORIZADOS /root/.ssh/authorized_keys
+cp "$LOCAL_AUTORIZADOS" /root/.ssh/authorized_keys
 echoverde "...Leida Mac y autorizados equipos de gestión por SSH"
 
 # Compruebo si la MAC está en el repositorio: si no está, se queda el nombre del equipo por defecto "mint"
-EQUIPOENMACS="mint"
+EQUIPOENMACS=$DISTRO
 if [ ! -f $LOCAL_MACS ]; then
     echorojo "No se ha encontrado el archivo de MACs: $LOCAL_MACS"
     echo "Por favor, compruebe la conexión a Internet y que el archivo está disponible en el repositorio."
@@ -154,20 +154,8 @@ echo && echo && echoverde "...Configurado nombre de host y usuarios"
 # Install and configure bootloader
 echoverde "Instalando y configurando el gestor de arranque..."
 ################################################################apt-get install -y grub-efi-amd64
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=MINT
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=$DISTRO --recheck --no-floppy
 
-#17/06/2025:  al actualizar linux mint 22.1, se quedaba la pantalla negra al arrancar.
-# Por eso añadí la opción "nomodeset" al grub, para que arranque sin problemas gráficos.
-    # nomodeset: Esta opción del kernel desactiva el sistema de gestión de modo de vídeo durante el arranque.
-    # Es útil cuando hay problemas gráficos al iniciar el sistema, como pantallas negras o congeladas.
-    # Al usar nomodeset, el kernel utiliza el modo BIOS básico en lugar de controladores de gráficos modernos,
-    # lo que puede permitir el arranque en sistemas con tarjetas gráficas problemáticas o drivers incompatibles.
-    # Comúnmente utilizada como solución temporal hasta instalar los controladores gráficos adecuados.
-    # IMPORTANTE: Una vez instalados los controladores gráficos correctos, se recomienda quitar esta opción 
-    # editando /etc/default/grub y eliminando "nomodeset" del parámetro GRUB_CMDLINE_LINUX_DEFAULT, 
-    # seguido de ejecutar 'sudo update-grub' para aplicar los cambios.
-#con full-upgrade parece que funciona sin problemas, así que quito nomodeset, pero lo dejo comentado
-#sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash nomodeset"/' /etc/default/grub
 sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash "/' /etc/default/grub
 grep -q "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub || echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"' >> /etc/default/grub
 
