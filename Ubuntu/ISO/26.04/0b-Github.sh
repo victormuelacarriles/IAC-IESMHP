@@ -39,35 +39,21 @@ ping -c1 -W2 github.com &>/dev/null || err "No hay conexión a Internet. Abortan
 # ─────────────── git ───────────────────
 log "Asegurando que git está instalado..."
 rm -f /var/lib/man-db/auto-update
+
+# update-initramfs tarda 2-4 min reconstruyendo el initramfs del kernel.
+# En un live CD no sirve para nada; lo sustituimos por un no-op antes de
+# llamar a apt para que dpkg no lo ejecute al procesar los triggers pendientes.
+mkdir -p /usr/local/sbin
+ln -sf /bin/true /usr/local/sbin/update-initramfs
+export PATH="/usr/local/sbin:$PATH"
+log "update-initramfs enmascarado (no-op en entorno live)."
+
 DEBIAN_FRONTEND=noninteractive apt-get update -qq
-# --no-triggers: omite TODOS los triggers dpkg (man-db, ldconfig, systemd…)
 # --force-unsafe-io: evita fsync sobre overlayfs (más rápido y sin bloqueos)
-# Los triggers se procesan en background; git queda funcional de inmediato.
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    -o "Dpkg::Options::=--no-triggers" \
     -o "Dpkg::Options::=--force-unsafe-io" \
     --no-install-recommends git
-dpkg --triggers-only -a --force-unsafe-io 2>/dev/null &
 log "git instalado."
-
-#FAlla: podemos ver con esto 
-# echo "1. Ver qué procesos están corriendo en ese momento:"
-# ps axf | grep -E "(apt|dpkg|git|iac|bash)" --color=never
-# echo "2. Ver en qué función de kernel está bloqueado dpkg (el más útil):"
-# cat /proc/$(pgrep -f dpkg | head -1)/wchan 2>/dev/null
-
-# echo "3. Comprobar si hay locks de apt/dpkg activos:"
-# ls -la /var/lib/dpkg/lock* /var/lib/apt/lists/lock* 2>/dev/null
-# fuser /var/lib/dpkg/lock /var/lib/apt/lists/lock 2>/dev/null
-
-# echo "4. Ver si systemd está haciendo algo:"
-# systemctl status --no-pager | head -20
-# journalctl -n 30 --no-pager
-
-# echo "5. Ver los triggers dpkg pendientes:"
-# ls /var/lib/dpkg/triggers/
-
-
 
 
 # ─────────────── Clonar repo ───────────
