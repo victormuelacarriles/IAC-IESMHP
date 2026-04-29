@@ -178,27 +178,50 @@ lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
 echoverde "Sistemas de ficheros montados"
 
 # ─────────────── Copiar squashfs ───────
-# Ubuntu Desktop 26.04 usa casper/filesystem.squashfs (igual que versiones anteriores)
-SQUASHFS=$(find /cdrom -name "filesystem.squashfs" 2>/dev/null | head -1)
-if [[ -z "$SQUASHFS" ]]; then
-    SQUASHFS=$(find /cdrom -name "*.squashfs" ! -name "minimal*" 2>/dev/null | head -1)
-fi
-if [[ -z "$SQUASHFS" ]]; then
-    echorojo "No se encontró filesystem.squashfs en /cdrom. Squashfs disponibles:"
-    find /cdrom -name "*.squashfs" 2>/dev/null || true
-    sleep 10 && exit 1
-fi
-echoverde "Squashfs seleccionado: $SQUASHFS"
+# Ubuntu <24.04 usa un único filesystem.squashfs.
+# Ubuntu 26.04+ usa capas minimal.*.squashfs que se combinan con overlayfs.
+SQ_MOUNTS=()
+SRC=""
 
-echoamarillo "Montando squashfs: $SQUASHFS ..."
-mkdir -p /tmp/squashfs
-mount -o loop "$SQUASHFS" /tmp/squashfs
+SQUASHFS_SINGLE=$(find /cdrom -name "filesystem.squashfs" 2>/dev/null | head -1)
+if [[ -n "$SQUASHFS_SINGLE" ]]; then
+    echoamarillo "Montando squashfs único: $SQUASHFS_SINGLE ..."
+    mkdir -p /tmp/sq0
+    mount -o loop "$SQUASHFS_SINGLE" /tmp/sq0
+    SQ_MOUNTS+=("/tmp/sq0")
+    SRC=/tmp/sq0
+else
+    echoamarillo "Ubuntu 26.04+: combinando capas squashfs con overlayfs..."
+    LOWER=""
+    i=0
+    # Las capas se aplican de menos a más específica; overlayfs quiere la más específica primero (izquierda)
+    for layer in minimal.squashfs minimal.standard.squashfs minimal.standard.live.squashfs; do
+        f="/cdrom/casper/$layer"
+        [[ -f "$f" ]] || continue
+        mnt="/tmp/sq$i"; mkdir -p "$mnt"
+        mount -o loop,ro "$f" "$mnt"
+        SQ_MOUNTS+=("$mnt")
+        LOWER="${mnt}${LOWER:+:$LOWER}"   # prepend → la más nueva queda a la izquierda (mayor prioridad)
+        echoverde "  + capa $i: $layer"
+        (( i++ )) || true
+    done
+    if [[ ${#SQ_MOUNTS[@]} -eq 0 ]]; then
+        echorojo "No se encontró ningún squashfs en /cdrom/casper. Disponibles:"
+        find /cdrom -name "*.squashfs" 2>/dev/null || true
+        sleep 10 && exit 1
+    fi
+    mkdir -p /tmp/merged
+    mount -t overlay overlay -o lowerdir="$LOWER" /tmp/merged
+    SRC=/tmp/merged
+fi
 
 echoamarillo "Copiando sistema de archivos a /mnt ..."
-rsync -av --exclude=/etc/fstab --exclude=/etc/machine-id /tmp/squashfs/ /mnt/  
-echoverde "Sistema de archivos copiado desde $SQUASHFS"
+rsync -av --exclude=/etc/fstab --exclude=/etc/machine-id "$SRC/" /mnt/
+echoverde "Sistema de archivos copiado desde $SRC"
 
-umount /tmp/squashfs
+# Desmontar todo
+[[ "$SRC" == "/tmp/merged" ]] && umount /tmp/merged
+for mnt in "${SQ_MOUNTS[@]}"; do umount "$mnt"; done
 
 # ─────────────── Preparar chroot ───────
 # Solo los filesystems virtuales del kernel; /bin y /lib vienen del squashfs instalado
