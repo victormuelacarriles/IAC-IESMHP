@@ -205,3 +205,5 @@ else
 fi
 echo " Log: $LOGFILE" | tee -a "$LOGFILE"
 echo "================================================================" | tee -a "$LOGFILE"
+#pulsar una tecla para continuar
+read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
