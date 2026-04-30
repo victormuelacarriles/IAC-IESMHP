@@ -235,6 +235,23 @@ ln -sf /etc/machine-id /var/lib/dbus/machine-id
 ok "machine-id generado: $(cat /etc/machine-id)"
 
 # ─────────────────────────────────────────────────────────────────────────────
+paso "Plymouth: imágenes corporativas IES"
+# ─────────────────────────────────────────────────────────────────────────────
+# Las imágenes se copiaron al squashfs del LiveCD en /usr/local/share/iac-iesmhp/plymouth/
+# por 0a-CreaISO.sh. Aquí las instalamos en el sistema definitivo antes de
+# generar el initramfs, para que queden embebidas en él.
+PLYMOUTH_SRC="/usr/local/share/iac-iesmhp/plymouth"
+PLYMOUTH_DST="/usr/share/plymouth/themes/spinner"
+if [ -d "$PLYMOUTH_SRC" ]; then
+    mkdir -p "$PLYMOUTH_DST"
+    cp "${PLYMOUTH_SRC}/watermark.png"    "${PLYMOUTH_DST}/watermark.png"
+    cp "${PLYMOUTH_SRC}/bgrt-fallback.png" "${PLYMOUTH_DST}/bgrt-fallback.png"
+    ok "Imágenes Plymouth instaladas en ${PLYMOUTH_DST}"
+else
+    info "No se encontró ${PLYMOUTH_SRC} — se usarán las imágenes Plymouth originales"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 paso "Eliminar hooks de casper y generar initramfs"
 # ─────────────────────────────────────────────────────────────────────────────
 # casper tiene hooks en /usr/share/initramfs-tools/hooks/ diseñados para Live CD.

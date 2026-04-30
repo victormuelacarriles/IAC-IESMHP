@@ -27,20 +27,20 @@ NAME      SIZE TYPE
 loop0     3,2G loop
 loop1   565,3M loop
 loop2   785,2M loop
-loop3       4K loop
-loop4    66,8M loop
+loop3    66,8M loop
+loop4       4K loop
 loop5    19,6M loop
 loop6   273,7M loop
-loop7    16,5M loop
-loop8    15,7M loop
-loop9   606,1M loop
+loop7   606,1M loop
+loop8    91,7M loop
+loop9    16,5M loop
 loop10    395M loop
-loop11  227,6M loop
-loop12   91,7M loop
-loop13   18,8M loop
-loop14   49,3M loop
-loop15    580K loop
-loop16  115,3M loop
+loop11   18,8M loop
+loop12   15,7M loop
+loop13   49,3M loop
+loop14    580K loop
+loop15  115,3M loop
+loop16  227,6M loop
 sda      1000G disk
 sr0       6,1G rom
 nvme0n1   512G disk
@@ -76,10 +76,10 @@ Número  Inicio  Fin     Tamaño  Sistema de archivos  Nombre   Banderas
 [33mFormateando (EFI=/dev/nvme0n1p1, SWAP=/dev/nvme0n1p2, ROOT=/dev/nvme0n1p3, HOME=/dev/sda1)...[0m
 mkfs.fat 4.2 (2021-01-31)
 Configurando espacio de intercambio versión 1, tamaño = 8 GiB (8589930496 bytes)
-sin etiqueta, UUID=fd8ac579-9335-4879-97bd-b2d5677b38ab
+sin etiqueta, UUID=a5999a16-8450-47c7-a1a8-f35d6056cd71
 mke2fs 1.47.2 (1-Jan-2025)
 Se está creando un sistema de ficheros con 131988992 bloques de 4k y 32997376 nodos-i
-UUID del sistema de ficheros: be75eee3-345b-4a77-85e3-9985fcf437c0
+UUID del sistema de ficheros: b1efbce2-bee9-4e04-b238-f91b1f19cfdb
 Respaldos del superbloque guardados en los bloques: 
 	32768, 98304, 163840, 229376, 294912, 819200, 884736, 1605632, 2654208, 
 	4096000, 7962624, 11239424, 20480000, 23887872, 71663616, 78675968, 
@@ -92,7 +92,7 @@ Escribiendo superbloques y la información contable del sistema de archivos:    
 
 mke2fs 1.47.2 (1-Jan-2025)
 Se está creando un sistema de ficheros con 262143488 bloques de 4k y 65536000 nodos-i
-UUID del sistema de ficheros: 0645a4c5-54b8-4682-90a4-e224697b9d0c
+UUID del sistema de ficheros: f853bb15-6969-40c6-8128-b595cb75ca85
 Respaldos del superbloque guardados en los bloques: 
 	32768, 98304, 163840, 229376, 294912, 819200, 884736, 1605632, 2654208, 
 	4096000, 7962624, 11239424, 20480000, 23887872, 71663616, 78675968, 
@@ -103,42 +103,42 @@ Escribiendo las tablas de nodos-i:    0/8000         hecho
 Creando el fichero de transacciones (262144 bloques): hecho
 Escribiendo superbloques y la información contable del sistema de archivos:    0/8000         hecho
 
-/dev/nvme0n1p1: UUID="FAC6-1531" BLOCK_SIZE="512" TYPE="vfat" PARTLABEL="ESP" PARTUUID="08eb8198-d831-4334-99c8-94a37378bfbc"
-/dev/nvme0n1p2: UUID="fd8ac579-9335-4879-97bd-b2d5677b38ab" TYPE="swap" PARTLABEL="primary" PARTUUID="f80a7dd2-fb8b-4ceb-81bb-f6d7a3b96efe"
-/dev/nvme0n1p3: UUID="be75eee3-345b-4a77-85e3-9985fcf437c0" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="e7a574f9-dc16-4db4-a7f9-b34607865962"
-/dev/sda1: UUID="0645a4c5-54b8-4682-90a4-e224697b9d0c" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="205a8ead-67ec-434a-86d4-5660c8615b6c"
+/dev/nvme0n1p1: UUID="731D-2BDD" BLOCK_SIZE="512" TYPE="vfat" PARTLABEL="ESP" PARTUUID="70c1f135-00c5-4841-90a6-c340819d7725"
+/dev/nvme0n1p2: UUID="a5999a16-8450-47c7-a1a8-f35d6056cd71" TYPE="swap" PARTLABEL="primary" PARTUUID="3e7b2daf-ea95-43ef-a5d9-1da21f3f0315"
+/dev/nvme0n1p3: UUID="b1efbce2-bee9-4e04-b238-f91b1f19cfdb" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="39c50d5e-1ed7-40fc-8c90-d891f2ff6503"
+/dev/sda1: UUID="f853bb15-6969-40c6-8128-b595cb75ca85" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="5acf5d3b-2349-42aa-9808-56e33051f9c1"
 [33m--- UUIDs asignados ---[0m
-/dev/nvme0n1p1: UUID="FAC6-1531" BLOCK_SIZE="512" TYPE="vfat" PARTLABEL="ESP" PARTUUID="08eb8198-d831-4334-99c8-94a37378bfbc"
-/dev/nvme0n1p2: UUID="fd8ac579-9335-4879-97bd-b2d5677b38ab" TYPE="swap" PARTLABEL="primary" PARTUUID="f80a7dd2-fb8b-4ceb-81bb-f6d7a3b96efe"
-/dev/nvme0n1p3: UUID="be75eee3-345b-4a77-85e3-9985fcf437c0" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="e7a574f9-dc16-4db4-a7f9-b34607865962"
-/dev/sda1: UUID="0645a4c5-54b8-4682-90a4-e224697b9d0c" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="205a8ead-67ec-434a-86d4-5660c8615b6c"
+/dev/nvme0n1p1: UUID="731D-2BDD" BLOCK_SIZE="512" TYPE="vfat" PARTLABEL="ESP" PARTUUID="70c1f135-00c5-4841-90a6-c340819d7725"
+/dev/nvme0n1p2: UUID="a5999a16-8450-47c7-a1a8-f35d6056cd71" TYPE="swap" PARTLABEL="primary" PARTUUID="3e7b2daf-ea95-43ef-a5d9-1da21f3f0315"
+/dev/nvme0n1p3: UUID="b1efbce2-bee9-4e04-b238-f91b1f19cfdb" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="39c50d5e-1ed7-40fc-8c90-d891f2ff6503"
+/dev/sda1: UUID="f853bb15-6969-40c6-8128-b595cb75ca85" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="5acf5d3b-2349-42aa-9808-56e33051f9c1"
 [32mParticiones formateadas correctamente[0m
 [33mMontando sistemas de ficheros...[0m
 NAME          SIZE TYPE MOUNTPOINT                          UUID
 loop0         3,2G loop /rofs                               
 loop1       565,3M loop                                     
 loop2       785,2M loop                                     
-loop3           4K loop /snap/bare/5                        
-loop4        66,8M loop /snap/core24/1587                   
+loop3        66,8M loop /snap/core24/1587                   
+loop4           4K loop /snap/bare/5                        
 loop5        19,6M loop /snap/desktop-security-center/150   
 loop6       273,7M loop /snap/firefox/8107                  
-loop7        16,5M loop /snap/firmware-updater/226          
-loop8        15,7M loop /snap/snap-store/1367               
-loop9       606,1M loop /snap/gnome-46-2404/153             
+loop7       606,1M loop /snap/gnome-46-2404/153             
+loop8        91,7M loop /snap/gtk-common-themes/1535        
+loop9        16,5M loop /snap/firmware-updater/226          
 loop10        395M loop /snap/mesa-2404/1165                
-loop11      227,6M loop /snap/thunderbird/1057              
-loop12       91,7M loop /snap/gtk-common-themes/1535        
-loop13       18,8M loop /snap/prompting-client/204          
-loop14       49,3M loop /snap/snapd/26865                   
-loop15        580K loop /snap/snapd-desktop-integration/361 
-loop16      115,3M loop /snap/ubuntu-desktop-bootstrap/589  
+loop11       18,8M loop /snap/prompting-client/204          
+loop12       15,7M loop /snap/snap-store/1367               
+loop13       49,3M loop /snap/snapd/26865                   
+loop14        580K loop /snap/snapd-desktop-integration/361 
+loop15      115,3M loop /snap/ubuntu-desktop-bootstrap/589  
+loop16      227,6M loop /snap/thunderbird/1057              
 sda          1000G disk                                     
-└─sda1       1000G part /mnt/home                           0645a4c5-54b8-4682-90a4-e224697b9d0c
-sr0           6,1G rom  /cdrom                              2026-04-30-08-14-22-00
+└─sda1       1000G part /mnt/home                           f853bb15-6969-40c6-8128-b595cb75ca85
+sr0           6,1G rom  /cdrom                              2026-04-30-13-18-57-00
 nvme0n1       512G disk                                     
-├─nvme0n1p1   512M part /mnt/boot/efi                       FAC6-1531
-├─nvme0n1p2     8G part [SWAP]                              fd8ac579-9335-4879-97bd-b2d5677b38ab
-└─nvme0n1p3 503,5G part /mnt                                be75eee3-345b-4a77-85e3-9985fcf437c0
+├─nvme0n1p1   512M part /mnt/boot/efi                       731D-2BDD
+├─nvme0n1p2     8G part [SWAP]                              a5999a16-8450-47c7-a1a8-f35d6056cd71
+└─nvme0n1p3 503,5G part /mnt                                b1efbce2-bee9-4e04-b238-f91b1f19cfdb
 [33m--- Espacio disponible en puntos de montaje ---[0m
 S.ficheros     Tamaño Usados  Disp Uso% Montado en
 /dev/nvme0n1p3   495G   2,1M  470G   1% /mnt
