@@ -237,9 +237,24 @@ echo "────────────────────────�
 sudo systemctl stop snap.ubuntu-desktop-bootstrap.subiquity-server.service 2>/dev/null || true
 pkill -f "ubuntu-desktop-bootstrap" 2>/dev/null || true
 
-echo "Actualizamos repositorios e instalamos git en el entorno live... "
+
+
+echo "Actualizamos repositorios..."
 sudo apt-get update -qq
+
+echo "Instalamos git en el entorno live... "
 sudo DEBIAN_FRONTEND=noninteractive apt-get install git -y -qq
+
+echo "Instalamos ssh en el entorno live... "
+sudo DEBIAN_FRONTEND=noninteractive apt-get install openssh-server -y -qq
+
+IP=$(hostname -I | awk '{print $1}')
+if [[ -n "$IP" ]]; then
+    echo "SSH activo. Puedes conectarte a este entorno live con:"
+    echo "  ssh ubuntu@${IP}"
+else
+    echo "No se pudo detectar la IP. SSH puede no estar accesible."
+fi
 
 echo "Lanzamos el script github de instalación (0b-Github.sh)..."
 sudo /bin/bash /0b-Github.sh 2>&1 | tee "${LOG_FILE}"

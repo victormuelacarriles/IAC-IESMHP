@@ -193,7 +193,7 @@ if systemctl is-system-running &>/dev/null 2>&1; then
         _avs "SSH: no activo"
     fi
 fi
-
+IP=$(hostname -I | awk '{print $1}')
 # ─────────────────────────────────────────────────────────────────────────────
 echo | tee -a "$LOGFILE"
 echo "================================================================" | tee -a "$LOGFILE"
@@ -203,7 +203,7 @@ if [ "$ERRORES" -eq 0 ]; then
 else
     echo -e "\033[31m $ERRORES problema(s) detectado(s) que pueden impedir el arranque\033[0m" | tee -a "$LOGFILE"
 fi
-echo " Log: $LOGFILE" | tee -a "$LOGFILE"
+echo " ssh ubuntu@${IP}   Log: $LOGFILE      " | tee -a "$LOGFILE"
 echo "================================================================" | tee -a "$LOGFILE"
 #pulsar una tecla para continuar
 read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
