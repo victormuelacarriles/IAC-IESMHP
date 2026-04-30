@@ -200,6 +200,9 @@ echo && echo && echo "..Generada  machine-id"
 echoverde "Eliminando casper (paquete live que bloquea la generación de initramfs)..."
 # casper tiene hooks de initramfs-tools para entorno live; si está instalado,
 # update-initramfs los ejecuta, fallan silenciosamente y el initramfs nunca se crea.
+# man-db y update-initramfs se enmascaran para evitar bloqueos en el chroot.
+rm -f /var/lib/man-db/auto-update
+ln -sf /bin/true /usr/bin/mandb
 apt-get remove --purge -y casper 2>/dev/null || true
 echoverde "Actualizando initramfs (lo que hace que el sistema arranque)..."
 # MODULES=most: en chroot la detección de módulos falla; sin esto el driver NVMe
