@@ -86,11 +86,13 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 - Termina siempre con `echo "Correcto"` si todo fue bien (1-SetupLiveCD lo comprueba con `tail -n1`).
 
 ### 3-SetupPrimerInicio.sh — Primer arranque
-- Detecta el aula por el tercer octeto de la IP: 72→IABD, 32→SMRD.
-- Ejecuta `NombreIP.sh` (descarga `macs.csv` de GitHub para resolver MAC→hostname y opcionalmente convierte DHCP a IP estática).
-- Ejecuta `Auto-Ansible.sh` + playbook Ansible desde `$RAIZANSIBLE/roles.yaml`.
-- Se autodeshabilita tras completarse (`systemctl disable`).
-- **Nota**: tiene una línea `DISTRO="Mint"` sin adaptar a Ubuntu; revisar si afecta.
+- Detecta el aula por el tercer octeto de la IP: 72→IABD, 32→SMRV.
+- Configura proxy apt según aula: `10.0.72.140:3128` (IABD) o `10.0.32.119:3128` (SMRV).
+- Instala `ssh` y `ansible`, habilita `PermitRootLogin yes` y hace `apt-get full-upgrade`.
+- Muestra progreso al usuario mediante diálogos `zenity` en todas las sesiones gráficas activas.
+- Se autodeshabilita con triple mecanismo: `systemctl disable` + `rm` del `.service` + `mv "$0" "$0.borrado"`.
+- Ejecuta `NombreIP.sh` (resuelve MAC→hostname y opcionalmente convierte DHCP a IP estática).
+- Ejecuta `Auto-Ansible.sh` y lanza directamente `ansible-playbook roles.yaml` desde `$RAIZANSIBLE`.
 
 ### 4-Comprobaciones.sh — Diagnóstico
 Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de hooks casper, grub.cfg con UUIDs, fstab vs blkid, paquetes dpkg rotos, servicio SSH. Genera resumen de errores/warnings al final. Útil como primer análisis al pegar un log.
@@ -116,7 +118,6 @@ Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de 
 
 ## Issues conocidos y áreas en optimización
 
-- **`0b-Github.sh` línea 43**: comentario `#####FALLA AQUí!` — en alguna versión se bloqueaba antes del `apt-get install git`. Mitigado enmascarando `update-initramfs` y `man-db` antes de cualquier apt.
+- **`0b-Github.sh` línea 54**: comentario `#####FALLA AQUí!` — en alguna versión se bloqueaba antes del `apt-get install git`. Mitigado enmascarando `update-initramfs` (tanto `/usr/local/sbin/` como `/usr/sbin/`) y `man-db` antes de cualquier apt.
 - **`Auto-Ansible.sh` línea 38**: `ssh-keygen -F $HOSTNAME` falla. Pendiente de corrección.
-- **`3-SetupPrimerInicio.sh`**: tiene `DISTRO="Mint"` sin adaptar. Verificar si causa problemas en rutas.
 - **snapd en Live CD**: si en futuras ISOs snapd vuelve a arrancar, los síntomas son arranque lento (~3 min) y bloqueo de `ubuntu-desktop-bootstrap` antes del autostart.
