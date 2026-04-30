@@ -206,13 +206,22 @@ info "Ejecutando update-grub..."
 update-grub
 ok "update-grub OK"
 
-# Verificar que grub.cfg usa UUID (más robusto que nombre de dispositivo)
-if grep -q 'root=UUID=' /boot/grub/grub.cfg 2>/dev/null; then
+# update-grub en chroot a veces genera root=/dev/XXX en lugar de root=UUID=...
+# porque grub-probe no puede resolver el UUID del dispositivo desde dentro del chroot.
+# Lo corregimos reemplazando la ruta de dispositivo por el UUID real en grub.cfg.
+GRUB_CFG=/boot/grub/grub.cfg
+if grep -q 'root=UUID=' "$GRUB_CFG" 2>/dev/null; then
     ok "grub.cfg usa UUID para root — correcto"
 else
-    err "grub.cfg usa nombre de dispositivo para root (no UUID) — puede fallar si el orden de discos cambia"
-    info "Líneas 'linux' en grub.cfg:"
-    grep '^\s*linux\b' /boot/grub/grub.cfg | head -5 | sed 's/^/    /'
+    ROOT_DEV="/dev/$ROOT"
+    ROOT_UUID=$(blkid -s UUID -o value "$ROOT_DEV" 2>/dev/null || true)
+    if [ -n "$ROOT_UUID" ]; then
+        # Reemplazar root=/dev/nvme0n1p3 → root=UUID=xxxx en todas las entradas linux
+        sed -i "s|root=${ROOT_DEV}\b|root=UUID=${ROOT_UUID}|g" "$GRUB_CFG"
+        ok "grub.cfg parcheado: root=${ROOT_DEV} → root=UUID=${ROOT_UUID}"
+    else
+        err "grub.cfg usa nombre de dispositivo para root y no se pudo obtener UUID de $ROOT_DEV"
+    fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -224,52 +233,36 @@ ln -sf /etc/machine-id /var/lib/dbus/machine-id
 ok "machine-id generado: $(cat /etc/machine-id)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-paso "Eliminar casper (paquete live) y generar initramfs"
+paso "Eliminar hooks de casper y generar initramfs"
 # ─────────────────────────────────────────────────────────────────────────────
-# casper tiene hooks en /etc/initramfs-tools/hooks/ diseñados para Live CD.
-# Si está instalado, update-initramfs los ejecuta, fallan silenciosamente y el
+# casper tiene hooks en /usr/share/initramfs-tools/hooks/ diseñados para Live CD.
+# Si están presentes, update-initramfs los ejecuta, fallan silenciosamente y el
 # initramfs no se genera → el sistema no arranca.
 #
-# Problema adicional: el script postrm de casper llama a update-initramfs, lo que
-# bloquea el chroot durante 2-4 minutos. Para evitarlo:
-#   1. Se enmascaran man-db y update-initramfs ANTES de borrar casper.
-#   2. Se restaura update-initramfs para que nuestra llamada posterior funcione.
+# NO usamos apt-get remove porque el procesamiento de dpkg triggers (man-db,
+# initramfs-tools, etc.) se bloquea en el chroot. Borramos directamente los
+# ficheros de hooks — es todo lo que necesitamos para que update-initramfs funcione.
 
-info "Enmascarando man-db y update-initramfs para evitar bloqueos durante el apt..."
-rm -f /var/lib/man-db/auto-update
-ln -sf /bin/true /usr/bin/mandb
-
-# Guardar el binario real antes de enmascarar
-if [ -f /usr/sbin/update-initramfs ] && [ ! -L /usr/sbin/update-initramfs ]; then
-    cp -a /usr/sbin/update-initramfs /usr/sbin/update-initramfs.real
-    info "update-initramfs original guardado en update-initramfs.real"
-else
-    info "update-initramfs ya era un symlink o no existía — no se guarda copia"
-fi
-ln -sf /bin/true /usr/sbin/update-initramfs
-info "update-initramfs enmascarado → /bin/true"
-
-info "Eliminando casper..."
-DEBIAN_FRONTEND=noninteractive apt-get remove -y casper 2>&1 || true
-ok "casper eliminado"
-
-info "Restaurando update-initramfs real..."
-if [ -f /usr/sbin/update-initramfs.real ]; then
-    mv /usr/sbin/update-initramfs.real /usr/sbin/update-initramfs
-    ok "update-initramfs restaurado"
-else
-    # Si no tenemos copia, reinstalar el paquete que lo provee
-    info "No hay copia guardada — reinstalando initramfs-tools para recuperar el binario..."
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall initramfs-tools 2>&1
-    ok "initramfs-tools reinstalado"
-fi
-
-info "Verificando que update-initramfs es el binario real (no /bin/true)..."
-if grep -q "true" /usr/sbin/update-initramfs 2>/dev/null; then
-    err "update-initramfs sigue siendo un no-op — el initramfs NO se generará"
-    exit 1
-fi
-ok "update-initramfs apunta al binario real"
+info "Eliminando hooks de casper directamente (sin apt, sin triggers dpkg)..."
+CASPER_HOOKS_REMOVED=0
+for f in \
+    /usr/share/initramfs-tools/hooks/casper \
+    /usr/share/initramfs-tools/scripts/casper \
+    /usr/share/initramfs-tools/scripts/casper-bottom \
+    /usr/share/initramfs-tools/scripts/casper-premount \
+    /etc/initramfs-tools/hooks/casper \
+    /etc/casper.conf \
+; do
+    if [ -e "$f" ]; then
+        rm -rf "$f"
+        info "  Eliminado: $f"
+        CASPER_HOOKS_REMOVED=$((CASPER_HOOKS_REMOVED + 1))
+    fi
+done
+# Eliminar cualquier otro fichero de casper en initramfs-tools que pudiera existir
+find /usr/share/initramfs-tools /etc/initramfs-tools \
+     -name '*casper*' -exec rm -rf {} + 2>/dev/null || true
+ok "Hooks de casper eliminados ($CASPER_HOOKS_REMOVED ficheros/dirs encontrados)"
 
 info "Configurando MODULES=most y RESUME=none..."
 mkdir -p /etc/initramfs-tools/conf.d
