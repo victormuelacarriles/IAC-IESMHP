@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.2-20260430"
+VERSIONSCRIPT="22.3-20260430"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -271,15 +271,15 @@ mkdir -p /etc/initramfs-tools/conf.d
 echo "MODULES=most" > /etc/initramfs-tools/conf.d/modules
 echo "RESUME=none"  > /etc/initramfs-tools/conf.d/resume
 
-# 0b-Github.sh enmascara update-initramfs → /bin/true en el live CD para que
-# apt no lo ejecute al instalar paquetes. El rsync de 1-SetupLiveCD.sh copia
-# esos symlinks al sistema instalado. Los eliminamos y reinstalamos el paquete
-# para recuperar el script real antes de generar el initramfs.
+# Recuperar update-initramfs si fue enmascarado como /bin/true.
+# El rsync copia desde el squashfs (read-only), que normalmente no incluye
+# las modificaciones del live, pero verificamos de todas formas.
+# En merged-usr Ubuntu 26.04: /usr/sbin → bin, así que comprobamos también /usr/bin.
 _UPDATE_INITRAMFS_REAL=true
-for _masked in /usr/local/sbin/update-initramfs /usr/sbin/update-initramfs; do
-    if [ -L "$_masked" ] && readlink "$_masked" | grep -q "true"; then
+for _masked in /usr/local/sbin/update-initramfs /usr/sbin/update-initramfs /usr/bin/update-initramfs; do
+    if [ -L "$_masked" ] && readlink "$_masked" | grep -qE "(^|/)true$"; then
         rm -f "$_masked"
-        info "  Eliminada máscara: $_masked → /bin/true"
+        info "  Eliminada máscara: $_masked → $(readlink $_masked)"
         _UPDATE_INITRAMFS_REAL=false
     fi
 done
@@ -289,12 +289,38 @@ if [ "$_UPDATE_INITRAMFS_REAL" = "false" ]; then
     ok "update-initramfs restaurado: $(readlink -f $(command -v update-initramfs))"
 fi
 
-info "Ejecutando update-initramfs -u -k all -v (puede tardar 2-4 min)..."
-update-initramfs -u -k all -v
+# Protección extra: verificar que el binario no es un no-op por tamaño
+_UI_BIN=$(readlink -f "$(command -v update-initramfs 2>/dev/null || echo '')" 2>/dev/null || echo "")
+if [ -n "$_UI_BIN" ]; then
+    _UI_SIZE=$(stat -c%s "$_UI_BIN" 2>/dev/null || echo "0")
+    info "update-initramfs → $_UI_BIN (${_UI_SIZE} bytes)"
+    if [ "$_UI_SIZE" -lt 200 ]; then
+        info "  → binario sospechoso, reinstalando initramfs-tools..."
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall initramfs-tools 2>&1 | sed 's/^/    /'
+    fi
+fi
+
+# update-initramfs sale silenciosamente con código 0 si detecta entorno de
+# contenedor/chroot. Causas: /run bind-mount trae /run/systemd/container del
+# live CD (VMware), o DPKG_MAINTSCRIPT_PACKAGE heredad de apt previo activa
+# la guarda ischroot. Limpiamos antes de llamarlo.
+unset DPKG_MAINTSCRIPT_PACKAGE DPKG_MAINTSCRIPT_NAME DPKG_RUNNING_VERSION 2>/dev/null || true
+rm -f /run/systemd/container /run/container_type 2>/dev/null || true
+
+# Kernel instalado: preferir el de /lib/modules/ (el del chroot) sobre uname -r (kernel del host live)
+KERNEL_INSTALADO=$(ls /lib/modules/ 2>/dev/null | sort -V | tail -1)
+info "Kernels en /lib/modules/: $(ls /lib/modules/ 2>/dev/null | tr '\n' ' ' || echo 'NINGUNO')"
+info "Ficheros en /boot/ antes de generar initramfs:"
+ls -lh /boot/ 2>/dev/null | sed 's/^/    /' || info "  /boot/ vacío o inaccesible"
+
+# Usar -c (create) en lugar de -u (update): -u no crea initramfs nuevos si no
+# existe uno previo, lo que ocurre en sistemas instalados desde squashfs live.
+info "Ejecutando update-initramfs -c -k all -v (puede tardar 2-4 min)..."
+update-initramfs -c -k all -v
 ok "update-initramfs terminado"
 
-# Verificar que el initramfs se creó
-KERNEL=$(uname -r 2>/dev/null || ls /lib/modules/ | tail -1)
+# Verificar que el initramfs se creó; usar kernel del chroot, no del host live
+KERNEL="${KERNEL_INSTALADO:-$(uname -r)}"
 if [ -f "/boot/initrd.img-${KERNEL}" ]; then
     INITRAMFS_SIZE=$(du -sh "/boot/initrd.img-${KERNEL}" | cut -f1)
     ok "Initramfs generado: /boot/initrd.img-${KERNEL} (${INITRAMFS_SIZE})"
@@ -302,6 +328,7 @@ else
     err "Initramfs NO encontrado en /boot/initrd.img-${KERNEL} — el sistema no arrancará"
     info "Ficheros en /boot/:"
     ls -lh /boot/ | sed 's/^/    /'
+    info "Kernels en /lib/modules/: $(ls /lib/modules/ 2>/dev/null | tr '\n' ' ')"
     exit 1
 fi
 
