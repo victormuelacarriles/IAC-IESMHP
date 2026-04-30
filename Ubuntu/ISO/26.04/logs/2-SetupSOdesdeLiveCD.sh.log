@@ -1,0 +1,145 @@
+
+════════════════════════════════════════════════════════════
+  PASO 1: Inicio — /opt/IAC-IESMHP/Ubuntu/ISO/26.04/2-SetupSOdesdeLiveCD.sh (vs22.2-20260430) — chroot ubuntu
+  2026-04-30 08:20:07
+════════════════════════════════════════════════════════════
+  [36m[INF][0m  08:20:07 RAIZLOG=/var/log/IAC-IESMHP/Ubuntu  RAIZDISTRO=/opt/IAC-IESMHP/Ubuntu/ISO/26.04
+  [36m[INF][0m  08:20:07 Log completo : /var/log/IAC-IESMHP/Ubuntu/2-SetupSOdesdeLiveCD.sh.log
+  [36m[INF][0m  08:20:07 Fichero pasos: /var/log/IAC-IESMHP/Ubuntu/2-SetupSOdesdeLiveCD.steps
+
+════════════════════════════════════════════════════════════
+  PASO 2: Idioma y teclado español
+  2026-04-30 08:20:07
+════════════════════════════════════════════════════════════
+Generating locales (this might take a while)...
+  es_ES.UTF-8... done
+Generation complete.
+  [32m[OK ][0m  08:20:08 Idioma y teclado configurados
+
+════════════════════════════════════════════════════════════
+  PASO 3: Fondo de escritorio (dconf)
+  2026-04-30 08:20:08
+════════════════════════════════════════════════════════════
+  [36m[INF][0m  08:20:08 dconf se aplicará en el primer inicio (normal en chroot)
+
+════════════════════════════════════════════════════════════
+  PASO 4: Configurar /etc/fstab
+  2026-04-30 08:20:08
+════════════════════════════════════════════════════════════
+  [32m[OK ][0m  08:20:08 Particiones leídas: EFI=nvme0n1p1  SWAP=nvme0n1p2  ROOT=nvme0n1p3  HOME=sda1
+  [36m[INF][0m  08:20:08 EFI=/dev/nvme0n1p1  SWAP=/dev/nvme0n1p2  ROOT=/dev/nvme0n1p3  HOME=/dev/sda1
+  [36m[INF][0m  08:20:08 UUID ROOT=be75eee3-345b-4a77-85e3-9985fcf437c0  EFI=FAC6-1531  HOME=0645a4c5-54b8-4682-90a4-e224697b9d0c  SWAP=fd8ac579-9335-4879-97bd-b2d5677b38ab
+# /etc/fstab — generado por /opt/IAC-IESMHP/Ubuntu/ISO/26.04/2-SetupSOdesdeLiveCD.sh el jue 30 abr 2026 08:20:08 UTC
+UUID=be75eee3-345b-4a77-85e3-9985fcf437c0  /          ext4  defaults  0 1
+UUID=FAC6-1531   /boot/efi  vfat  umask=0077  0 1
+UUID=0645a4c5-54b8-4682-90a4-e224697b9d0c  /home      ext4  defaults  0 2
+UUID=fd8ac579-9335-4879-97bd-b2d5677b38ab  none       swap  sw          0 0
+  [32m[OK ][0m  08:20:08 fstab generado con UUIDs
+
+════════════════════════════════════════════════════════════
+  PASO 5: Verificar conectividad a Internet
+  2026-04-30 08:20:08
+════════════════════════════════════════════════════════════
+  [32m[OK ][0m  08:20:08 Internet disponible
+
+════════════════════════════════════════════════════════════
+  PASO 6: MAC, hostname y claves SSH autorizadas
+  2026-04-30 08:20:08
+════════════════════════════════════════════════════════════
+  [36m[INF][0m  08:20:08 MAC detectada: 00:0c:29:0e:32:d7
+  [32m[OK ][0m  08:20:08 authorized_keys copiado
+  [31m[ERR][0m  08:20:08 MAC 00:0c:29:0e:32:d7 no encontrada en macs.csv — nombre por defecto 'Ubuntu'
+  [32m[OK ][0m  08:20:08 Hostname cambiado: ubuntu → Ubuntu
+
+════════════════════════════════════════════════════════════
+  PASO 7: Usuarios (root y usuario)
+  2026-04-30 08:20:08
+════════════════════════════════════════════════════════════
+CONTRASEÑA INCORRECTA: La contraseña tiene menos de 8 caracteres
+  [32m[OK ][0m  08:20:08 Contraseña root establecida
+  [32m[OK ][0m  08:20:08 Usuario 'usuario' creado
+CONTRASEÑA INCORRECTA: La contraseña tiene menos de 8 caracteres
+  [32m[OK ][0m  08:20:08 Usuario 'usuario' en grupo sudo
+  [32m[OK ][0m  08:20:08 authorized_keys copiado a /home/usuario/.ssh/
+
+════════════════════════════════════════════════════════════
+  PASO 8: GRUB (grub-install + update-grub)
+  2026-04-30 08:20:08
+════════════════════════════════════════════════════════════
+  [36m[INF][0m  08:20:08 Instalando GRUB EFI en /boot/efi  (bootloader-id=Ubuntu)
+Instalando para plataforma x86_64-efi.
+grub-install: aviso: EFI variables cannot be set on this system.
+grub-install: aviso: You will have to complete the GRUB setup manually.
+Instalación terminada. No se notificó ningún error.
+  [32m[OK ][0m  08:20:08 grub-install OK
+  [36m[INF][0m  08:20:08 Ejecutando update-grub...
+Sourcing file `/etc/default/grub'
+Sourcing file `/etc/default/grub.d/kdump-tools.cfg'
+Generating grub configuration file ...
+Found linux image: /boot/vmlinuz-7.0.0-14-generic
+Found memtest86+ 64bit EFI image: /boot/mt86+x64
+Found memtest86+ 32bit EFI image: /boot/mt86+ia32
+Found memtest86+ 64bit image: /boot/mt86+x64
+Found memtest86+ 32bit image: /boot/mt86+ia32
+Warning: os-prober will be executed to detect other bootable partitions.
+Its output will be used to detect bootable binaries on them and create new boot entries.
+Adding boot menu entry for UEFI Firmware Settings ...
+done
+  [32m[OK ][0m  08:20:10 update-grub OK
+  [36m[INF][0m  08:20:10 Entradas 'linux' en grub.cfg (verificación root=):
+    	linux	/boot/vmlinuz-7.0.0-14-generic root=/dev/nvme0n1p3 ro  quiet splash crashkernel=2G-4G:320M,4G-32G:512M,32G-64G:1024M,64G-128G:2048M,128G-:4096M
+    		linux	/boot/vmlinuz-7.0.0-14-generic root=/dev/nvme0n1p3 ro  quiet splash crashkernel=2G-4G:320M,4G-32G:512M,32G-64G:1024M,64G-128G:2048M,128G-:4096M
+    		linux	/boot/vmlinuz-7.0.0-14-generic root=/dev/nvme0n1p3 ro recovery nomodeset dis_ucode_ldr 
+    		linux /boot/mt86+x64 
+    		linux /boot/mt86+x64 console=ttyS0,115200
+    		linux /boot/mt86+ia32 
+    		linux /boot/mt86+ia32 console=ttyS0,115200
+    		linux /boot/mt86+x64 
+    		linux /boot/mt86+x64 console=ttyS0,115200
+    		linux /boot/mt86+ia32 
+    		linux /boot/mt86+ia32 console=ttyS0,115200
+  [32m[OK ][0m  08:20:10 grub.cfg parcheado: root=/dev/nvme0n1p3 → root=UUID=be75eee3-345b-4a77-85e3-9985fcf437c0
+
+════════════════════════════════════════════════════════════
+  PASO 9: Machine-ID
+  2026-04-30 08:20:10
+════════════════════════════════════════════════════════════
+  [32m[OK ][0m  08:20:10 machine-id generado: ec4d175a016c3995f6a08ec069f310ba
+
+════════════════════════════════════════════════════════════
+  PASO 10: Eliminar hooks de casper y generar initramfs
+  2026-04-30 08:20:10
+════════════════════════════════════════════════════════════
+  [36m[INF][0m  08:20:10 Eliminando hooks de casper directamente (sin apt, sin triggers dpkg)...
+  [36m[INF][0m  08:20:10   Eliminado: /usr/share/initramfs-tools/hooks/casper
+  [36m[INF][0m  08:20:10   Eliminado: /usr/share/initramfs-tools/scripts/casper
+  [36m[INF][0m  08:20:10   Eliminado: /usr/share/initramfs-tools/scripts/casper-bottom
+  [36m[INF][0m  08:20:10   Eliminado: /usr/share/initramfs-tools/scripts/casper-premount
+  [36m[INF][0m  08:20:10   Eliminado: /etc/casper.conf
+  [32m[OK ][0m  08:20:10 Hooks de casper eliminados (5 ficheros/dirs encontrados)
+  [36m[INF][0m  08:20:10 Configurando MODULES=most y RESUME=none...
+  [36m[INF][0m  08:20:10 Ejecutando update-initramfs -u -k all -v (puede tardar 2-4 min)...
+Available versions: 
+Nothing to do, exiting.
+  [32m[OK ][0m  08:20:10 update-initramfs terminado
+  [31m[ERR][0m  08:20:10 Initramfs NO encontrado en /boot/initrd.img-7.0.0-14-generic — el sistema no arrancará
+  [36m[INF][0m  08:20:10 Ficheros en /boot/:
+    total 28M
+    -rw------- 1 root root  11M Apr 13 08:12 System.map-7.0.0-14-generic
+    -rw-r--r-- 1 root root 302K Apr 13 08:12 config-7.0.0-14-generic
+    drwxr-xr-x 3 root root 4.0K Jan  1  1970 efi
+    drwxr-xr-x 5 root root 4.0K Apr 30 08:20 grub
+    lrwxrwxrwx 1 root root   27 Apr 23 01:18 initrd.img -> initrd.img-7.0.0-14-generic
+    lrwxrwxrwx 1 root root   27 Apr 23 01:18 initrd.img.old -> initrd.img-7.0.0-14-generic
+    -rw-r--r-- 1 root root 153K Nov 29 08:22 mt86+ia32
+    -rw-r--r-- 1 root root 158K Nov 29 08:22 mt86+x64
+    lrwxrwxrwx 1 root root   24 Apr 23 01:18 vmlinuz -> vmlinuz-7.0.0-14-generic
+    -rw------- 1 root root  17M Apr 13 08:14 vmlinuz-7.0.0-14-generic
+    lrwxrwxrwx 1 root root   24 Apr 23 01:18 vmlinuz.old -> vmlinuz-7.0.0-14-generic
+ric
+    lrwxrwxrwx 1 root root   27 Apr 23 01:18 initrd.img.old -> initrd.img-7.0.0-14-generic
+    -rw-r--r-- 1 root root 153K Nov 29 08:22 mt86+ia32
+    -rw-r--r-- 1 root root 158K Nov 29 08:22 mt86+x64
+    lrwxrwxrwx 1 root root   24 Apr 23 01:18 vmlinuz -> vmlinuz-7.0.0-14-generic
+    -rw------- 1 root root  17M Apr 13 08:14 vmlinuz-7.0.0-14-generic
+    lrwxrwxrwx 1 root root   24 Apr 23 01:18 vmlinuz.old -> vmlinuz-7.0.0-14-generic

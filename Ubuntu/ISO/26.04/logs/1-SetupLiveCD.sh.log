@@ -1,0 +1,162 @@
+WARNING: Running setxkbmap against an Xwayland server
+[32m1-SetupLiveCD (vs22.2-20260428-Ubuntu)[0m
+   Script personalizado de instalación de 
+   sistema operativo Ubuntu 26.04 para equipos distancia / CEIABD
+[33m   (victor.muelacarriles@educantabria.es)[0m
+[32m--------------------------------------------------------------------[0m
+[32m       Distancia     ->Disco pequeño: NVMe 0,5TB (/EFI, /swap y /)[0m
+[32m                     ->Disco grande:  NVMe 2,0TB (/home)[0m
+[32m--------------------------------------------------------------------[0m
+[32m       CEIABD        ->Disco pequeño: NVMe 0,5TB (/EFI, /swap y /)[0m
+[32m                     ->Disco grande:  SDa  1,0TB (/home)[0m
+[32m--------------------------------------------------------------------[0m
+[32mCarpetas de trabajo: /opt/IAC-IESMHP, /opt/IAC-IESMHP, /var/log/IAC-IESMHP/Ubuntu[0m
+[33m--- Inventario completo de discos ---[0m
+sda      1000G sata   1 VMware Virtual SATA Hard Drive
+sr0       6,1G sata   1 VMware Virtual SATA CDRW Drive
+nvme0n1   512G nvme   0 VMware Virtual NVMe Disk
+DISCOS_M2[0]: nvme0n1
+DISCOS_M2[1]: <vacío>
+DISCOS_SD[0]: sda
+[32mEquipo NVME+SD:[0m
+[32m    /     -> NVMe (/dev/nvme0n1)[0m
+[32m    /home -> SD   (/dev/sda)[0m
+
+[33mBorrando y particionando: /dev/nvme0n1 y /dev/sda[0m
+NAME      SIZE TYPE
+loop0     3,2G loop
+loop1   565,3M loop
+loop2   785,2M loop
+loop3       4K loop
+loop4    66,8M loop
+loop5    19,6M loop
+loop6   273,7M loop
+loop7    16,5M loop
+loop8    15,7M loop
+loop9   606,1M loop
+loop10    395M loop
+loop11  227,6M loop
+loop12   91,7M loop
+loop13   18,8M loop
+loop14   49,3M loop
+loop15    580K loop
+loop16  115,3M loop
+sda      1000G disk
+sr0       6,1G rom
+nvme0n1   512G disk
+Creating new GPT entries in memory.
+GPT data structures destroyed! You may now partition the disk using fdisk or
+other utilities.
+Creating new GPT entries in memory.
+GPT data structures destroyed! You may now partition the disk using fdisk or
+other utilities.
+[32mDiscos particionados: /dev/nvme0n1 y /dev/sda[0m
+[33mEsperando detección de particiones por el kernel...[0m
+[33m--- Layout de particiones ---[0m
+Modelo: VMware Virtual NVMe Disk (nvme)
+Disco /dev/nvme0n1: 550GB
+Tamaño de sector (lógico/físico): 512B/512B
+Tabla de particiones: gpt
+Banderas de disco: 
+
+Número  Inicio  Fin     Tamaño  Sistema de archivos  Nombre   Banderas
+ 1      1049kB  538MB   537MB                        ESP      arranque, esp
+ 2      538MB   9128MB  8590MB                       primary  swap
+ 3      9128MB  550GB   541GB                        primary
+
+Modelo: ATA VMware Virtual S (scsi)
+Disco /dev/sda: 1074GB
+Tamaño de sector (lógico/físico): 512B/512B
+Tabla de particiones: gpt
+Banderas de disco: 
+
+Número  Inicio  Fin     Tamaño  Sistema de archivos  Nombre   Banderas
+ 1      1049kB  1074GB  1074GB                       primary
+
+[33mFormateando (EFI=/dev/nvme0n1p1, SWAP=/dev/nvme0n1p2, ROOT=/dev/nvme0n1p3, HOME=/dev/sda1)...[0m
+mkfs.fat 4.2 (2021-01-31)
+Configurando espacio de intercambio versión 1, tamaño = 8 GiB (8589930496 bytes)
+sin etiqueta, UUID=fd8ac579-9335-4879-97bd-b2d5677b38ab
+mke2fs 1.47.2 (1-Jan-2025)
+Se está creando un sistema de ficheros con 131988992 bloques de 4k y 32997376 nodos-i
+UUID del sistema de ficheros: be75eee3-345b-4a77-85e3-9985fcf437c0
+Respaldos del superbloque guardados en los bloques: 
+	32768, 98304, 163840, 229376, 294912, 819200, 884736, 1605632, 2654208, 
+	4096000, 7962624, 11239424, 20480000, 23887872, 71663616, 78675968, 
+	102400000
+
+Reservando las tablas de grupo:    0/4028         hecho                            
+Escribiendo las tablas de nodos-i:    0/4028         hecho                            
+Creando el fichero de transacciones (262144 bloques): hecho
+Escribiendo superbloques y la información contable del sistema de archivos:    0/4028         hecho
+
+mke2fs 1.47.2 (1-Jan-2025)
+Se está creando un sistema de ficheros con 262143488 bloques de 4k y 65536000 nodos-i
+UUID del sistema de ficheros: 0645a4c5-54b8-4682-90a4-e224697b9d0c
+Respaldos del superbloque guardados en los bloques: 
+	32768, 98304, 163840, 229376, 294912, 819200, 884736, 1605632, 2654208, 
+	4096000, 7962624, 11239424, 20480000, 23887872, 71663616, 78675968, 
+	102400000, 214990848
+
+Reservando las tablas de grupo:    0/8000         hecho                            
+Escribiendo las tablas de nodos-i:    0/8000         hecho                            
+Creando el fichero de transacciones (262144 bloques): hecho
+Escribiendo superbloques y la información contable del sistema de archivos:    0/8000         hecho
+
+/dev/nvme0n1p1: UUID="FAC6-1531" BLOCK_SIZE="512" TYPE="vfat" PARTLABEL="ESP" PARTUUID="08eb8198-d831-4334-99c8-94a37378bfbc"
+/dev/nvme0n1p2: UUID="fd8ac579-9335-4879-97bd-b2d5677b38ab" TYPE="swap" PARTLABEL="primary" PARTUUID="f80a7dd2-fb8b-4ceb-81bb-f6d7a3b96efe"
+/dev/nvme0n1p3: UUID="be75eee3-345b-4a77-85e3-9985fcf437c0" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="e7a574f9-dc16-4db4-a7f9-b34607865962"
+/dev/sda1: UUID="0645a4c5-54b8-4682-90a4-e224697b9d0c" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="205a8ead-67ec-434a-86d4-5660c8615b6c"
+[33m--- UUIDs asignados ---[0m
+/dev/nvme0n1p1: UUID="FAC6-1531" BLOCK_SIZE="512" TYPE="vfat" PARTLABEL="ESP" PARTUUID="08eb8198-d831-4334-99c8-94a37378bfbc"
+/dev/nvme0n1p2: UUID="fd8ac579-9335-4879-97bd-b2d5677b38ab" TYPE="swap" PARTLABEL="primary" PARTUUID="f80a7dd2-fb8b-4ceb-81bb-f6d7a3b96efe"
+/dev/nvme0n1p3: UUID="be75eee3-345b-4a77-85e3-9985fcf437c0" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="e7a574f9-dc16-4db4-a7f9-b34607865962"
+/dev/sda1: UUID="0645a4c5-54b8-4682-90a4-e224697b9d0c" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="primary" PARTUUID="205a8ead-67ec-434a-86d4-5660c8615b6c"
+[32mParticiones formateadas correctamente[0m
+[33mMontando sistemas de ficheros...[0m
+NAME          SIZE TYPE MOUNTPOINT                          UUID
+loop0         3,2G loop /rofs                               
+loop1       565,3M loop                                     
+loop2       785,2M loop                                     
+loop3           4K loop /snap/bare/5                        
+loop4        66,8M loop /snap/core24/1587                   
+loop5        19,6M loop /snap/desktop-security-center/150   
+loop6       273,7M loop /snap/firefox/8107                  
+loop7        16,5M loop /snap/firmware-updater/226          
+loop8        15,7M loop /snap/snap-store/1367               
+loop9       606,1M loop /snap/gnome-46-2404/153             
+loop10        395M loop /snap/mesa-2404/1165                
+loop11      227,6M loop /snap/thunderbird/1057              
+loop12       91,7M loop /snap/gtk-common-themes/1535        
+loop13       18,8M loop /snap/prompting-client/204          
+loop14       49,3M loop /snap/snapd/26865                   
+loop15        580K loop /snap/snapd-desktop-integration/361 
+loop16      115,3M loop /snap/ubuntu-desktop-bootstrap/589  
+sda          1000G disk                                     
+└─sda1       1000G part /mnt/home                           0645a4c5-54b8-4682-90a4-e224697b9d0c
+sr0           6,1G rom  /cdrom                              2026-04-30-08-14-22-00
+nvme0n1       512G disk                                     
+├─nvme0n1p1   512M part /mnt/boot/efi                       FAC6-1531
+├─nvme0n1p2     8G part [SWAP]                              fd8ac579-9335-4879-97bd-b2d5677b38ab
+└─nvme0n1p3 503,5G part /mnt                                be75eee3-345b-4a77-85e3-9985fcf437c0
+[33m--- Espacio disponible en puntos de montaje ---[0m
+S.ficheros     Tamaño Usados  Disp Uso% Montado en
+/dev/nvme0n1p3   495G   2,1M  470G   1% /mnt
+/dev/nvme0n1p1   511M   4,0K  511M   1% /mnt/boot/efi
+/dev/sda1        984G   2,1M  934G   1% /mnt/home
+[32mSistemas de ficheros montados[0m
+[33mUbuntu 26.04+: combinando capas squashfs con overlayfs...[0m
+[32m  + capa 0: minimal.squashfs[0m
+[32m  + capa 1: minimal.standard.squashfs[0m
+[32m  + capa 2: minimal.standard.live.squashfs[0m
+[33mCopiando sistema de archivos a /mnt ...[0m
+[32mSistema de archivos copiado desde /tmp/merged[0m
+[32m  Fondo de escritorio copiado: /usr/share/backgrounds/iac-iesmhp.png (OK)[0m
+
+[33mCopiando /opt/IAC-IESMHP/*.* → /mnt/opt/IAC-IESMHP/[0m
+[33mCopiando /opt/IAC-IESMHP/Ubuntu/ → /mnt/opt/IAC-IESMHP/Ubuntu/[0m
+[33mVerificando entorno chroot...[0m
+[32m  OK: /mnt/usr/bin/bash existe 1540520 /mnt/usr/bin/bash[0m
+[32m  OK: /mnt/lib64 → usr/lib64[0m
+[32m  OK: chroot funcional — GNU bash, versión 5.3.9(1)-release (x86_64-pc-linux-gnu)[0m
+[33mCopiando logs a /mnt/var/log/IAC-IESMHP/Ubuntu/[0m

@@ -387,11 +387,11 @@ set timeout_style=countdown
 set gfxpayload=text
 
 menuentry "Instalar Ubuntu Personalizado (IAC-IESMHP)" {
-    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es ---
+    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es quiet splash ---
     initrd  /casper/initrd
 }
 menuentry "Probar Ubuntu en Espanol (Live)" {
-    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es ---
+    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es quiet splash ---
     initrd  /casper/initrd
 }
 menuentry 'UEFI Firmware Settings' {
