@@ -139,13 +139,25 @@ lsblk -o NAME,SIZE,TYPE,FSTYPE,UUID,MOUNTPOINT 2>/dev/null | tee -a "$LOGFILE"
 # ─────────────────────────────────────────────────────────────────────────────
 _sep "5. PAQUETES CLAVE"
 
-for pkg in casper ubiquity; do
-    if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
-        _err "$pkg está instalado (debe eliminarse antes de update-initramfs)"
-    else
-        _ok "$pkg: no instalado"
-    fi
-done
+# casper: comprobar ficheros de hooks en disco, no el registro dpkg.
+# 2-SetupSOdesdeLiveCD.sh los elimina con rm -rf sin pasar por apt
+# (apt-get remove bloquea en chroot por triggers dpkg).
+CASPER_HOOKS=$(find /usr/share/initramfs-tools /etc/initramfs-tools \
+               -name '*casper*' 2>/dev/null | head -1)
+if [ -n "$CASPER_HOOKS" ]; then
+    _err "casper: hooks en disco ($CASPER_HOOKS) — eliminar antes de update-initramfs"
+else
+    _ok "casper: hooks no presentes en disco (correcto)"
+fi
+if dpkg -l casper 2>/dev/null | grep -q "^ii"; then
+    _inf "casper: paquete en dpkg pero hooks eliminados — normal tras instalación desde Live CD"
+fi
+
+if dpkg -l ubiquity 2>/dev/null | grep -q "^ii"; then
+    _err "ubiquity está instalado (debe eliminarse)"
+else
+    _ok "ubiquity: no instalado"
+fi
 
 BROKEN=$(dpkg --audit 2>/dev/null | wc -l)
 if [ "$BROKEN" -gt 0 ]; then

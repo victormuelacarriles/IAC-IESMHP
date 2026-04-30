@@ -116,6 +116,16 @@ Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de 
 
 ---
 
+## Registro de cambios
+
+Los cambios realizados en cada sesión de trabajo se documentan en:
+```
+Ubuntu/RegistroDeCambios/YYYYMMDD-Cambios.md
+```
+Antes de modificar un script, consulta ese directorio para evitar repetir correcciones ya aplicadas.
+
+---
+
 ## Issues conocidos y áreas en optimización
 
 - **`0b-Github.sh` línea 54**: comentario `#####FALLA AQUí!` — en alguna versión se bloqueaba antes del `apt-get install git`. Mitigado enmascarando `update-initramfs` (tanto `/usr/local/sbin/` como `/usr/sbin/`) y `man-db` antes de cualquier apt.

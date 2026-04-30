@@ -24,7 +24,7 @@ SOURCE_ISO="${1:?ERROR: Debes indicar la ISO de origen.
 PERSO_SCRIPT="${2:?ERROR: Debes indicar el script de personalización (0b-Github.sh).}"
 OUTPUT_ISO="${3:-ubuntu-custom-desktop-uefi.iso}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WALLPAPER_PNG="${4:-${SCRIPT_DIR}/FondoIES-Ubuntu-Gris.png}"
+WALLPAPER_PNG="${4:-${SCRIPT_DIR}/imagenesIES/FondoIES-Ubuntu-Gris.png}"
 
 WORK_DIR="$(mktemp -d /tmp/iso_build_XXXXXX)"
 ISO_DIR="${WORK_DIR}/iso"
