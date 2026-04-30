@@ -12,6 +12,9 @@ GITREPO="https://github.com/victormuelacarriles/${REPO}.git"
 DESTDIR="/opt/${REPO}"
 SCRIPT_INSTALL="${DESTDIR}/Ubuntu/ISO/26.04/1-SetupLiveCD.sh"
 
+RAIZLOG="/var/log/${REPO}/Ubuntu"
+LOG0B="${RAIZLOG}/0b-Github.sh.log"
+
 #export DISPLAY=:0
 #export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/999/bus
 #zenity --info --text="Configurando..." --timeout=3 || true
@@ -22,7 +25,15 @@ GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[perso][+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[perso][!]${NC} $*"; }
 err()  { echo -e "${RED}[perso][✗]${NC} $*" >&2; exit 1; }
+
+# ─────────────── Log persistente ───────
+mkdir -p "$RAIZLOG"
+exec > >(tee -a "$LOG0B") 2>&1
+
 log "=== 0b-Github.sh iniciado: $(date) ==="
+log "REPO=$REPO  GITREPO=$GITREPO  DESTDIR=$DESTDIR"
+log "SCRIPT_INSTALL=$SCRIPT_INSTALL"
+log "Kernel: $(uname -r)  CPU: $(nproc) cores  RAM: $(free -h | awk '/^Mem:/{print $2}')"
 
 # ─────────────── Red: esperar DHCP ─────
 log "Comprobando conectividad..."
@@ -56,20 +67,22 @@ log "update-initramfs enmascarado (no-op en entorno live)."
 
 log "Desactivamos actualización de man-db"
 rm -f /var/lib/man-db/auto-update
-log "Actualizando paquetes..."
-DEBIAN_FRONTEND=noninteractive apt-get update -qq
+log "Actualizando lista de paquetes..."
+DEBIAN_FRONTEND=noninteractive apt-get update -q
 log "Asegurando que git está instalado..."
-DEBIAN_FRONTEND=noninteractive apt-get install  git -y
-log "git instalado."
+DEBIAN_FRONTEND=noninteractive apt-get install git -y
+log "git instalado: $(git --version 2>/dev/null || echo 'no encontrado')"
 
 
 # ─────────────── Clonar repo ───────────
 if [[ -d "${DESTDIR}/.git" ]]; then
     warn "El repositorio ya existe en ${DESTDIR}. Actualizando..."
     git -C "${DESTDIR}" pull --ff-only
+    log "Repo actualizado: $(git -C "${DESTDIR}" log -1 --oneline 2>/dev/null || echo 'sin commits')"
 else
     log "Clonando ${GITREPO} → ${DESTDIR} ..."
     git clone "${GITREPO}" "${DESTDIR}"
+    log "Repo clonado: $(git -C "${DESTDIR}" log -1 --oneline 2>/dev/null || echo 'sin commits')"
 fi
 
 # ─────────────── Verificar script ──────
@@ -81,7 +94,7 @@ chmod +x "${SCRIPT_INSTALL}"
 # ─────────────── Lanzar instalación ────
 
 
-log "Ejecutando ${SCRIPT_INSTALL} ..."
+log "=== 0b-Github.sh finalizado: $(date) — lanzando ${SCRIPT_INSTALL} ==="
 bash "${SCRIPT_INSTALL}"
 
 

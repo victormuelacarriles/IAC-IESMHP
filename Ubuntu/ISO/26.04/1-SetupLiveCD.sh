@@ -10,8 +10,6 @@
 # =============================================================================
 set -e
 
-
-
 VERSIONSCRIPT="22.2-20260428-Ubuntu"
 REPO="IAC-IESMHP"
 GITREPO="https://github.com/victormuelacarriles/$REPO.git"
@@ -67,7 +65,8 @@ echoverde "Carpetas de trabajo: $RAIZSCRIPTSLIVE, $RAIZSCRIPTS, $RAIZLOG"
 DISCOS_M2=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0 | grep -v 'usb' | grep nvme | sort -h -k2 | awk '{print $1}'))
 DISCOS_SD=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0 | grep -v 'usb' | grep sd   | sort -h -k2 | awk '{print $1}'))
 
-lsblk -dno NAME,SIZE | grep -v '^loop0'
+echoamarillo "--- Inventario completo de discos ---"
+lsblk -dno NAME,SIZE,TRAN,ROTA,MODEL | grep -v '^loop' || lsblk -dno NAME,SIZE
 echo "DISCOS_M2[0]: ${DISCOS_M2[0]:-<vacío>}"
 echo "DISCOS_M2[1]: ${DISCOS_M2[1]:-<vacío>}"
 echo "DISCOS_SD[0]: ${DISCOS_SD[0]:-<vacío>}"
@@ -137,6 +136,10 @@ echoverde "Discos particionados: $DISK_SMALL y $DISK_BIG"
 echoamarillo "Esperando detección de particiones por el kernel..."
 sleep 5
 
+echoamarillo "--- Layout de particiones ---"
+parted -s "$DISK_SMALL" print 2>/dev/null || true
+parted -s "$DISK_BIG"   print 2>/dev/null || true
+
 # ─────────────── Asignar particiones ───
 EFI="${DISK_SMALL}p1"
 SWAP="${DISK_SMALL}p2"
@@ -164,6 +167,10 @@ if ! blkid "$EFI" || ! blkid "$SWAP" || ! blkid "$ROOT" || ! blkid "$HOME_PART";
     echorojo "Error: no se pudieron formatear correctamente las particiones"
     sleep 10 && exit 1
 fi
+echoamarillo "--- UUIDs asignados ---"
+for _part in "$EFI" "$SWAP" "$ROOT" "$HOME_PART"; do
+    blkid "$_part" 2>/dev/null || echorojo "  blkid sin datos para $_part"
+done
 echoverde "Particiones formateadas correctamente"
 
 # ─────────────── Montar ────────────────
@@ -174,7 +181,9 @@ mkdir -p /mnt/home
 mount "$EFI"       /mnt/boot/efi
 mount "$HOME_PART" /mnt/home
 swapon "$SWAP"
-lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
+lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,UUID
+echoamarillo "--- Espacio disponible en puntos de montaje ---"
+df -h /mnt /mnt/boot/efi /mnt/home 2>/dev/null || df -h /mnt
 echoverde "Sistemas de ficheros montados"
 
 # ─────────────── Copiar squashfs ───────
@@ -284,8 +293,13 @@ echoverde "  OK: chroot funcional — $(chroot /mnt /bin/bash --version 2>&1 | h
 
 
 # ─────────────── Log de este script ────
-echoamarillo "Copiando log a $DISTROLOGS/1-SetupLiveCD.sh.log"
+echoamarillo "Copiando logs a $DISTROLOGS/"
 cp "$RAIZLOG/1-SetupLiveCD.sh.log" "$DISTROLOGS/1-SetupLiveCD.sh.log"
+# 0b-Github.sh escribe su log en el mismo RAIZLOG del live CD
+if [ -f "$RAIZLOG/0b-Github.sh.log" ]; then
+    cp "$RAIZLOG/0b-Github.sh.log" "$DISTROLOGS/0b-Github.sh.log"
+    echoverde "  0b-Github.sh.log copiado"
+fi
 
 # ─────────────── Pasar particiones al chroot ──
 # lsblk dentro del chroot ve los mount points del HOST (/mnt, /mnt/boot/efi...),

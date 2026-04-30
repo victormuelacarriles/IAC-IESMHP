@@ -205,6 +205,8 @@ grep -q "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub \
 info "Ejecutando update-grub..."
 update-grub
 ok "update-grub OK"
+info "Entradas 'linux' en grub.cfg (verificación root=):"
+grep -E '^\s*linux\s' /boot/grub/grub.cfg 2>/dev/null | sed 's/^/    /' || info "  (grub.cfg no encontrado aún)"
 
 # update-grub en chroot a veces genera root=/dev/XXX en lugar de root=UUID=...
 # porque grub-probe no puede resolver el UUID del dispositivo desde dentro del chroot.
@@ -269,8 +271,26 @@ mkdir -p /etc/initramfs-tools/conf.d
 echo "MODULES=most" > /etc/initramfs-tools/conf.d/modules
 echo "RESUME=none"  > /etc/initramfs-tools/conf.d/resume
 
-info "Ejecutando update-initramfs -u -k all (puede tardar 2-4 min)..."
-update-initramfs -u -k all
+# 0b-Github.sh enmascara update-initramfs → /bin/true en el live CD para que
+# apt no lo ejecute al instalar paquetes. El rsync de 1-SetupLiveCD.sh copia
+# esos symlinks al sistema instalado. Los eliminamos y reinstalamos el paquete
+# para recuperar el script real antes de generar el initramfs.
+_UPDATE_INITRAMFS_REAL=true
+for _masked in /usr/local/sbin/update-initramfs /usr/sbin/update-initramfs; do
+    if [ -L "$_masked" ] && readlink "$_masked" | grep -q "true"; then
+        rm -f "$_masked"
+        info "  Eliminada máscara: $_masked → /bin/true"
+        _UPDATE_INITRAMFS_REAL=false
+    fi
+done
+if [ "$_UPDATE_INITRAMFS_REAL" = "false" ]; then
+    info "Reinstalando initramfs-tools para recuperar update-initramfs real..."
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall initramfs-tools 2>&1 | sed 's/^/    /'
+    ok "update-initramfs restaurado: $(readlink -f $(command -v update-initramfs))"
+fi
+
+info "Ejecutando update-initramfs -u -k all -v (puede tardar 2-4 min)..."
+update-initramfs -u -k all -v
 ok "update-initramfs terminado"
 
 # Verificar que el initramfs se creó

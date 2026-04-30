@@ -9,7 +9,7 @@ echo "$SCRIPT3 (vs$VERSIONSCRIPT)"
 #Nos quedamos solo con el nombre del script sin ruta
 
 REPO="IAC-IESMHP"
-DISTRO="Mint"
+DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
 RAIZSCRIPTS="/opt/$REPO"
 RAIZLOG="/var/log/$REPO/$DISTRO"
@@ -23,6 +23,9 @@ VERLOGSCRIPT="/home/usuario/verLog.sh"
 
 #Fichero de log del servicio
 FLOG="$RAIZLOG/$SCRIPT3.log"
+mkdir -p "$RAIZLOG"
+# Todo stdout+stderr va al terminal (journal en systemd) Y al fichero de log
+exec > >(tee -a "$FLOG") 2>&1
 
 # Function to show a message to all graphical sessions
 mostrar_mensaje() {
@@ -50,22 +53,19 @@ mostrar_mensaje() {
 }
 
 echoverde() {
-    local MENSAJE_EN_GUI="${3:-'N'}"  
-    echo -e "\033[32m$1\033[0m" 
-    echo $1 >> $FLOG
+    local MENSAJE_EN_GUI="${3:-'N'}"
+    echo -e "\033[32m$1\033[0m"
     if [[ "$MENSAJE_EN_GUI" == "S" ]]; then
         mostrar_mensaje "$1"
     fi
 }
-echorojo()  {
+echorojo() {
     echo -e "\033[31m$1\033[0m"
-    echo $1 >> $FLOG 
     mostrar_mensaje "ERROR!!! :  $1"
 }
-echoamarillo() {  
-        local MENSAJE_EN_GUI="${3:-'N'}"  
-    echo -e "\033[33m$1\033[0m" 
-    echo $1 >> $FLOG
+echoamarillo() {
+    local MENSAJE_EN_GUI="${3:-'N'}"
+    echo -e "\033[33m$1\033[0m"
     if [[ "$MENSAJE_EN_GUI" == "S" ]]; then
         mostrar_mensaje "$1"
     fi
@@ -73,6 +73,14 @@ echoamarillo() {
 
 echo "tail -f $FLOG" > $VERLOGSCRIPT
 chmod +x $VERLOGSCRIPT
+
+echoverde "=== $SCRIPT3 (vs$VERSIONSCRIPT) iniciado: $(date) ==="
+echoverde "DISTRO=$DISTRO  versionDISTRO=$versionDISTRO  RAIZLOG=$RAIZLOG"
+echoverde "RAIZDISTRO=$RAIZDISTRO  RAIZANSIBLE=$RAIZANSIBLE"
+_IP_BOOT=$(hostname -I 2>/dev/null | awk '{print $1}') || _IP_BOOT="desconocida"
+_MAC_BOOT=$(ip link show 2>/dev/null | awk '/ether/ {print $2}' | head -1) || _MAC_BOOT="desconocida"
+echoverde "IP=$_IP_BOOT  MAC=$_MAC_BOOT  hostname=$(hostname)"
+echoverde "Kernel: $(uname -r)"
 
 echoverde "Lanzando mensaje en sesiones gráficas activas..." 
 mostrar_mensaje "Actualizando: (SSH no disponible)" 
@@ -83,13 +91,14 @@ echoverde "Ajustadando la hora del sistema..."
 timedatectl set-timezone Europe/Madrid
 timedatectl set-ntp true
 
-echoverde "Arreglando posibles problemas de configuración de paquetes..." 
-dpkg --configure -a >> $FLOG
+echoverde "Arreglando posibles problemas de configuración de paquetes..."
+dpkg --configure -a
 
-echoverde "Configuramos proxy de aula si procede..." 
+echoverde "Configuramos proxy de aula si procede..."
 # #Si el tercer octeto de la IP es 72=>estamos en aula IABD:
-# #                                32=>estamos en aula IABD
+# #                                32=>estamos en aula SMRD
 IP3=$(ip addr show $(ip route | grep default | awk '{print $5}') | grep 'inet ' | awk '{print $2}' | cut -d'.' -f3)
+echoverde "IP3=$IP3 (interfaz: $(ip route | grep default | awk '{print $5}'))"
 if [ "$IP3" == "72" ]; then
     echoverde "Estamos en aula IABD, configuramos proxy 10.0.72.140:3128"
     rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
@@ -116,62 +125,61 @@ elif [ "$IP3" == "32" ]; then
     echo 'Acquire::https::Proxy "DIRECT";'> /etc/apt/apt.conf.d/00aptproxy
 fi
 
-echoverde "Voy a actualizar lista de paquetes" 
-apt-get update --fix-missing >> $FLOG
-
-
-
+echoverde "Voy a actualizar lista de paquetes"
+apt-get update --fix-missing
 
 #Instalado SSH server
 echoverde "Instalando servidor SSH+ansible y limpiando..."
-apt-get install -y ssh ansible >> $FLOG
+apt-get install -y ssh ansible
 # Configurar SSH para permitir el acceso root
 sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 # Reiniciar el servicio SSH para aplicar los cambios
-service ssh restart >> $FLOG
+service ssh restart
 
 #Obtener la IP de la máquina
 IP=$(hostname -I | awk '{print $1}')
 MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
-mostrar_mensaje "Actualizando: SSH root/root usuario/usuario" 
+mostrar_mensaje "Actualizando: SSH root/root usuario/usuario"
 
 # Limpiar caché de paquetes
 echoverde "Limpiando caché de paquetes..."
-apt-get clean >> $FLOG
-apt-get autoremove -y >> $FLOG
+apt-get clean
+apt-get autoremove -y
 
-
-echoverde "Actualizando el sistema..." 
-apt-get update -y >> $FLOG
-apt-get full-upgrade -y >> $FLOG
-echoverde "Actualizado el sistema..." 
+echoverde "Actualizando el sistema..."
+apt-get update -y
+apt-get full-upgrade -y
+echoverde "Actualizado el sistema..."
 
 # Limpiar caché de paquetes
 echoverde "Limpiando caché de paquetes segunda vez..."
-apt-get clean >> $FLOG
-apt-get autoremove -y >> $FLOG
+apt-get clean
+apt-get autoremove -y
 
 
 echoverde "Recompilando configuración dconf (fondo de escritorio y ajustes del sistema)..."
 dconf update 2>/dev/null || true
 
-echoverde "Desactivando y borrando el servicio de actualización en primer arranque..." >> $FLOG
+echoverde "Desactivando y borrando el servicio de actualización en primer arranque..."
 systemctl disable 3-SetupPrimerInicio.service
 rm /etc/systemd/system/3-SetupPrimerInicio.service
 mv "$0" "$0.borrado" # Renombrar el script para evitar que se ejecute de nuevo
 
-mostrar_mensaje "Intentamos cambiar IP y nombre de nuevo" >> $FLOG
+mostrar_mensaje "Intentamos cambiar IP y nombre de nuevo"
 chmod +x "$SCRIPT4nombreip"
-/bin/bash "$SCRIPT4nombreip"  >> $FLOG 
+/bin/bash "$SCRIPT4nombreip"
 
-mostrar_mensaje "Intentamos configurar Ansible y SSH" >> $FLOG
+mostrar_mensaje "Intentamos configurar Ansible y SSH"
 chmod +x "$SCRIPT5ansible"
-/bin/bash "$SCRIPT5ansible"  >> $FLOG 
+/bin/bash "$SCRIPT5ansible"
 
-mostrar_mensaje "Intentamos finalizar autoconfiguración con Ansible" >> $FLOG
+mostrar_mensaje "Intentamos finalizar autoconfiguración con Ansible"
 set +e # desactivamos para que no se pare en errores de ansible
 cd "$RAIZANSIBLE/" || exit 1
-ansible-playbook -i localhost, --connection=local roles.yaml -e 'ansible_python_interpreter=/usr/bin/python3.12' --ssh-extra-args="-o StrictHostKeyChecking=no" >> $FLOG || echorojo "Error en la autoconfiguración ansible" && true
+ansible-playbook -i localhost, --connection=local roles.yaml \
+    -e 'ansible_python_interpreter=/usr/bin/python3.12' \
+    --ssh-extra-args="-o StrictHostKeyChecking=no" \
+    || echorojo "Error en la autoconfiguración ansible"
 
 #Reinciando en 30 segundos y avisando a los usuarios
 mostrar_mensaje "Sistema actualizado. SSH root/root"
@@ -184,8 +192,8 @@ if [ -f "$SCRIPT4" ]; then
     bash "$SCRIPT4" 2>&1 | tee -a "$FLOG" || true
 fi
 
-echoverde "Reiniciando el sistema en 30 segundos..." >> $FLOG
+echoverde "=== $SCRIPT3 finalizado: $(date) ==="
+echoverde "Reiniciando el sistema en 30 segundos..."
 sleep 30
-rm $VERLOGSCRIPT
-echo "Reiniciando el sistema..." >> $FLOG
+rm -f "$VERLOGSCRIPT"
 reboot now
