@@ -225,7 +225,7 @@ else
 fi
 
 echoamarillo "Copiando sistema de archivos a /mnt ..."
-rsync -av --exclude=/etc/fstab --exclude=/etc/machine-id "$SRC/" /mnt/
+rsync -a --info=progress2 --exclude=/etc/fstab --exclude=/etc/machine-id "$SRC/" /mnt/ >/dev/tty
 echoverde "Sistema de archivos copiado desde $SRC"
 if [ -f /mnt/usr/share/backgrounds/iac-iesmhp.png ]; then
     echoverde "  Fondo de escritorio copiado: /usr/share/backgrounds/iac-iesmhp.png (OK)"
