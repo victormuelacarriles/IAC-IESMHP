@@ -120,7 +120,7 @@ else
     while IFS= read -r line; do
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
         [[ -z "${line// }" ]] && continue
-        UUID=$(echo "$line" | grep -oP 'UUID=\K[a-f0-9-]+')
+        UUID=$(echo "$line" | grep -oP 'UUID=\K[a-fA-F0-9-]+')
         MP=$(echo "$line" | awk '{print $2}')
         [ -z "$UUID" ] && continue
         DEV=$(blkid -U "$UUID" 2>/dev/null)
