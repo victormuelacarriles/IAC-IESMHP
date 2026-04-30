@@ -1,7 +1,6 @@
 #!/bin/bash
-#"set -e" significa que el script se detendrá si ocurre un error
 set -e
-VERSIONSCRIPT="22.1-20260126-09:55"       #Versión del script
+VERSIONSCRIPT="22.2-20260430"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -10,53 +9,67 @@ RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
 RAIZLOG="/var/log/$REPO/$DISTRO"
 SCRIPT3="3-SetupPrimerInicio.sh"
 
-# Funciones de colores
-echoverde() {
-    echo -e "\033[32m$1\033[0m" 
-}
-echorojo()  {
-      echo -e "\033[31m$1\033[0m" 
-}  
-echoamarillo() {  
-    echo -e "\033[33m$1\033[0m" 
-}
+# ─── Logging propio ───────────────────────────────────────────────────────────
+# Todo stdout/stderr va al terminal (via tee del padre) Y a este log.
+# Además se genera un fichero .steps con una línea por paso, para diagnóstico rápido.
+mkdir -p "$RAIZLOG"
+LOG2="$RAIZLOG/2-SetupSOdesdeLiveCD.sh.log"
+STEPS="$RAIZLOG/2-SetupSOdesdeLiveCD.steps"
+exec > >(tee -a "$LOG2") 2>&1
+: > "$STEPS"   # vaciar/crear fichero de pasos
 
-echoverde "$0 (vs$VERSIONSCRIPT)"
+_PASO=0
+paso() {
+    _PASO=$((_PASO + 1))
+    local ts; ts=$(date '+%Y-%m-%d %H:%M:%S')
+    echo ""
+    echo "════════════════════════════════════════════════════════════"
+    echo "  PASO ${_PASO}: $*"
+    echo "  ${ts}"
+    echo "════════════════════════════════════════════════════════════"
+    echo "[PASO${_PASO}][${ts}] INICIO: $*" >> "$STEPS"
+}
+ok()   { echo -e "  \033[32m[OK ]\033[0m  $(date '+%H:%M:%S') $*";  echo "  [OK ] $(date '+%H:%M:%S') $*" >> "$STEPS"; }
+err()  { echo -e "  \033[31m[ERR]\033[0m  $(date '+%H:%M:%S') $*" >&2; echo "  [ERR] $(date '+%H:%M:%S') $*" >> "$STEPS"; }
+info() { echo -e "  \033[36m[INF]\033[0m  $(date '+%H:%M:%S') $*";  echo "  [INF] $(date '+%H:%M:%S') $*" >> "$STEPS"; }
 
-#Idioma y teclado español
-echoamarillo "Configurando el entorno gráfico en español..."
+# Funciones de colores (compatibilidad con código existente)
+echoverde()    { echo -e "\033[32m$1\033[0m"; }
+echorojo()     { echo -e "\033[31m$1\033[0m"; }
+echoamarillo() { echo -e "\033[33m$1\033[0m"; }
+
+paso "Inicio — $0 (vs$VERSIONSCRIPT) — chroot $(hostname)"
+info "RAIZLOG=$RAIZLOG  RAIZDISTRO=$RAIZDISTRO"
+info "Log completo : $LOG2"
+info "Fichero pasos: $STEPS"
+
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Idioma y teclado español"
+# ─────────────────────────────────────────────────────────────────────────────
 sed -i 's/# es_ES.UTF-8/es_ES.UTF-8/g' /etc/locale.gen
 locale-gen es_ES.UTF-8
 
-# Set system-wide locale defaults
-echo "LANG=es_ES.UTF-8" > /etc/default/locale
-echo "LC_ALL=es_ES.UTF-8" >> /etc/default/locale
-echo "LANGUAGE=es_ES" >> /etc/default/locale
+printf 'LANG=es_ES.UTF-8\nLC_ALL=es_ES.UTF-8\nLANGUAGE=es_ES\n' > /etc/default/locale
 
-# Configure keyboard for Spanish layout
-echo "XKBLAYOUT=es" > /etc/default/keyboard
-echo "XKBMODEL=pc105" >> /etc/default/keyboard
-echo "XKBVARIANT=" >> /etc/default/keyboard
-echo "XKBOPTIONS=" >> /etc/default/keyboard
+printf 'XKBLAYOUT=es\nXKBMODEL=pc105\nXKBVARIANT=\nXKBOPTIONS=\n' > /etc/default/keyboard
 
-# Configure Cinnamon desktop environment for Spanish
 mkdir -p /etc/dconf/db/local.d
-cat > /etc/dconf/db/local.d/00-language << EOF
+cat > /etc/dconf/db/local.d/00-language << 'LANGEOF'
 [org/gnome/desktop/input-sources]
 sources=[('xkb', 'es')]
 xkb-options=[]
 
 [org/gnome/system/locale]
 region='es_ES.UTF-8'
-EOF
+LANGEOF
+ok "Idioma y teclado configurados"
 
-# Fondo de escritorio para el sistema instalado
-echoamarillo "Configurando fondo de escritorio..."
-# Asegurar perfil dconf
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Fondo de escritorio (dconf)"
+# ─────────────────────────────────────────────────────────────────────────────
 mkdir -p /etc/dconf/profile
 [ -f /etc/dconf/profile/user ] || printf 'user-db:user\nsystem-db:local\n' > /etc/dconf/profile/user
-# Crear override (el fichero ya viene del squashfs, pero lo escribimos explícitamente
-# para no depender del rsync)
+
 mkdir -p /etc/dconf/db/local.d
 cat > /etc/dconf/db/local.d/01-wallpaper << 'WALLEOF'
 [org/gnome/desktop/background]
@@ -65,174 +78,232 @@ picture-uri-dark='file:///usr/share/backgrounds/iac-iesmhp.png'
 picture-options='zoom'
 WALLEOF
 
-# Update dconf
-# dconf es un sistema de configuración basado en claves utilizado en GNOME y otras aplicaciones.
-# El comando 'dconf update' actualiza la base de datos del sistema con los cambios realizados en la configuración.
-# Si el comando falla durante la ejecución del script (por ejemplo, porque no hay un entorno gráfico activo),
-# se muestra un mensaje indicando que los cambios de configuración se aplicarán en el primer inicio de sesión.
-# Esto es común cuando se configura un sistema desde un LiveCD o en entornos de preinstalación.
-dconf update 2>/dev/null || echo "dconf se aplicará en el primer inicio"
+# En chroot no hay entorno gráfico; dconf update puede fallar — se aplicará en el primer login.
+dconf update 2>/dev/null && ok "dconf actualizado" || info "dconf se aplicará en el primer inicio (normal en chroot)"
 
-echo && echo && echoverde "....Configurado entorno en español y fondo de escritorio"
-
-# Configure fstab
-
-echoamarillo "Configurando /etc/fstab..."
-# lsblk dentro del chroot ve mount points del HOST (/mnt, /mnt/boot/efi...),
-# no los del sistema instalado. Las particiones se leen del fichero creado por 1-SetupLiveCD.sh.
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Configurar /etc/fstab"
+# ─────────────────────────────────────────────────────────────────────────────
+# lsblk dentro del chroot ve los mount points del HOST (/mnt, /mnt/boot/efi…),
+# no los del sistema instalado. Las particiones vienen del fichero creado por 1-SetupLiveCD.sh.
 PARTS_FILE=/tmp/.iac-partitions.env
 if [ -f "$PARTS_FILE" ]; then
+    # shellcheck disable=SC1090
     source "$PARTS_FILE"
     EFI="${PART_EFI##*/}"
     SWAP="${PART_SWAP##*/}"
     ROOT="${PART_ROOT##*/}"
-    HOME="${PART_HOME##*/}"
-    echoverde "Particiones leídas del fichero: EFI=$EFI SWAP=$SWAP ROOT=$ROOT HOME=$HOME"
+    HOME_DEV="${PART_HOME##*/}"
+    ok "Particiones leídas: EFI=$EFI  SWAP=$SWAP  ROOT=$ROOT  HOME=$HOME_DEV"
 else
-    echorojo "AVISO: $PARTS_FILE no encontrado — detección automática puede fallar en chroot"
-    EFI=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/boot/efi" {print $1}')
-    SWAP=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "[SWAP]" {print $1}')
-    ROOT=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt" {print $1}')
-    HOME=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/home" {print $1}')
+    err "AVISO: $PARTS_FILE no encontrado — detección automática (puede fallar en chroot)"
+    EFI=$(lsblk  -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/boot/efi" {print $1}')
+    SWAP=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "[SWAP]"        {print $1}')
+    ROOT=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt"          {print $1}')
+    HOME_DEV=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/home" {print $1}')
 fi
-echo "EFI= $EFI SWAP= $SWAP ROOT= $ROOT HOME= $HOME"
-[ -n "$ROOT" ] || { echorojo "ERROR: no se pudo determinar la partición root"; exit 1; }
+
+info "EFI=/dev/$EFI  SWAP=/dev/$SWAP  ROOT=/dev/$ROOT  HOME=/dev/$HOME_DEV"
+[ -n "$ROOT" ] || { err "ERROR: no se pudo determinar la partición root"; exit 1; }
+
+UUID_ROOT=$(blkid -s UUID -o value "/dev/$ROOT")
+UUID_EFI=$(blkid  -s UUID -o value "/dev/$EFI")
+UUID_HOME=$(blkid -s UUID -o value "/dev/$HOME_DEV")
+UUID_SWAP=$(blkid -s UUID -o value "/dev/$SWAP")
+info "UUID ROOT=$UUID_ROOT  EFI=$UUID_EFI  HOME=$UUID_HOME  SWAP=$UUID_SWAP"
 
 cat > /etc/fstab << EOF
-# /etc/fstab
-UUID=$(blkid -s UUID -o value "/dev/$ROOT") / ext4 defaults 0 1
-UUID=$(blkid -s UUID -o value "/dev/$EFI") /boot/efi vfat umask=0077 0 1
-UUID=$(blkid -s UUID -o value "/dev/$HOME") /home ext4 defaults 0 2
-UUID=$(blkid -s UUID -o value "/dev/$SWAP") none swap sw 0 0
+# /etc/fstab — generado por $0 el $(date)
+UUID=$UUID_ROOT  /          ext4  defaults  0 1
+UUID=$UUID_EFI   /boot/efi  vfat  umask=0077  0 1
+UUID=$UUID_HOME  /home      ext4  defaults  0 2
+UUID=$UUID_SWAP  none       swap  sw          0 0
 EOF
 cat /etc/fstab
-echo && echo && echoverde "...Configurado /etc/fstab"  
+ok "fstab generado con UUIDs"
 
-#Para si no reponde un ping a 1.1.1.1, pausar la instalación, y vuelve a comprobar en bucle
-while ! ping -c 1 1.1.1.1; do
-    echo "No se puede acceder a Internet. Pausando la instalación."
-    read -p "Presione Enter para continuar..."
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Verificar conectividad a Internet"
+# ─────────────────────────────────────────────────────────────────────────────
+while ! ping -c 1 -W 3 1.1.1.1 &>/dev/null; do
+    echoamarillo "Sin Internet. Reintentando en 10 s… (Ctrl+C para abortar)"
+    sleep 10
 done
+ok "Internet disponible"
 
-
-# Remove live-specific packages and configurations
-#echoamarillo "Eliminando paquetes innecesarios..."
-#apt-get update
-#apt-get remove -y --purge casper ubiquity ubiquity-frontend-* 
-#echoverde "...Eliminados paquetes innecesarios..."  
-
-echoamarillo "Averiguando MAC y autorizando equipos de gestión por SSH..."
+# ─────────────────────────────────────────────────────────────────────────────
+paso "MAC, hostname y claves SSH autorizadas"
+# ─────────────────────────────────────────────────────────────────────────────
 MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
+info "MAC detectada: $MAC"
 mkdir -p /root/.ssh
 LOCAL_MACS="$RAIZSCRIPTS/macs.csv"
 LOCAL_AUTORIZADOS="$RAIZSCRIPTS/Autorizados.txt"
 cp "$LOCAL_AUTORIZADOS" /root/.ssh/authorized_keys
-echoverde "...Leida Mac y autorizados equipos de gestión por SSH"
+ok "authorized_keys copiado"
 
-# Compruebo si la MAC está en el repositorio: si no está, se queda el nombre del equipo por defecto "mint"
 EQUIPOENMACS=$DISTRO
-if [ ! -f $LOCAL_MACS ]; then
-    echorojo "No se ha encontrado el archivo de MACs: $LOCAL_MACS"
-    echo "Por favor, compruebe la conexión a Internet y que el archivo está disponible en el repositorio."
+if [ ! -f "$LOCAL_MACS" ]; then
+    err "No se encontró $LOCAL_MACS — el equipo quedará con nombre '$DISTRO'"
 else
-    # Compruebo si la MAC está en el repositorio
     if ! grep -q -i "$MAC" "$LOCAL_MACS"; then
-        echorojo "La MAC $MAC no se encuentra en el repositorio."
-        echo            "Por favor, compruebe la conexión a Internet y que la MAC está registrada en el repositorio."
+        err "MAC $MAC no encontrada en macs.csv — nombre por defecto '$DISTRO'"
     else
-        INFO_MACS=$(cat $LOCAL_MACS | grep -i $MAC )
-        #Sustituyo el contenido de $LOCAL_MACS por la información de la MAC
-        echo "Información de la MAC: $INFO_MACS"
-        echo "$INFO_MACS" > $LOCAL_MACS
-        #Si se encuentra la MAC, extraigo el nombre del equipo
-        EQUIPOENMACS=$(echo $INFO_MACS | cut -d',' -f2 | xargs)
+        INFO_MACS=$(grep -i "$MAC" "$LOCAL_MACS")
+        info "Entrada en macs.csv: $INFO_MACS"
+        echo "$INFO_MACS" > "$LOCAL_MACS"
+        EQUIPOENMACS=$(echo "$INFO_MACS" | cut -d',' -f2 | xargs)
     fi
 fi
 
 EQUIPOACTUAL=$(hostname)
 if [ "$EQUIPOACTUAL" != "$EQUIPOENMACS" ]; then
-    echo "Equipo identificado: '$EQUIPOENMACS'  Nombre actual del equipo: '$EQUIPOACTUAL'"    
-    #Cambio el nombre del equipo a $EQUIPOENMACS
-    echo "Renombrando el equipo a: $EQUIPOENMACS"
     echo "$EQUIPOENMACS" > /etc/hostname
-    echo "127.0.0.1 localhost" > /etc/hosts
-    echo "127.0.1.1 $EQUIPOENMACS" >> /etc/hosts
-    hostnamectl set-hostname "$EQUIPOENMACS"
+    printf '127.0.0.1 localhost\n127.0.1.1 %s\n' "$EQUIPOENMACS" > /etc/hosts
+    hostnamectl set-hostname "$EQUIPOENMACS" 2>/dev/null || true
+    ok "Hostname cambiado: $EQUIPOACTUAL → $EQUIPOENMACS"
 else
-    echo "El nombre del equipo ya es correcto: '$EQUIPOENMACS'" 
+    ok "Hostname correcto: $EQUIPOENMACS"
 fi
 
-
-# Set up users
-echoverde "Configurando usuarios..."
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Usuarios (root y usuario)"
+# ─────────────────────────────────────────────────────────────────────────────
 echo "root:root" | chpasswd
-useradd -m -s /bin/bash usuario
+ok "Contraseña root establecida"
+
+if id usuario &>/dev/null; then
+    info "Usuario 'usuario' ya existe"
+else
+    useradd -m -s /bin/bash usuario
+    ok "Usuario 'usuario' creado"
+fi
 echo "usuario:usuario" | chpasswd
-adduser usuario sudo
-# si existe /root/.ssh/authorized_keys, lo copio a /home/usuario/.ssh/authorized_keys
+adduser usuario sudo 2>/dev/null || usermod -aG sudo usuario
+ok "Usuario 'usuario' en grupo sudo"
+
 if [ -f /root/.ssh/authorized_keys ]; then
     mkdir -p /home/usuario/.ssh
     cp /root/.ssh/authorized_keys /home/usuario/.ssh/
     chown usuario:usuario /home/usuario/.ssh/authorized_keys
     chmod 600 /home/usuario/.ssh/authorized_keys
+    ok "authorized_keys copiado a /home/usuario/.ssh/"
 fi
-echo && echo && echoverde "...Configurado nombre de host y usuarios" 
 
-# Install and configure bootloader
-echoverde "Instalando y configurando el gestor de arranque..."
-################################################################apt-get install -y grub-efi-amd64
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=$DISTRO --recheck --no-floppy
+# ─────────────────────────────────────────────────────────────────────────────
+paso "GRUB (grub-install + update-grub)"
+# ─────────────────────────────────────────────────────────────────────────────
+info "Instalando GRUB EFI en /boot/efi  (bootloader-id=$DISTRO)"
+grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+             --bootloader-id="$DISTRO" --recheck --no-floppy
+ok "grub-install OK"
 
-sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash "/' /etc/default/grub
-grep -q "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub || echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"' >> /etc/default/grub
+sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' /etc/default/grub
+grep -q "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub \
+    || echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"' >> /etc/default/grub
 
+info "Ejecutando update-grub..."
 update-grub
-echo && echo && echoverde "...Instalado y configurado el gestor de arranque ( sin nomodeset! si hubiera problemas gráficos, añadirlo manualmente en /etc/default/grub)" 
+ok "update-grub OK"
 
-# Generate new machine-id
-echo "Generando nuevo machine-id..."
+# Verificar que grub.cfg usa UUID (más robusto que nombre de dispositivo)
+if grep -q 'root=UUID=' /boot/grub/grub.cfg 2>/dev/null; then
+    ok "grub.cfg usa UUID para root — correcto"
+else
+    err "grub.cfg usa nombre de dispositivo para root (no UUID) — puede fallar si el orden de discos cambia"
+    info "Líneas 'linux' en grub.cfg:"
+    grep '^\s*linux\b' /boot/grub/grub.cfg | head -5 | sed 's/^/    /'
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Machine-ID"
+# ─────────────────────────────────────────────────────────────────────────────
 rm -f /etc/machine-id
 dbus-uuidgen > /etc/machine-id
 ln -sf /etc/machine-id /var/lib/dbus/machine-id
-echo && echo && echo "..Generada  machine-id" 
+ok "machine-id generado: $(cat /etc/machine-id)"
 
-# Update initramfs
-echoverde "Eliminando casper (paquete live que bloquea la generación de initramfs)..."
-# casper tiene hooks de initramfs-tools para entorno live; si está instalado,
-# update-initramfs los ejecuta, fallan silenciosamente y el initramfs nunca se crea.
-# man-db y update-initramfs se enmascaran para evitar bloqueos en el chroot.
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Eliminar casper (paquete live) y generar initramfs"
+# ─────────────────────────────────────────────────────────────────────────────
+# casper tiene hooks en /etc/initramfs-tools/hooks/ diseñados para Live CD.
+# Si está instalado, update-initramfs los ejecuta, fallan silenciosamente y el
+# initramfs no se genera → el sistema no arranca.
+#
+# Problema adicional: el script postrm de casper llama a update-initramfs, lo que
+# bloquea el chroot durante 2-4 minutos. Para evitarlo:
+#   1. Se enmascaran man-db y update-initramfs ANTES de borrar casper.
+#   2. Se restaura update-initramfs para que nuestra llamada posterior funcione.
+
+info "Enmascarando man-db y update-initramfs para evitar bloqueos durante el apt..."
 rm -f /var/lib/man-db/auto-update
 ln -sf /bin/true /usr/bin/mandb
-apt-get remove --purge -y casper 2>/dev/null || true
-echoverde "Actualizando initramfs (lo que hace que el sistema arranque)..."
-# MODULES=most: en chroot la detección de módulos falla; sin esto el driver NVMe
-# puede no incluirse y el kernel no encuentra el disco → kernel panic al arrancar.
+
+# Guardar el binario real antes de enmascarar
+if [ -f /usr/sbin/update-initramfs ] && [ ! -L /usr/sbin/update-initramfs ]; then
+    cp -a /usr/sbin/update-initramfs /usr/sbin/update-initramfs.real
+    info "update-initramfs original guardado en update-initramfs.real"
+else
+    info "update-initramfs ya era un symlink o no existía — no se guarda copia"
+fi
+ln -sf /bin/true /usr/sbin/update-initramfs
+info "update-initramfs enmascarado → /bin/true"
+
+info "Eliminando casper..."
+DEBIAN_FRONTEND=noninteractive apt-get remove -y casper 2>&1 || true
+ok "casper eliminado"
+
+info "Restaurando update-initramfs real..."
+if [ -f /usr/sbin/update-initramfs.real ]; then
+    mv /usr/sbin/update-initramfs.real /usr/sbin/update-initramfs
+    ok "update-initramfs restaurado"
+else
+    # Si no tenemos copia, reinstalar el paquete que lo provee
+    info "No hay copia guardada — reinstalando initramfs-tools para recuperar el binario..."
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall initramfs-tools 2>&1
+    ok "initramfs-tools reinstalado"
+fi
+
+info "Verificando que update-initramfs es el binario real (no /bin/true)..."
+if grep -q "true" /usr/sbin/update-initramfs 2>/dev/null; then
+    err "update-initramfs sigue siendo un no-op — el initramfs NO se generará"
+    exit 1
+fi
+ok "update-initramfs apunta al binario real"
+
+info "Configurando MODULES=most y RESUME=none..."
 mkdir -p /etc/initramfs-tools/conf.d
-echo "MODULES=most"  > /etc/initramfs-tools/conf.d/modules
-echo "RESUME=none"   > /etc/initramfs-tools/conf.d/resume
+echo "MODULES=most" > /etc/initramfs-tools/conf.d/modules
+echo "RESUME=none"  > /etc/initramfs-tools/conf.d/resume
+
+info "Ejecutando update-initramfs -u -k all (puede tardar 2-4 min)..."
 update-initramfs -u -k all
-echo && echo && echoverde "...Actualizado initramfs" 
+ok "update-initramfs terminado"
 
-#Paso 3 : servicio de actualización en primer arranque
-#Compruebo que existe el script de actualización en primer arranque
+# Verificar que el initramfs se creó
+KERNEL=$(uname -r 2>/dev/null || ls /lib/modules/ | tail -1)
+if [ -f "/boot/initrd.img-${KERNEL}" ]; then
+    INITRAMFS_SIZE=$(du -sh "/boot/initrd.img-${KERNEL}" | cut -f1)
+    ok "Initramfs generado: /boot/initrd.img-${KERNEL} (${INITRAMFS_SIZE})"
+else
+    err "Initramfs NO encontrado en /boot/initrd.img-${KERNEL} — el sistema no arrancará"
+    info "Ficheros en /boot/:"
+    ls -lh /boot/ | sed 's/^/    /'
+    exit 1
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Servicio 3-SetupPrimerInicio (primer arranque)"
+# ─────────────────────────────────────────────────────────────────────────────
 if [ ! -f "$RAIZDISTRO/$SCRIPT3" ]; then
-    echorojo "No se encontró el script de actualización en primer arranque: $RAIZDISTRO/$SCRIPT3"
-    sleep 10 && exit 1
-fi  
-#------------------------------------------------------------------------------------------
-#------------------------------------------------------------------------------------------
-#------------------------------------------------------------------------------------------
-# Creo un servicio para actualizar el sistema en el primer arranque
-echo "Configurando servicio de actualización en primer arranque..."
+    err "No se encontró $RAIZDISTRO/$SCRIPT3"
+    exit 1
+fi
 chmod +x "$RAIZDISTRO/$SCRIPT3"
-#------------------------------------------------------------------------------------------
-#------------------------------------------------------------------------------------------
-#------------------------------------------------------------------------------------------
 
-
-# Creo una variable con el contenido del servicio
-CONTENIDOSERVICIO="[Unit]
-Description=3-SetupPrimerInicio
+cat > /etc/systemd/system/3-SetupPrimerInicio.service << EOF
+[Unit]
+Description=IAC-IESMHP Configuracion primer arranque
 DefaultDependencies=no
 Wants=network-online.target
 After=network-online.target graphical.target
@@ -241,30 +312,34 @@ Conflicts=shutdown.target
 [Service]
 Type=oneshot
 Environment=LC_ALL=es_ES.UTF-8
-ExecStart=sudo /bin/bash $RAIZDISTRO/$SCRIPT3
+ExecStart=/bin/bash $RAIZDISTRO/$SCRIPT3
 StandardOutput=append:$RAIZLOG/$SCRIPT3.log
 StandardError=append:$RAIZLOG/$SCRIPT3.log
 TimeoutSec=0
 RemainAfterExit=yes
 
 [Install]
-WantedBy=multi-user.target"
+WantedBy=multi-user.target
+EOF
 
-#Vuelco la variable $CONTENIDOSERVICIO en el fichero /etc/systemd/system/3-SetupPrimerInicio.service
-echo "$CONTENIDOSERVICIO" > /etc/systemd/system/3-SetupPrimerInicio.service
-# Habilito el servicio
 systemctl enable 3-SetupPrimerInicio.service
-echo && echo && echoverde "...Servicio de actualización en primer arranque configurado."
-echo $CONTENIDOSERVICIO
+ok "Servicio 3-SetupPrimerInicio habilitado"
+info "ExecStart=/bin/bash $RAIZDISTRO/$SCRIPT3"
+info "Log primer arranque: $RAIZLOG/$SCRIPT3.log"
 
-# ─────────────── Comprobaciones antes del reboot ────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Comprobaciones finales (4-Comprobaciones.sh)"
+# ─────────────────────────────────────────────────────────────────────────────
 SCRIPT4="$RAIZDISTRO/4-Comprobaciones.sh"
 if [ -f "$SCRIPT4" ]; then
-    echoamarillo "Ejecutando comprobaciones del sistema instalado..."
     chmod +x "$SCRIPT4"
-    bash "$SCRIPT4" || true   # no detener el script aunque haya errores detectados
+    bash "$SCRIPT4" || true   # diagnóstico no bloquea el proceso
 else
-    echoamarillo "4-Comprobaciones.sh no encontrado en $SCRIPT4 — omitiendo diagnóstico"
+    info "4-Comprobaciones.sh no encontrado en $SCRIPT4 — omitiendo diagnóstico"
 fi
 
-echo && echo "Correcto"
+paso "FIN — 2-SetupSOdesdeLiveCD.sh completado"
+info "Log completo : $LOG2"
+info "Resumen pasos: $STEPS"
+echo ""
+echo "Correcto"
