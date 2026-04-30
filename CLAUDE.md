@@ -4,137 +4,120 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Propósito del proyecto
 
-**IAC-IESMHP** (Infraestructura como Código — IES Miguel Herrero, Torrelavega): automatización completa del despliegue y configuración de equipos Linux en las aulas del centro. Cubre dos distribuciones:
+Automatización del despliegue de Ubuntu 26.04 Desktop en equipos del IES Miguel Herrero (Torrelavega). El flujo genera una ISO personalizada de Ubuntu, que al arrancar particiona los discos, copia el sistema operativo e instala GRUB sin intervención manual.
 
-| Distribución   | Carpeta    | Estado        |
-|----------------|------------|---------------|
-| Linux Mint 22.x Cinnamon | `Mint/`  | Producción    |
-| Ubuntu 26.04 Desktop     | `Ubuntu/` | Producción    |
-
-El flujo general en ambos casos es idéntico: se genera una ISO personalizada → la ISO arranca en el equipo → particiona los discos e instala el SO sin intervención → al primer arranque se instala Ansible y se ejecutan los playbooks.
+**Metodología de trabajo**: el usuario arranca la ISO en una máquina virtual (VMware), recoge los logs y los pega aquí para diagnosticar fallos y optimizar el proceso.
 
 ---
 
-## Estructura del repositorio
+## Cadena de ejecución completa
 
 ```
-IAC-IESMHP/
-├── macs.csv            ← Mapeo MAC → hostname → octeto IP final (compartido por Mint y Ubuntu)
-├── Autorizados.txt     ← Claves SSH públicas autorizadas en root y usuario
-│
-├── Mint/
-│   ├── CLAUDE.md       ← Documentación detallada de Mint
-│   ├── ControlIABD/    ← Scripts Wake-on-LAN para aula IABD
-│   ├── ControlSMRD/    ← Scripts Wake-on-LAN para aula SMRD
-│   ├── ISO/
-│   │   ├── 22.1/       ← Scripts completos para Mint 22.1
-│   │   └── 22.3/       ← Solo utiles/ por ahora (pendiente 0a-CreaISO.sh)
-│   ├── ansible/        ← Playbooks y 13 roles Ansible
-│   └── utiles/         ← Versión más actualizada de Auto-Ansible.sh, NombreIP.sh, etc.
-│
-└── Ubuntu/
-    ├── CLAUDE.md       ← Documentación detallada de Ubuntu
-    └── ISO/
-        └── 26.04/      ← Scripts completos para Ubuntu 26.04
-```
-
-**Para documentación detallada de cada distribución, leer su propio `CLAUDE.md`.**
-
----
-
-## Datos compartidos entre distribuciones
-
-### `macs.csv` — Registro de equipos
-Formato: `MAC, Equipo, IPf, Comentario`
-- `MAC`: dirección MAC de la interfaz de red principal.
-- `Equipo`: hostname asignado (prefijo-número, ej: `IABD-01`). El `-00` se reserva para el profesor.
-- `IPf`: último octeto de la IP (la subred se detecta por aula).
-- Líneas con `#` son comentarios.
-
-Aulas registradas:
-- **IABD** (CEIABD): IABD-00 a IABD-20 → subred `10.0.72.x`
-- **SMRD** (Distancia): SMRD-00 a SMRD-18 → subred `10.0.32.x`
-- VMs de prueba: VM-01, VM-02
-
-### `Autorizados.txt` — Claves SSH
-Claves SSH públicas que se copian a `/root/.ssh/authorized_keys` y `/home/usuario/.ssh/authorized_keys` durante la instalación. Permite acceso sin contraseña desde los equipos de gestión.
-
----
-
-## Red y proxies
-
-| Aula    | Subred         | Proxy apt                |
-|---------|----------------|--------------------------|
-| IABD    | 10.0.72.0/24   | 10.0.72.140:3128         |
-| SMRD    | 10.0.32.0/24   | 10.0.32.119:3128         |
-
-La detección del aula se hace por el tercer octeto de la IP en tiempo de ejecución.
-
----
-
-## Cadena de ejecución (resumen)
-
-### Mint
-```
-0a-CreaISO.sh → ISO bootea → setup.desktop (autostart Cinnamon) → 0b-Github.sh
-  → 1-SetupLiveCD.sh → 2-SetupSOdesdeLiveCD.sh (chroot) → reboot
-  → 3-SetupPrimerInicio.service (full-upgrade + Ansible)
-```
-
-### Ubuntu 26.04
-```
-0a-CreaISO.sh → ISO bootea → iac-iesmhp-launch.sh (autostart GNOME) → iac-iesmhp-run.sh
-  → 0b-Github.sh → 1-SetupLiveCD.sh → 2-SetupSOdesdeLiveCD.sh (chroot) → reboot
-  → 3-SetupPrimerInicio.service → 4-Comprobaciones.sh
+0a-CreaISO.sh          ← Se ejecuta en el equipo de desarrollo (Linux), genera la ISO
+  └── [ISO bootea]
+       └── iac-iesmhp-launch.sh    ← autostart GNOME del Live CD, abre terminal
+            └── iac-iesmhp-run.sh  ← instalado en el squashfs por 0a-CreaISO.sh
+                 └── 0b-Github.sh  ← clona el repo IAC-IESMHP desde GitHub
+                      └── 1-SetupLiveCD.sh         ← particiona discos, monta squashfs capas, prepara chroot
+                           └── 2-SetupSOdesdeLiveCD.sh  ← corre DENTRO del chroot, configura el SO instalado
+                                └── [reboot → primer arranque]
+                                     └── 3-SetupPrimerInicio.service  ← systemd oneshot, configura hostname/IP/Ansible
+                                          └── 4-Comprobaciones.sh     ← diagnóstico (llamado desde 2 y 3)
 ```
 
 ---
 
-## Diferencias clave entre Mint y Ubuntu
+## Comandos clave
 
-| Aspecto                   | Mint 22.x                             | Ubuntu 26.04                          |
-|---------------------------|---------------------------------------|---------------------------------------|
-| squashfs                  | Único (`filesystem.squashfs`)         | Multicapa (minimal + standard + live) |
-| Arranque                  | BIOS + UEFI (isolinux + grub/efi)     | Solo UEFI                             |
-| Autostart                 | `setup.desktop` en `/home/mint/`      | `iac-iesmhp-setup.desktop` en skel + home ubuntu |
-| snapd                     | No relevante                          | Enmascarado (`/dev/null`) para evitar bootstrap snap y reducir arranque de 3 min a 10 s |
-| Comprobaciones            | No hay script dedicado                | `4-Comprobaciones.sh` (diagnóstico)   |
-| Versión GRUB bootloader-id| `MINT`                                | `ubuntu` (genera update-grub)         |
-| Ansible                   | En `Mint/ansible/` con 13 roles       | No incluido aún en Ubuntu             |
-| Control de aulas (WoL)    | `ControlIABD/`, `ControlSMRD/`        | No incluido                           |
-
----
-
-## Comandos más frecuentes
-
-### Actualizar el repo en los equipos instalados
+### Generar la ISO (en equipo Linux con Ubuntu)
 ```bash
-cd /opt/IAC-IESMHP && git reset --hard origin/main && git pull
+# Instalar dependencias
+sudo apt install xorriso mtools squashfs-tools gdisk -y
+
+# Actualizar el repo y generar la ISO
+cd ~/xIAC-IESMHP/Ubuntu/ISO/26.04
+git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh
+sudo ./0a-CreaISO.sh ~/Descargas/ubuntu-26.04-desktop-amd64.iso 0b-Github.sh ~/Descargas/mi-ubuntu.iso
+# Argumento 4 opcional: ruta a un PNG personalizado como fondo (por defecto FondoIES-Ubuntu-Gris.png)
 ```
 
-### Ping a todos los equipos de un aula
+### Ver logs en el equipo instalado
 ```bash
-ansible all -i /opt/IAC-IESMHP/Mint/ansible/equiposIABD.ini -m ping
-```
-
-### Ejecutar un rol Ansible en un equipo concreto
-```bash
-cd /opt/IAC-IESMHP/Mint/ansible
-ansible-playbook -i ./equiposIABD.ini roles.yaml -l IABD-17
-```
-
-### Encender/apagar aulas (desde equipo con `wakeonlan`)
-```bash
-bash /opt/IAC-IESMHP/Mint/ControlIABD/EnciendeAula.sh
-bash /opt/IAC-IESMHP/Mint/ControlSMRD/EnciendeSMRD.sh
+ls /var/log/IAC-IESMHP/Ubuntu/
+# 1-SetupLiveCD.sh.log         ← particionado y copia del FS
+# 2-SetupSOdesdeLiveCD.sh.log  ← configuración en chroot
+# 2-SetupSOdesdeLiveCD.steps   ← resumen de pasos con timestamps (diagnóstico rápido)
+# 3-SetupPrimerInicio.sh.log   ← primer arranque
+# 4-Comprobaciones.sh.log      ← diagnóstico
 ```
 
 ---
 
-## Convenciones del proyecto
+## Arquitectura y decisiones clave
 
-- Los scripts se numeran `0a`, `0b`, `1`, `2`, `3`, `4`... para reflejar el orden de ejecución.
-- Los logs se guardan en `/var/log/IAC-IESMHP/<Distro>/`.
-- El repo se clona siempre en `/opt/IAC-IESMHP/` en los equipos instalados.
-- Los scripts terminan con `echo "Correcto"` cuando tienen éxito; el script anterior comprueba la última línea del log para decidir si reiniciar o esperar.
-- Las claves SSH usan `ed25519`; la clave pública de cada equipo se agrega a su propio `authorized_keys` para que Ansible pueda conectar en local.
+### 0a-CreaISO.sh — Generación de la ISO
+- **Squashfs multicapa (Ubuntu 26.04+)**: la ISO usa capas `minimal.squashfs` / `minimal.standard.squashfs` / `minimal.standard.live.squashfs`. El script detecta la capa `*.live.squashfs` para insertar el autostart de escritorio, que es donde vive el entorno GNOME.
+- **snapd enmascarado**: se enmascaran `snapd.service`, `snapd.socket` y `snapd.seeded.service` vía symlinks a `/dev/null` en el squashfs. Esto reduce el tiempo de arranque del Live CD de ~3 min a ~10 s y bloquea definitivamente `ubuntu-desktop-bootstrap` (el instalador snap de Ubuntu 26.04).
+- **Autostart GNOME**: se escribe `iac-iesmhp-setup.desktop` tanto en `/etc/skel/.config/autostart` como en `/home/ubuntu/.config/autostart` para cubrir el caso de que el home del usuario `ubuntu` preexista o se cree desde skel. El `.desktop` llama a `iac-iesmhp-launch.sh`, que aplica el fondo y luego abre un terminal con `iac-iesmhp-run.sh`.
+- **Boot UEFI únicamente**: se eliminan `isolinux/` y `boot/grub/i386-pc/`. La detección del modo EFI (appended partition GPT vs El Torito) es automática vía `xorriso -report_el_torito`, con fallback a `sfdisk+dd`.
+
+### 0b-Github.sh — Bootstrap en el Live CD
+- Se embebe en la raíz del squashfs como `/0b-Github.sh` (no en PATH estándar).
+- Enmascara `/usr/sbin/update-initramfs` → `/bin/true` y desactiva `man-db auto-update` antes de cualquier `apt-get install` para evitar bloqueos en el entorno live.
+- Espera red con 12 reintentos (5 s cada uno) antes de clonar el repo.
+- El repo se clona en `/opt/IAC-IESMHP`.
+
+### 1-SetupLiveCD.sh — Particionado e instalación del FS
+- **Detección de discos**: ignora USB y loop; usa `lsblk -dno NAME,SIZE,TRAN`.
+  - 2×NVMe → pequeño=`/`, grande=`/home`
+  - NVMe+SD → NVMe=`/`, SD=`/home`
+- **Esquema de particiones** (disco pequeño, GPT): EFI 512 MiB | swap 8 GiB | root resto. Disco grande: /home entero.
+- **Capas squashfs**: Ubuntu 26.04 combina `minimal.squashfs + minimal.standard.squashfs + minimal.standard.live.squashfs` con overlayfs en `/tmp/merged`; Ubuntu <24.04 usa `filesystem.squashfs` único.
+- Copia el FS con `rsync` (excluyendo `/etc/fstab` y `/etc/machine-id`).
+- Pasa las particiones al chroot mediante `/mnt/tmp/.iac-partitions.env` porque `lsblk` dentro del chroot ve los mount points del host, no del sistema instalado.
+- Si `2-SetupSOdesdeLiveCD.sh` termina con la línea literal `Correcto`, reinicia automáticamente; si no, espera 100000 s para diagnóstico.
+
+### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot
+- Genera `/etc/fstab` con UUIDs reales leídos de `blkid`.
+- **Parche grub.cfg**: `update-grub` en chroot a veces escribe `root=/dev/nvme0n1p3` en lugar de `root=UUID=...`. El script lo detecta y parchea con `sed`.
+- **Casper hooks**: se eliminan directamente con `rm -rf` (sin `apt remove`) para evitar que los triggers dpkg se bloqueen en el chroot. Los hooks afectados: `/usr/share/initramfs-tools/hooks/casper` y variantes.
+- `update-initramfs -u -k all` tarda 2–4 min; es el paso más lento del chroot.
+- Crea el servicio systemd `3-SetupPrimerInicio.service` con `WantedBy=multi-user.target`.
+- Termina siempre con `echo "Correcto"` si todo fue bien (1-SetupLiveCD lo comprueba con `tail -n1`).
+
+### 3-SetupPrimerInicio.sh — Primer arranque
+- Detecta el aula por el tercer octeto de la IP: 72→IABD, 32→SMRV.
+- Configura proxy apt según aula: `10.0.72.140:3128` (IABD) o `10.0.32.119:3128` (SMRV).
+- Instala `ssh` y `ansible`, habilita `PermitRootLogin yes` y hace `apt-get full-upgrade`.
+- Muestra progreso al usuario mediante diálogos `zenity` en todas las sesiones gráficas activas.
+- Se autodeshabilita con triple mecanismo: `systemctl disable` + `rm` del `.service` + `mv "$0" "$0.borrado"`.
+- Ejecuta `NombreIP.sh` (resuelve MAC→hostname y opcionalmente convierte DHCP a IP estática).
+- Ejecuta `Auto-Ansible.sh` y lanza directamente `ansible-playbook roles.yaml` desde `$RAIZANSIBLE`.
+
+### 4-Comprobaciones.sh — Diagnóstico
+Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de hooks casper, grub.cfg con UUIDs, fstab vs blkid, paquetes dpkg rotos, servicio SSH. Genera resumen de errores/warnings al final. Útil como primer análisis al pegar un log.
+
+---
+
+## Configuraciones de hardware soportadas
+
+| Aula      | Disco pequeño       | Disco grande      |
+|-----------|---------------------|-------------------|
+| Distancia | NVMe 0.5 TB (/, EFI, swap) | NVMe 2.0 TB (/home) |
+| CEIABD    | NVMe 0.5 TB (/, EFI, swap) | SDA  1.0 TB (/home) |
+
+---
+
+## Ficheros de datos
+
+- `macs.csv` — en raíz del repo (`/opt/IAC-IESMHP/macs.csv`). Formato: `MAC,hostname`. Usado por `2-SetupSOdesdeLiveCD.sh` y `NombreIP.sh` para asignar nombre al equipo.
+- `Autorizados.txt` — claves SSH públicas autorizadas para `root` y `usuario`.
+- `FondoIES-Ubuntu-Gris.png` — fondo de escritorio embebido en el squashfs.
+
+---
+
+## Issues conocidos y áreas en optimización
+
+- **`0b-Github.sh` línea 54**: comentario `#####FALLA AQUí!` — en alguna versión se bloqueaba antes del `apt-get install git`. Mitigado enmascarando `update-initramfs` (tanto `/usr/local/sbin/` como `/usr/sbin/`) y `man-db` antes de cualquier apt.
+- **`Auto-Ansible.sh` línea 38**: `ssh-keygen -F $HOSTNAME` falla. Pendiente de corrección.
+- **snapd en Live CD**: si en futuras ISOs snapd vuelve a arrancar, los síntomas son arranque lento (~3 min) y bloqueo de `ubuntu-desktop-bootstrap` antes del autostart.

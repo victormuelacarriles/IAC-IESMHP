@@ -4,7 +4,7 @@
 #  Genera una ISO de Ubuntu Desktop personalizada con instalación automática UEFI.
 #
 #  Uso:
-#    sudo ./0a-CreaISO.sh <iso_origen> <0b-Github.sh> [iso_salida] [fondo.png]
+#    sudo ./0a-CreaISO.sh <iso_origen> <0b-Github.sh> [iso_salida] [fondo.png] [watermark.png] [bgrt-fallback.png]
 #
 #  ARQUITECTURA:
 #    El autoinstall de Ubuntu solo actúa como disparador de arranque:
@@ -24,7 +24,9 @@ SOURCE_ISO="${1:?ERROR: Debes indicar la ISO de origen.
 PERSO_SCRIPT="${2:?ERROR: Debes indicar el script de personalización (0b-Github.sh).}"
 OUTPUT_ISO="${3:-ubuntu-custom-desktop-uefi.iso}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WALLPAPER_PNG="${4:-${SCRIPT_DIR}/FondoIES-Ubuntu-Gris.png}"
+WALLPAPER_PNG="${4:-${SCRIPT_DIR}/imagenesIES/FondoIES-Ubuntu-Gris.png}"
+WATERMARK_PNG="${5:-${SCRIPT_DIR}/imagenesIES/watermark.png}"
+BGRT_FALLBACK_PNG="${6:-${SCRIPT_DIR}/imagenesIES/bgrt-fallback.png}"
 
 WORK_DIR="$(mktemp -d /tmp/iso_build_XXXXXX)"
 ISO_DIR="${WORK_DIR}/iso"
@@ -84,6 +86,10 @@ check_inputs() {
     log "ISO salida   : ${OUTPUT_ISO}"
     log "Wallpaper    : ${WALLPAPER_PNG}"
     [[ -f "$WALLPAPER_PNG" ]] || err "No se encuentra el PNG: ${WALLPAPER_PNG}"
+    log "Watermark    : ${WATERMARK_PNG}"
+    [[ -f "$WATERMARK_PNG" ]] || err "No se encuentra el PNG: ${WATERMARK_PNG}"
+    log "BGRT fallback: ${BGRT_FALLBACK_PNG}"
+    [[ -f "$BGRT_FALLBACK_PNG" ]] || err "No se encuentra el PNG: ${BGRT_FALLBACK_PNG}"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -357,6 +363,20 @@ picture-options='zoom'
 DCONFEOF
     log "  Override dconf creado: /etc/dconf/db/local.d/01-wallpaper"
 
+    # ── Plymouth spinner: imágenes corporativas ────────────────────────────
+    step "Instalando imágenes Plymouth en el squashfs"
+    local plymouth_dir="${SQUASHFS_DIR}/usr/share/plymouth/themes/spinner"
+    mkdir -p "${plymouth_dir}"
+    cp "${WATERMARK_PNG}"     "${plymouth_dir}/watermark.png"
+    cp "${BGRT_FALLBACK_PNG}" "${plymouth_dir}/bgrt-fallback.png"
+    log "  watermark.png     → ${plymouth_dir}/watermark.png"
+    log "  bgrt-fallback.png → ${plymouth_dir}/bgrt-fallback.png"
+    # Copia accesible desde el chroot de instalación (2-SetupSOdesdeLiveCD.sh)
+    mkdir -p "${SQUASHFS_DIR}/usr/local/share/iac-iesmhp/plymouth"
+    cp "${WATERMARK_PNG}"     "${SQUASHFS_DIR}/usr/local/share/iac-iesmhp/plymouth/watermark.png"
+    cp "${BGRT_FALLBACK_PNG}" "${SQUASHFS_DIR}/usr/local/share/iac-iesmhp/plymouth/bgrt-fallback.png"
+    log "  Copia en /usr/local/share/iac-iesmhp/plymouth/ (disponible en la instalación)"
+
     log "Reempaquetando SquashFS..."
     rm "${squashfs_path}"
     mksquashfs "${SQUASHFS_DIR}" "${squashfs_path}" -noappend || err "Fallo al reempaquetar SquashFS."
@@ -387,11 +407,11 @@ set timeout_style=countdown
 set gfxpayload=text
 
 menuentry "Instalar Ubuntu Personalizado (IAC-IESMHP)" {
-    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es ---
+    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es quiet splash ---
     initrd  /casper/initrd
 }
 menuentry "Probar Ubuntu en Espanol (Live)" {
-    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es ---
+    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es quiet splash ---
     initrd  /casper/initrd
 }
 menuentry 'UEFI Firmware Settings' {

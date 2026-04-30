@@ -120,7 +120,7 @@ else
     while IFS= read -r line; do
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
         [[ -z "${line// }" ]] && continue
-        UUID=$(echo "$line" | grep -oP 'UUID=\K[a-f0-9-]+')
+        UUID=$(echo "$line" | grep -ioP 'UUID=\K[a-fA-F0-9-]+')
         MP=$(echo "$line" | awk '{print $2}')
         [ -z "$UUID" ] && continue
         DEV=$(blkid -U "$UUID" 2>/dev/null)
@@ -139,7 +139,13 @@ lsblk -o NAME,SIZE,TYPE,FSTYPE,UUID,MOUNTPOINT 2>/dev/null | tee -a "$LOGFILE"
 # ─────────────────────────────────────────────────────────────────────────────
 _sep "5. PAQUETES CLAVE"
 
-for pkg in casper ubiquity; do
+if [ -f /usr/share/initramfs-tools/hooks/casper ] \
+   || [ -d /usr/share/initramfs-tools/scripts/casper ]; then
+    _err "casper: hooks presentes en initramfs-tools (deben eliminarse antes de update-initramfs)"
+else
+    _ok "casper: hooks no presentes (correcto)"
+fi
+for pkg in ubiquity; do
     if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
         _err "$pkg está instalado (debe eliminarse antes de update-initramfs)"
     else
@@ -205,5 +211,7 @@ else
 fi
 echo " ssh ubuntu@${IP}   Log: /mnt$LOGFILE      " | tee -a "$LOGFILE"
 echo "================================================================" | tee -a "$LOGFILE"
-#pulsar una tecla para continuar
-read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
+# Solo pausar cuando se ejecuta en terminal interactivo (no en chroot)
+if [ -t 0 ]; then
+    read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
+fi
