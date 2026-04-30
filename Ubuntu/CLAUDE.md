@@ -8,6 +8,13 @@ Automatización del despliegue de Ubuntu 26.04 Desktop en equipos del IES Miguel
 
 **Metodología de trabajo**: el usuario arranca la ISO en una máquina virtual (VMware), recoge los logs y los pega aquí para diagnosticar fallos y optimizar el proceso.
 
+### Protocolo de diagnóstico (seguir en este orden)
+1. Leer el fichero de cambios más reciente en `Ubuntu/RegistroDeCambios/` para saber qué se tocó en la última sesión y qué consecuencias puede haber tenido.
+2. Leer el log pegado o el fichero `Ubuntu/ISO/26.04/logs/Ubuntu/4-Comprobaciones.sh.log`.
+3. **Antes de proponer un fix**, cruzar cada `[ERR]` con la lista de falsos positivos conocidos documentada más abajo — muchos errores son del propio script de diagnóstico, no del sistema instalado.
+4. Si el error es real (no falso positivo), buscar en el script correspondiente la línea exacta que lo genera y proponer el cambio mínimo necesario.
+5. Documentar el fix en `Ubuntu/RegistroDeCambios/YYYYMMDD-Cambios.md` (crear el fichero del día si no existe).
+
 ---
 
 ## Cadena de ejecución completa
@@ -97,6 +104,17 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 ### 4-Comprobaciones.sh — Diagnóstico
 Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de hooks casper, grub.cfg con UUIDs, fstab vs blkid, paquetes dpkg rotos, servicio SSH. Genera resumen de errores/warnings al final. Útil como primer análisis al pegar un log.
 
+**Falsos positivos conocidos en 4-Comprobaciones.sh** — verificar antes de asumir que el sistema está roto:
+
+| Mensaje `[ERR]` en el log | Causa real | ¿Es un problema real? |
+|---|---|---|
+| `casper está instalado` (sección 5, pre-2026-04-30) | dpkg lo marca como instalado pero los hooks ya fueron borrados con `rm -rf` en el chroot | No — los hooks no están en disco; el initramfs se generó limpio |
+| `UUID 68 (/boot/efi) → ningún dispositivo` (sección 3, pre-2026-04-30) | Regex `[a-f0-9-]+` trunca UUIDs FAT con mayúsculas (`68AA-2FED` → `68`) | No — la partición EFI existe; era un bug del regex |
+
+**Diagnóstico rápido de la sección 3 (FSTAB)**: si hay un `[ERR]` de UUID para `/boot/efi` pero `lsblk` (sección 4) muestra esa partición con un UUID del tipo `XXXX-YYYY` (4+4 hex en mayúsculas, formato FAT), es falso positivo — el UUID FAT usa mayúsculas y el regex debe ser `[a-fA-F0-9-]+`.
+
+**Diagnóstico rápido de la sección 5 (casper)**: si la sección 1 dice `[OK] Hooks casper: no presentes` pero la sección 5 dice `[ERR] casper está instalado`, es falso positivo — dpkg tiene el registro pero los hooks no existen en disco y no afectan al initramfs.
+
 ---
 
 ## Configuraciones de hardware soportadas
@@ -131,3 +149,8 @@ Antes de modificar un script, consulta ese directorio para evitar repetir correc
 - **`0b-Github.sh` línea 54**: comentario `#####FALLA AQUí!` — en alguna versión se bloqueaba antes del `apt-get install git`. Mitigado enmascarando `update-initramfs` (tanto `/usr/local/sbin/` como `/usr/sbin/`) y `man-db` antes de cualquier apt.
 - **`Auto-Ansible.sh` línea 38**: `ssh-keygen -F $HOSTNAME` falla. Pendiente de corrección.
 - **snapd en Live CD**: si en futuras ISOs snapd vuelve a arrancar, los síntomas son arranque lento (~3 min) y bloqueo de `ubuntu-desktop-bootstrap` antes del autostart.
+
+### Bugs corregidos en 4-Comprobaciones.sh (historial para no repetirlos)
+
+- **2026-04-30 — Falso positivo casper (sección 5)**: el check usaba `dpkg -l casper | grep "^ii"`. `2-SetupSOdesdeLiveCD.sh` borra los hooks con `rm -rf` sin pasar por `apt remove`, así que dpkg sigue marcando el paquete como instalado aunque los hooks no existan. **Fix**: buscar hooks en disco con `find /usr/share/initramfs-tools /etc/initramfs-tools -name '*casper*'`; si no hay ficheros → `[OK]`.
+- **2026-04-30 — Falso positivo UUID EFI (sección 3)**: el regex `UUID=\K[a-f0-9-]+` trunca los UUIDs FAT/vfat (formato `68AA-2FED`) en la primera letra mayúscula, extrayendo solo `68`. `blkid -U 68` no encuentra nada → `[ERR]` falso. **Fix**: regex `[a-fA-F0-9-]+` (añadir `A-F`).
