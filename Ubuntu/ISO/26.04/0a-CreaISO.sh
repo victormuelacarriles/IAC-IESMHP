@@ -4,7 +4,7 @@
 #  Genera una ISO de Ubuntu Desktop personalizada con instalación automática UEFI.
 #
 #  Uso:
-#    sudo ./0a-CreaISO.sh <iso_origen> <0b-Github.sh> [iso_salida]
+#    sudo ./0a-CreaISO.sh <iso_origen> <0b-Github.sh> [iso_salida] [fondo.png]
 #
 #  ARQUITECTURA:
 #    El autoinstall de Ubuntu solo actúa como disparador de arranque:
@@ -20,9 +20,11 @@ set -euo pipefail
 # PARÁMETROS Y VARIABLES
 # ─────────────────────────────────────────────────────────────────────────────
 SOURCE_ISO="${1:?ERROR: Debes indicar la ISO de origen.
-  Uso: $0 <iso_origen> <0b-Github.sh> [iso_salida]}"
+  Uso: $0 <iso_origen> <0b-Github.sh> [iso_salida] [fondo.png]}"
 PERSO_SCRIPT="${2:?ERROR: Debes indicar el script de personalización (0b-Github.sh).}"
 OUTPUT_ISO="${3:-ubuntu-custom-desktop-uefi.iso}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WALLPAPER_PNG="${4:-${SCRIPT_DIR}/FondoIES-Ubuntu-Gris.png}"
 
 WORK_DIR="$(mktemp -d /tmp/iso_build_XXXXXX)"
 ISO_DIR="${WORK_DIR}/iso"
@@ -80,6 +82,8 @@ check_inputs() {
     log "ISO origen   : ${SOURCE_ISO}"
     log "0b-Github.sh : ${PERSO_SCRIPT}"
     log "ISO salida   : ${OUTPUT_ISO}"
+    log "Wallpaper    : ${WALLPAPER_PNG}"
+    [[ -f "$WALLPAPER_PNG" ]] || err "No se encuentra el PNG: ${WALLPAPER_PNG}"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -281,6 +285,11 @@ WRAPEOF
     cat > "${SQUASHFS_DIR}/usr/local/bin/iac-iesmhp-launch.sh" << 'LAUNCHEOF'
 #!/usr/bin/env bash
 SCRIPT=/usr/local/bin/iac-iesmhp-run.sh
+# Fondo de escritorio en el Live CD (se ejecuta con el entorno gráfico del usuario ubuntu)
+FONDO=file:///usr/share/backgrounds/iac-iesmhp.png
+gsettings set org.gnome.desktop.background picture-uri      "$FONDO" 2>/dev/null || true
+gsettings set org.gnome.desktop.background picture-uri-dark "$FONDO" 2>/dev/null || true
+gsettings set org.gnome.desktop.background picture-options  'zoom'   2>/dev/null || true
 if command -v gnome-terminal >/dev/null 2>&1; then
     exec gnome-terminal -- "$SCRIPT"
 elif command -v kgx >/dev/null 2>&1; then
@@ -321,6 +330,29 @@ X-GNOME-Autostart-Delay=5
 DESKTOPEOF
         log "  .desktop escrito en: ${autostart_dir}"
     done
+
+    # ── Fondo de escritorio ────────────────────────────────────────────────
+    step "Instalando fondo de escritorio en el squashfs"
+    mkdir -p "${SQUASHFS_DIR}/usr/share/backgrounds"
+    cp "${WALLPAPER_PNG}" "${SQUASHFS_DIR}/usr/share/backgrounds/iac-iesmhp.png"
+    log "  PNG copiado → /usr/share/backgrounds/iac-iesmhp.png"
+
+    # Perfil dconf: asegura que el sistema db tenga efecto en el sistema instalado
+    mkdir -p "${SQUASHFS_DIR}/etc/dconf/profile"
+    if [[ ! -f "${SQUASHFS_DIR}/etc/dconf/profile/user" ]]; then
+        printf 'user-db:user\nsystem-db:local\n' > "${SQUASHFS_DIR}/etc/dconf/profile/user"
+        log "  Perfil dconf creado: user-db:user / system-db:local"
+    fi
+
+    # Override dconf para el fondo (plantilla que 2-SetupSO compila en el chroot)
+    mkdir -p "${SQUASHFS_DIR}/etc/dconf/db/local.d"
+    cat > "${SQUASHFS_DIR}/etc/dconf/db/local.d/01-wallpaper" << 'DCONFEOF'
+[org/gnome/desktop/background]
+picture-uri='file:///usr/share/backgrounds/iac-iesmhp.png'
+picture-uri-dark='file:///usr/share/backgrounds/iac-iesmhp.png'
+picture-options='zoom'
+DCONFEOF
+    log "  Override dconf creado: /etc/dconf/db/local.d/01-wallpaper"
 
     log "Reempaquetando SquashFS..."
     rm "${squashfs_path}"

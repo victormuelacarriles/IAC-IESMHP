@@ -218,6 +218,11 @@ fi
 echoamarillo "Copiando sistema de archivos a /mnt ..."
 rsync -av --exclude=/etc/fstab --exclude=/etc/machine-id "$SRC/" /mnt/
 echoverde "Sistema de archivos copiado desde $SRC"
+if [ -f /mnt/usr/share/backgrounds/iac-iesmhp.png ]; then
+    echoverde "  Fondo de escritorio copiado: /usr/share/backgrounds/iac-iesmhp.png (OK)"
+else
+    echoamarillo "  AVISO: /usr/share/backgrounds/iac-iesmhp.png no encontrado en /mnt — el fondo no se aplicará"
+fi
 
 # Desmontar todo
 [[ "$SRC" == "/tmp/merged" ]] && umount /tmp/merged

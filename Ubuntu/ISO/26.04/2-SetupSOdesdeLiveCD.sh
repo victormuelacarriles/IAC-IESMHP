@@ -50,6 +50,21 @@ xkb-options=[]
 region='es_ES.UTF-8'
 EOF
 
+# Fondo de escritorio para el sistema instalado
+echoamarillo "Configurando fondo de escritorio..."
+# Asegurar perfil dconf
+mkdir -p /etc/dconf/profile
+[ -f /etc/dconf/profile/user ] || printf 'user-db:user\nsystem-db:local\n' > /etc/dconf/profile/user
+# Crear override (el fichero ya viene del squashfs, pero lo escribimos explícitamente
+# para no depender del rsync)
+mkdir -p /etc/dconf/db/local.d
+cat > /etc/dconf/db/local.d/01-wallpaper << 'WALLEOF'
+[org/gnome/desktop/background]
+picture-uri='file:///usr/share/backgrounds/iac-iesmhp.png'
+picture-uri-dark='file:///usr/share/backgrounds/iac-iesmhp.png'
+picture-options='zoom'
+WALLEOF
+
 # Update dconf
 # dconf es un sistema de configuración basado en claves utilizado en GNOME y otras aplicaciones.
 # El comando 'dconf update' actualiza la base de datos del sistema con los cambios realizados en la configuración.
@@ -58,7 +73,7 @@ EOF
 # Esto es común cuando se configura un sistema desde un LiveCD o en entornos de preinstalación.
 dconf update 2>/dev/null || echo "dconf se aplicará en el primer inicio"
 
-echo && echo && echoverde "....Configurado entorno en español"  
+echo && echo && echoverde "....Configurado entorno en español y fondo de escritorio"
 
 # Configure fstab
 

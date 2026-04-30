@@ -152,6 +152,9 @@ apt-get clean >> $FLOG
 apt-get autoremove -y >> $FLOG
 
 
+echoverde "Recompilando configuración dconf (fondo de escritorio y ajustes del sistema)..."
+dconf update 2>/dev/null || true
+
 echoverde "Desactivando y borrando el servicio de actualización en primer arranque..." >> $FLOG
 systemctl disable 3-SetupPrimerInicio.service
 rm /etc/systemd/system/3-SetupPrimerInicio.service

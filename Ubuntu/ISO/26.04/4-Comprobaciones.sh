@@ -203,7 +203,7 @@ if [ "$ERRORES" -eq 0 ]; then
 else
     echo -e "\033[31m $ERRORES problema(s) detectado(s) que pueden impedir el arranque\033[0m" | tee -a "$LOGFILE"
 fi
-echo " ssh ubuntu@${IP}   Log: $LOGFILE      " | tee -a "$LOGFILE"
+echo " ssh ubuntu@${IP}   Log: /mnt$LOGFILE      " | tee -a "$LOGFILE"
 echo "================================================================" | tee -a "$LOGFILE"
 #pulsar una tecla para continuar
 read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
