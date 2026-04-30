@@ -197,6 +197,10 @@ ln -sf /etc/machine-id /var/lib/dbus/machine-id
 echo && echo && echo "..Generada  machine-id" 
 
 # Update initramfs
+echoverde "Eliminando casper (paquete live que bloquea la generación de initramfs)..."
+# casper tiene hooks de initramfs-tools para entorno live; si está instalado,
+# update-initramfs los ejecuta, fallan silenciosamente y el initramfs nunca se crea.
+apt-get remove --purge -y casper 2>/dev/null || true
 echoverde "Actualizando initramfs (lo que hace que el sistema arranque)..."
 # MODULES=most: en chroot la detección de módulos falla; sin esto el driver NVMe
 # puede no incluirse y el kernel no encuentra el disco → kernel panic al arrancar.
@@ -232,11 +236,11 @@ After=network-online.target graphical.target
 Conflicts=shutdown.target
 
 [Service]
-Type=always
+Type=oneshot
 Environment=LC_ALL=es_ES.UTF-8
-ExecStart=sudo /bin/bash $RAIZDISTRO/$SCRIPT3 
-StandardOutput=append: $RAIZLOG/$SCRIPT3.log
-StandardError=append: $RAIZLOG/$SCRIPT3.log
+ExecStart=sudo /bin/bash $RAIZDISTRO/$SCRIPT3
+StandardOutput=append:$RAIZLOG/$SCRIPT3.log
+StandardError=append:$RAIZLOG/$SCRIPT3.log
 TimeoutSec=0
 RemainAfterExit=yes
 
