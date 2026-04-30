@@ -252,10 +252,13 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install git -y -qq
 echo "Instalamos ssh en el entorno live... "
 sudo DEBIAN_FRONTEND=noninteractive apt-get install openssh-server -y -qq
 
+echo "Establecemos contraseña para el usuario 'ubuntu' (ubuntu/ubuntu)..."
+sudo -S sh -c 'echo "ubuntu:ubuntu" | chpasswd'
+
 IP=$(hostname -I | awk '{print $1}')
 if [[ -n "$IP" ]]; then
     echo "SSH activo. Puedes conectarte a este entorno live con:"
-    echo "  ssh ubuntu@${IP}"
+    echo "  ssh ubuntu@${IP}  (contraseña: ubuntu)"
 else
     echo "No se pudo detectar la IP. SSH puede no estar accesible."
 fi
