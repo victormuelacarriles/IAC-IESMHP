@@ -267,7 +267,7 @@ fi
 echo " ssh ubuntu@${IP}   Log: /mnt$LOGFILE      " | tee -a "$LOGFILE"
 echo "================================================================" | tee -a "$LOGFILE"
 if [ "$ERRORES" -eq 0 ]; then
-    for i in 5 4 3 2 1; do
+    for i in 20 19 18 17 16 15 14 13 12 1110 9 8 7 6 5 4 3 2 1; do
         echo -ne "\r Reiniciando en $i segundos... (Ctrl+C para cancelar)  " | tee -a "$LOGFILE"
         sleep 1
     done
