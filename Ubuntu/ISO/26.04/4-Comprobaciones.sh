@@ -5,7 +5,7 @@
 #  Funciona tanto dentro del chroot (llamado desde 2-SetupSOdesdeLiveCD.sh)
 #  como en el sistema ya arrancado (llamado desde 3-SetupPrimerInicio.sh).
 # =============================================================================
-VERSIONSCRIPT="1.0-20260429"
+VERSIONSCRIPT="1.1-20260502"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 RAIZLOG="/var/log/$REPO/$DISTRO"
@@ -86,12 +86,29 @@ if [ ! -f /boot/grub/grub.cfg ]; then
     _err "grub.cfg no encontrado en /boot/grub/grub.cfg"
 else
     _ok "grub.cfg encontrado"
-    GRUB_ROOT_UUID=$(grep -oP 'root=UUID=\K[a-f0-9-]+' /boot/grub/grub.cfg | head -1)
+
+    # Extraer cmdline real de la primera entrada Ubuntu (no del submenu)
+    LINUX_LINE=$(awk '/menuentry .Ubuntu[^,]/{f=1} f && /^\s+linux\s/{print; exit}' /boot/grub/grub.cfg)
+    _inf "  Cmdline del kernel: ${LINUX_LINE:-<no encontrada>}"
+
+    GRUB_ROOT_UUID=$(echo "$LINUX_LINE" | grep -oP 'root=UUID=\K[a-fA-F0-9-]+')
+    if [ -z "$GRUB_ROOT_UUID" ]; then
+        # Fallback: buscar en todo el archivo
+        GRUB_ROOT_UUID=$(grep -oP 'root=UUID=\K[a-fA-F0-9-]+' /boot/grub/grub.cfg | head -1)
+    fi
+
+    # Verificar parámetro root=
+    ROOT_PARAM=$(echo "$LINUX_LINE" | grep -oP 'root=\S+')
+    if [ -z "$ROOT_PARAM" ]; then
+        _err "  Parámetro root= ausente en cmdline del kernel → kernel panic seguro"
+    elif echo "$ROOT_PARAM" | grep -q 'root=UUID='; then
+        _ok "  root= usa UUID (correcto)"
+    elif echo "$ROOT_PARAM" | grep -q 'root=/dev/'; then
+        _err "  root= usa $ROOT_PARAM en lugar de UUID — puede causar kernel panic si el dispositivo cambia de nombre"
+    fi
 
     if [ -z "$GRUB_ROOT_UUID" ]; then
         _err "No hay root=UUID=... en grub.cfg — GRUB no sabe dónde está el root"
-        _inf "  Líneas 'linux' en grub.cfg:"
-        grep '^\s*linux\s' /boot/grub/grub.cfg | head -5 | sed 's/^/    /' | tee -a "$LOGFILE"
     else
         _inf "  UUID root en grub.cfg: $GRUB_ROOT_UUID"
         DEVICE=$(blkid -U "$GRUB_ROOT_UUID" 2>/dev/null)
@@ -100,11 +117,17 @@ else
         else
             _err "  UUID root $GRUB_ROOT_UUID NO existe en ningún dispositivo → kernel panic"
         fi
-    fi
 
-    _inf "  Entradas GRUB:"
-    grep -E 'menuentry|^\s+linux ' /boot/grub/grub.cfg | grep -v '^#' | head -10 \
-        | sed 's/^/    /' | tee -a "$LOGFILE"
+        # Coherencia grub.cfg ↔ fstab
+        FSTAB_ROOT_UUID=$(grep -E '\s+/\s+' /etc/fstab 2>/dev/null | grep -oP 'UUID=\K[a-fA-F0-9-]+' | head -1)
+        if [ -n "$FSTAB_ROOT_UUID" ]; then
+            if [ "$GRUB_ROOT_UUID" = "$FSTAB_ROOT_UUID" ]; then
+                _ok "  UUID coherente: grub.cfg == fstab ($GRUB_ROOT_UUID)"
+            else
+                _err "  UUID INCOHERENTE: grub.cfg=$GRUB_ROOT_UUID  fstab=$FSTAB_ROOT_UUID → kernel panic seguro"
+            fi
+        fi
+    fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -189,9 +212,35 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
+_sep "7. GRUB EFI INSTALADO"
+
+EFI_DIR=/boot/efi/EFI
+if [ ! -d "$EFI_DIR" ]; then
+    _err "$EFI_DIR no existe — grub-install no ejecutado o partición EFI no montada"
+    _avs "  Fix: mount /dev/nvme0n1p1 /boot/efi && grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu"
+else
+    _inf "  Contenido de $EFI_DIR: $(ls "$EFI_DIR" 2>/dev/null | tr '\n' ' ')"
+    GRUB_EFI=$(find "$EFI_DIR" \( -name 'grubx64.efi' -o -name 'shimx64.efi' \) 2>/dev/null | head -1)
+    if [ -n "$GRUB_EFI" ]; then
+        _ok "  EFI bootloader: $GRUB_EFI ($(du -sh "$GRUB_EFI" 2>/dev/null | cut -f1))"
+    else
+        _err "  No se encontró grubx64.efi ni shimx64.efi en $EFI_DIR → GRUB no instalado en EFI → equipo no arrancará"
+        _avs "  Fix: grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu"
+    fi
+
+    GRUB_MODS=/boot/grub/x86_64-efi
+    if [ -d "$GRUB_MODS" ] && [ "$(ls -A "$GRUB_MODS" 2>/dev/null | wc -l)" -gt 10 ]; then
+        _ok "  Módulos GRUB EFI: presentes ($GRUB_MODS)"
+    else
+        _err "  Módulos GRUB EFI ausentes en $GRUB_MODS → GRUB no puede arrancar"
+        _avs "  Fix: grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu"
+    fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Servicios systemd (solo si el sistema está arrancado, no en chroot)
 if systemctl is-system-running &>/dev/null 2>&1; then
-    _sep "7. SERVICIOS SYSTEMD"
+    _sep "8. SERVICIOS SYSTEMD"
     FAILED=$(systemctl --failed --no-legend 2>/dev/null | wc -l)
     if [ "$FAILED" -gt 0 ]; then
         _avs "$FAILED servicio(s) fallido(s):"
@@ -217,5 +266,13 @@ else
 fi
 echo " ssh ubuntu@${IP}   Log: /mnt$LOGFILE      " | tee -a "$LOGFILE"
 echo "================================================================" | tee -a "$LOGFILE"
-#pulsar una tecla para continuar
-read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
+if [ "$ERRORES" -eq 0 ]; then
+    for i in 5 4 3 2 1; do
+        echo -ne "\r Reiniciando en $i segundos... (Ctrl+C para cancelar)  " | tee -a "$LOGFILE"
+        sleep 1
+    done
+    echo | tee -a "$LOGFILE"
+    reboot
+else
+    read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
+fi

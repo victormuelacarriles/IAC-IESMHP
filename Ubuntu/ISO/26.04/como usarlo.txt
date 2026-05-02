@@ -11,3 +11,6 @@ git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh && sudo ./0
 
 #Despues , en vmware, arranco la máquina que está conectada
 # a esa iso (ubuntu auto)
+
+#Me puedo descargar los logs con : 
+(Get-Content -Path "C:\Users\vmuela\.ssh\known_hosts") -notmatch "10\.0\.72\.51" | Set-Content -Path "C:\Users\vmuela\.ssh\known_hosts"; scp -r -O -o StrictHostKeyChecking=accept-new ubuntu@10.0.72.51:/mnt/var/log/IAC-IESMHP/Ubuntu "E:\Usuarios\vmuela\OneDrive - Educantabria\_20FP25-26\Dep\IAC-IESMHP\Ubuntu\ISO\26.04\logs"
