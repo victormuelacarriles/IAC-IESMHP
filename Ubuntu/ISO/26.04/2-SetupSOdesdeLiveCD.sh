@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.7-20260502"
+VERSIONSCRIPT="22.8-20260502"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -276,6 +276,16 @@ fi
 
 GDM_CONF=/etc/gdm3/custom.conf
 mkdir -p /etc/gdm3
+
+# Eliminar cualquier fichero drop-in del Live CD que pueda re-habilitar el auto-login.
+# Ubuntu 26.04 puede usar /etc/gdm3/custom.conf.d/ para sus overrides de live session.
+if [ -d /etc/gdm3/custom.conf.d ]; then
+    info "Contenido de /etc/gdm3/custom.conf.d/ antes de limpiar:"
+    ls -la /etc/gdm3/custom.conf.d/ | while read -r l; do info "  $l"; done
+    rm -rf /etc/gdm3/custom.conf.d
+    ok "Directorio /etc/gdm3/custom.conf.d eliminado (evita overrides de auto-login del Live CD)"
+fi
+
 cat > "$GDM_CONF" << 'GDMEOF'
 [daemon]
 AutomaticLoginEnable=False
@@ -290,6 +300,8 @@ TimedLoginEnable=False
 [debug]
 GDMEOF
 ok "GDM config sobrescrita (auto-login deshabilitado)"
+info "Contenido final de $GDM_CONF:"
+while IFS= read -r l; do info "  $l"; done < "$GDM_CONF"
 
 # gnome-initial-setup se lanza en el primer arranque si no existe este flag.
 # GDM lo detecta y muestra el asistente de bienvenida EN VEZ de la pantalla de login,
@@ -304,6 +316,24 @@ if [ -d /home/usuario ]; then
     chown -R usuario:usuario /home/usuario/.config
 fi
 ok "gnome-initial-setup marcado como completado (evita bypass de pantalla de login GDM)"
+
+# Deshabilitar el bloqueo de pantalla en la sesión del GDM greeter.
+# GDM en Ubuntu 26.04 corre el greeter como sesión Wayland del usuario 'gdm'.
+# Si el screensaver lo bloquea, aparece "GDM Greeter" en la pantalla de bloqueo
+# y el usuario no puede desbloquearlo (no conoce la contraseña del usuario 'gdm').
+mkdir -p /etc/dconf/db/gdm.d
+cat >> /etc/dconf/db/gdm.d/00-login-screen << 'GDMLOCKEOF'
+
+[org/gnome/desktop/session]
+idle-delay=uint32 0
+
+[org/gnome/desktop/screensaver]
+lock-enabled=false
+lock-delay=uint32 3600
+GDMLOCKEOF
+ok "Screensaver del GDM greeter deshabilitado (evita pantalla de bloqueo de 'GDM Greeter')"
+dconf update && ok "dconf recompilado (gdm screensaver settings incluidos)" \
+    || info "dconf update falló en chroot — las bases GDM se compilarán en el primer arranque"
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "GRUB (grub-install + update-grub)"

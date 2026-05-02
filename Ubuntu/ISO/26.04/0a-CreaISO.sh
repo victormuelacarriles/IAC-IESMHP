@@ -596,7 +596,7 @@ main() {
     check_inputs
     extract_iso
     customize_squashfs
-    customize_plymouth_initrd
+    # customize_plymouth_initrd  # desactivado: el gzip-append degrada Plymouth a modo texto
     configure_grub
     remove_bios_boot
     get_efi_boot_params
