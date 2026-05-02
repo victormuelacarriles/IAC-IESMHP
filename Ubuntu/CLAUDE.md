@@ -140,7 +140,7 @@ Los cambios realizados en cada sesión de trabajo se documentan en:
 ```
 Ubuntu/RegistroDeCambios/YYYYMMDD-Cambios.md
 ```
-Antes de modificar un script, consulta ese directorio para evitar repetir correcciones ya aplicadas.
+Antes de modificar un script, consulta ese directorio para evitar repetir correcciones ya aplicadas que funcionaron mal. Los nuevos cambios regístralos allí indicando también la hora y minuto en que los realizastes. 
 
 ---
 

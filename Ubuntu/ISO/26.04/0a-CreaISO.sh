@@ -357,6 +357,28 @@ picture-options='zoom'
 DCONFEOF
     log "  Override dconf creado: /etc/dconf/db/local.d/01-wallpaper"
 
+    # Plymouth: logos personalizados en la capa live del squashfs.
+    # El Live CD monta todas las capas squashfs en un overlayfs; la capa live es la superior,
+    # así que sus ficheros tienen prioridad sobre los de capas inferiores.
+    # Plymouth (fase spinner, después de que casper monta el squashfs) lee de este overlayfs,
+    # por lo que nuestras imágenes reemplazan las de Ubuntu durante la instalación.
+    local _bgrt_src="${SCRIPT_DIR}/imagenesIES/bgrt-fallback.png"
+    local _wm_src="${SCRIPT_DIR}/imagenesIES/watermark.png"
+    if [[ -f "$_bgrt_src" ]] && [[ -f "$_wm_src" ]]; then
+        for _plym_dir in \
+            "${SQUASHFS_DIR}/usr/share/plymouth/themes/spinner" \
+            "${SQUASHFS_DIR}/usr/share/plymouth/themes/bgrt"; do
+            mkdir -p "$_plym_dir"
+            cp "$_bgrt_src" "${_plym_dir}/bgrt-fallback.png"
+            log "  bgrt-fallback.png → ${_plym_dir#"${SQUASHFS_DIR}"}"
+        done
+        mkdir -p "${SQUASHFS_DIR}/usr/share/plymouth/themes/spinner"
+        cp "$_wm_src" "${SQUASHFS_DIR}/usr/share/plymouth/themes/spinner/watermark.png"
+        log "  watermark.png → /usr/share/plymouth/themes/spinner/"
+    else
+        warn "Plymouth: faltan imágenes en imagenesIES/ — Live CD usará logos Ubuntu"
+    fi
+
     log "Reempaquetando SquashFS..."
     rm "${squashfs_path}"
     mksquashfs "${SQUASHFS_DIR}" "${squashfs_path}" -noappend || err "Fallo al reempaquetar SquashFS."

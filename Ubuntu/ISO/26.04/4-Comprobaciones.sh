@@ -294,6 +294,8 @@ if [ "$ERRORES" -eq 0 ]; then
     echo | tee -a "$LOGFILE"
     echo "Descomentar la línea 'reboot' para reiniciar el sistema" | tee -a "$LOGFILE"
     #reboot
+    #Eliminar esta lina
+    read -n 1 -s -r -p ")reboot(->Presiona cualquier tecla para continuar..."
 else
     read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
 fi

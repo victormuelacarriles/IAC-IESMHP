@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.8-20260502"
+VERSIONSCRIPT="22.9-20260502"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -273,6 +273,30 @@ if id ubuntu &>/dev/null; then
 else
     info "Usuario 'ubuntu' no presente"
 fi
+
+# AccountsService: GDM lee AccountsService con MAYOR PRIORIDAD que /etc/gdm3/custom.conf.
+# El Live CD crea /var/lib/AccountsService/users/ubuntu con AutomaticLogin=true.
+# El rsync lo copia al sistema instalado. Tot y que custom.conf diga AutomaticLoginEnable=False,
+# GDM intenta auto-loguear 'ubuntu' via AccountsService. Como 'ubuntu' no existe en /etc/passwd,
+# GDM queda en la sesión greeter (visible como "GDM Greeter").
+ACCTS_DIR=/var/lib/AccountsService/users
+info "Contenido de $ACCTS_DIR/ (diagnóstico):"
+ls -la "$ACCTS_DIR/" 2>/dev/null | while read -r l; do info "  $l"; done || info "  (directorio no existe)"
+if [ -f "$ACCTS_DIR/ubuntu" ]; then
+    info "Contenido de $ACCTS_DIR/ubuntu:"
+    cat "$ACCTS_DIR/ubuntu" | while read -r l; do info "  $l"; done
+    rm -f "$ACCTS_DIR/ubuntu"
+    ok "AccountsService: auto-login de ubuntu eliminado"
+fi
+# Registrar 'usuario' en AccountsService para que GDM lo muestre en el selector
+mkdir -p "$ACCTS_DIR"
+cat > "$ACCTS_DIR/usuario" << 'ACCTEOF'
+[User]
+Language=es_ES.UTF-8
+XSession=ubuntu
+SystemAccount=false
+ACCTEOF
+ok "AccountsService: usuario 'usuario' registrado"
 
 GDM_CONF=/etc/gdm3/custom.conf
 mkdir -p /etc/gdm3
