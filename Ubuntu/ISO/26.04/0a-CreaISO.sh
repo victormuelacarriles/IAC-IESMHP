@@ -429,23 +429,30 @@ customize_plymouth_initrd() {
         log "  watermark.png → ${wm_rel} (ruta por defecto)"
     fi
 
-    # Empaquetar como cpio sin comprimir y concatenar al final del initrd.
-    # El kernel Linux procesa múltiples segmentos initrd concatenados en orden;
-    # el último segmento sobreescribe ficheros duplicados de los anteriores.
-    # Es el mismo mecanismo que usa el microcode temprano (cpio prepended).
+    # Empaquetar como cpio sin comprimir.
     local overlay_cpio="${WORK_DIR}/plymouth_overlay.cpio"
     (cd "${overlay_dir}" && find . | sort | cpio --create --owner 0:0 --format=newc 2>/dev/null) \
         > "${overlay_cpio}"
 
-    # PREPEND (no append): nuestro CPIO sin comprimir va ANTES de la imagen comprimida.
-    # Con append, el descompresor del kernel lee el stream comprimido hasta el final,
-    # encuentra los bytes CPIO (magic 070701) y reporta "invalid magic at start of
-    # compressed archive". Con prepend, el kernel extrae primero nuestro overlay
-    # (imágenes Plymouth del IES) y luego descomprime el initramfs principal: sin error.
+    # APPEND con gzip: nuestro CPIO va AL FINAL del initrd, comprimido con gzip.
+    #
+    # Por qué no PREPEND sin comprimir (enfoque anterior, incorrecto):
+    #   El kernel procesa los segmentos initrd en orden; el ÚLTIMO sobreescribe duplicados.
+    #   Con PREPEND, el initramfs principal (que va después) sobreescribe nuestras
+    #   imágenes Plymouth → Plymouth muestra los logos estándar de Ubuntu.
+    #
+    # Por qué no APPEND sin comprimir:
+    #   El kernel encuentra magic CPIO (070701) tras el stream comprimido y lo interpreta
+    #   como otro stream comprimido → "invalid magic at start of compressed archive".
+    #
+    # Con APPEND gzip: el kernel ve magic gzip (1f 8b) → nuevo segmento comprimido válido
+    #   → extrae nuestras imágenes DESPUÉS del initramfs principal → nuestros ficheros ganan.
+    local overlay_cpio_gz="${WORK_DIR}/plymouth_overlay.cpio.gz"
+    gzip -9 -c "${overlay_cpio}" > "${overlay_cpio_gz}"
     local patched_initrd="${WORK_DIR}/initrd_patched"
-    cat "${overlay_cpio}" "${initrd_path}" > "${patched_initrd}"
+    cat "${initrd_path}" "${overlay_cpio_gz}" > "${patched_initrd}"
     cp "${patched_initrd}" "${initrd_path}"
-    log "Plymouth del Live CD personalizado: overlay ($(du -sh "${overlay_cpio}" | cut -f1)) prefijado al initrd."
+    log "Plymouth del Live CD personalizado: overlay gzip ($(du -sh "${overlay_cpio_gz}" | cut -f1)) añadido al final del initrd."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

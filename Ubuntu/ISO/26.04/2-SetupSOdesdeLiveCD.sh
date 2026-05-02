@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.6-20260502"
+VERSIONSCRIPT="22.7-20260502"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -57,7 +57,6 @@ mkdir -p /etc/dconf/db/local.d
 cat > /etc/dconf/db/local.d/00-language << 'LANGEOF'
 [org/gnome/desktop/input-sources]
 sources=[('xkb', 'es')]
-xkb-options=[]
 
 [org/gnome/system/locale]
 region='es_ES.UTF-8'
@@ -276,16 +275,35 @@ else
 fi
 
 GDM_CONF=/etc/gdm3/custom.conf
-if [ -f "$GDM_CONF" ]; then
-    sed -i 's/^\s*AutomaticLoginEnable\s*=.*/AutomaticLoginEnable=False/' "$GDM_CONF"
-    sed -i '/^\s*AutomaticLogin\s*=/d' "$GDM_CONF"
-    ok "GDM auto-login deshabilitado en $GDM_CONF"
-else
-    mkdir -p /etc/gdm3
-    printf '[daemon]\nAutomaticLoginEnable=False\n\n[security]\n\n[xdmcp]\n\n[chooser]\n\n[debug]\n' \
-        > "$GDM_CONF"
-    ok "GDM config creada (auto-login deshabilitado)"
+mkdir -p /etc/gdm3
+cat > "$GDM_CONF" << 'GDMEOF'
+[daemon]
+AutomaticLoginEnable=False
+TimedLoginEnable=False
+
+[security]
+
+[xdmcp]
+
+[chooser]
+
+[debug]
+GDMEOF
+ok "GDM config sobrescrita (auto-login deshabilitado)"
+
+# gnome-initial-setup se lanza en el primer arranque si no existe este flag.
+# GDM lo detecta y muestra el asistente de bienvenida EN VEZ de la pantalla de login,
+# resultando en "acceder directamente al escritorio" + "cuenta no disponible" al abrir terminal.
+mkdir -p /var/lib/gdm3/.config
+touch /var/lib/gdm3/.config/gnome-initial-setup-done
+mkdir -p /etc/skel/.config
+touch /etc/skel/.config/gnome-initial-setup-done
+if [ -d /home/usuario ]; then
+    mkdir -p /home/usuario/.config
+    touch /home/usuario/.config/gnome-initial-setup-done
+    chown -R usuario:usuario /home/usuario/.config
 fi
+ok "gnome-initial-setup marcado como completado (evita bypass de pantalla de login GDM)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "GRUB (grub-install + update-grub)"
