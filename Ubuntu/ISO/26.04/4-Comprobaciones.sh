@@ -272,7 +272,8 @@ if [ "$ERRORES" -eq 0 ]; then
         sleep 1
     done
     echo | tee -a "$LOGFILE"
-    reboot
+    echo "Descomentar la línea 'reboot' para reiniciar el sistema" | tee -a "$LOGFILE"
+    #reboot
 else
     read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
 fi
