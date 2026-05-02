@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.4-20260502"
+VERSIONSCRIPT="22.5-20260502"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -80,6 +80,25 @@ WALLEOF
 
 # En chroot no hay entorno gráfico; dconf update puede fallar — se aplicará en el primer login.
 dconf update 2>/dev/null && ok "dconf actualizado" || info "dconf se aplicará en el primer inicio (normal en chroot)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Eliminar autostart del Live CD del sistema instalado"
+# ─────────────────────────────────────────────────────────────────────────────
+# iac-iesmhp-setup.desktop se embebe en el squashfs para arrancar el script de
+# instalación durante el Live CD. El rsync lo copia al sistema instalado, por
+# lo que sin este paso GNOME lo ejecutaría en cada login del sistema ya instalado.
+# Se elimina de skel (antes de crear el usuario 'usuario') y del home de ubuntu.
+for _autostart_file in \
+    /etc/skel/.config/autostart/iac-iesmhp-setup.desktop \
+    /home/ubuntu/.config/autostart/iac-iesmhp-setup.desktop
+do
+    if [ -f "$_autostart_file" ]; then
+        rm -f "$_autostart_file"
+        ok "Eliminado: $_autostart_file"
+    else
+        info "No presente: $_autostart_file"
+    fi
+done
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Configurar /etc/fstab"
@@ -233,6 +252,29 @@ rm -f /etc/machine-id
 dbus-uuidgen > /etc/machine-id
 ln -sf /etc/machine-id /var/lib/dbus/machine-id
 ok "machine-id generado: $(cat /etc/machine-id)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Plymouth: logos personalizados IES Miguel Herrero"
+# ─────────────────────────────────────────────────────────────────────────────
+# Los ficheros de tema Plymouth se embeben en el initramfs por update-initramfs.
+# Se copian ANTES de ese paso para que la imagen instalada use los logos del IES.
+_PLY_BGRT="$RAIZDISTRO/imagenesIES/bgrt-fallback.png"
+_PLY_WM="$RAIZDISTRO/imagenesIES/watermark.png"
+_PLY_COPIED=0
+for _ply_dir in /usr/share/plymouth/themes/spinner /usr/share/plymouth/themes/bgrt; do
+    if [ -d "$_ply_dir" ] && [ -f "$_PLY_BGRT" ]; then
+        cp "$_PLY_BGRT" "$_ply_dir/bgrt-fallback.png"
+        ok "bgrt-fallback.png → $_ply_dir/"
+        _PLY_COPIED=$((_PLY_COPIED + 1))
+    fi
+done
+if [ -d /usr/share/plymouth/themes/spinner ] && [ -f "$_PLY_WM" ]; then
+    cp "$_PLY_WM" /usr/share/plymouth/themes/spinner/watermark.png
+    ok "watermark.png → /usr/share/plymouth/themes/spinner/"
+    _PLY_COPIED=$((_PLY_COPIED + 1))
+fi
+[ "$_PLY_COPIED" -gt 0 ] && ok "Logos Plymouth copiados ($_PLY_COPIED fichero/s)" \
+                          || info "Ningún directorio de tema Plymouth encontrado — se omite"
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Eliminar hooks de casper y generar initramfs"
