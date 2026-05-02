@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.5-20260502"
+VERSIONSCRIPT="22.6-20260502"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -257,6 +257,34 @@ if [ -f /root/.ssh/authorized_keys ]; then
     chown usuario:usuario /home/usuario/.ssh/authorized_keys
     chmod 600 /home/usuario/.ssh/authorized_keys
     ok "authorized_keys copiado a /home/usuario/.ssh/"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Eliminar usuario ubuntu (Live CD) y deshabilitar auto-login GDM"
+# ─────────────────────────────────────────────────────────────────────────────
+# El Live CD configura GDM con AutomaticLogin=ubuntu. El rsync copia esa config
+# al sistema instalado → arranque sin pantalla de login → sesión como 'ubuntu',
+# cuya cuenta puede estar bloqueada en el sistema instalado (PAM la rechaza →
+# "cuenta no disponible" en el terminal). El dconf personal de 'ubuntu' también
+# sobreescribe el fondo personalizado del IES.
+if id ubuntu &>/dev/null; then
+    userdel -r ubuntu 2>/dev/null || userdel ubuntu 2>/dev/null || true
+    rm -rf /home/ubuntu 2>/dev/null || true
+    ok "Usuario 'ubuntu' del Live CD eliminado"
+else
+    info "Usuario 'ubuntu' no presente"
+fi
+
+GDM_CONF=/etc/gdm3/custom.conf
+if [ -f "$GDM_CONF" ]; then
+    sed -i 's/^\s*AutomaticLoginEnable\s*=.*/AutomaticLoginEnable=False/' "$GDM_CONF"
+    sed -i '/^\s*AutomaticLogin\s*=/d' "$GDM_CONF"
+    ok "GDM auto-login deshabilitado en $GDM_CONF"
+else
+    mkdir -p /etc/gdm3
+    printf '[daemon]\nAutomaticLoginEnable=False\n\n[security]\n\n[xdmcp]\n\n[chooser]\n\n[debug]\n' \
+        > "$GDM_CONF"
+    ok "GDM config creada (auto-login deshabilitado)"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

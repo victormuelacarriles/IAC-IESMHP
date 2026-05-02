@@ -437,8 +437,15 @@ customize_plymouth_initrd() {
     (cd "${overlay_dir}" && find . | sort | cpio --create --owner 0:0 --format=newc 2>/dev/null) \
         > "${overlay_cpio}"
 
-    cat "${overlay_cpio}" >> "${initrd_path}"
-    log "Plymouth del Live CD personalizado ($(du -sh "${overlay_cpio}" | cut -f1) añadidos al initrd)."
+    # PREPEND (no append): nuestro CPIO sin comprimir va ANTES de la imagen comprimida.
+    # Con append, el descompresor del kernel lee el stream comprimido hasta el final,
+    # encuentra los bytes CPIO (magic 070701) y reporta "invalid magic at start of
+    # compressed archive". Con prepend, el kernel extrae primero nuestro overlay
+    # (imágenes Plymouth del IES) y luego descomprime el initramfs principal: sin error.
+    local patched_initrd="${WORK_DIR}/initrd_patched"
+    cat "${overlay_cpio}" "${initrd_path}" > "${patched_initrd}"
+    cp "${patched_initrd}" "${initrd_path}"
+    log "Plymouth del Live CD personalizado: overlay ($(du -sh "${overlay_cpio}" | cut -f1)) prefijado al initrd."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
