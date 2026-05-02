@@ -383,15 +383,14 @@ configure_grub() {
     cat > "$grub_cfg" << 'GRUBEOF'
 set default=0
 set timeout=5
-set timeout_style=countdown
-set gfxpayload=text
+set timeout_style=hidden
 
 menuentry "Instalar Ubuntu Personalizado (IAC-IESMHP)" {
-    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es ---
+    linux   /casper/vmlinuz  boot=casper quiet splash locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es ---
     initrd  /casper/initrd
 }
 menuentry "Probar Ubuntu en Espanol (Live)" {
-    linux   /casper/vmlinuz  boot=casper locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es ---
+    linux   /casper/vmlinuz  boot=casper quiet splash locale=es_ES.UTF-8 keyboard-configuration/layoutcode=es console-setup/layoutcode=es ---
     initrd  /casper/initrd
 }
 menuentry 'UEFI Firmware Settings' {
