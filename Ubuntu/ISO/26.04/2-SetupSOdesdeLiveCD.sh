@@ -65,8 +65,40 @@ LANGEOF
 ok "Idioma y teclado configurados"
 
 # ─────────────────────────────────────────────────────────────────────────────
-paso "Fondo de escritorio (dconf)"
+paso "Fondo de escritorio (todos los usuarios)"
 # ─────────────────────────────────────────────────────────────────────────────
+# Estrategia de dos capas para cubrir todos los casos:
+#
+#  1. GSettings schema override  → establece el DEFAULT de GSettings compilado
+#     en disco. No requiere D-Bus. Se aplica a todos los usuarios que no tengan
+#     un valor en su user-db (es decir, cualquier usuario recién creado).
+#
+#  2. dconf system-db:local      → override de sistema en tiempo de ejecución.
+#     Tiene prioridad sobre el schema default pero requiere que dconf update
+#     compile el fichero binario. En chroot puede fallar; si falla, la capa 1
+#     garantiza el fondo correcto igualmente.
+
+# ── Capa 1: GSettings schema override ──────────────────────────────────────
+mkdir -p /usr/share/glib-2.0/schemas
+cat > /usr/share/glib-2.0/schemas/99-iac-iesmhp-wallpaper.gschema.override << 'GSEOF'
+[org.gnome.desktop.background]
+picture-uri='file:///usr/share/backgrounds/iac-iesmhp.png'
+picture-uri-dark='file:///usr/share/backgrounds/iac-iesmhp.png'
+picture-options='zoom'
+GSEOF
+glib-compile-schemas /usr/share/glib-2.0/schemas/ \
+    && ok "GSettings schema de fondo compilado (fondo predeterminado para todos los usuarios)" \
+    || info "glib-compile-schemas falló en chroot — se recompilará en el primer arranque"
+
+# Borrar el user-db de skel si contiene un fondo distinto al nuestro,
+# para que nuevos usuarios partan del schema default (nuestro fondo).
+_SKEL_DCONF=/etc/skel/.config/dconf/user
+if [ -f "$_SKEL_DCONF" ]; then
+    rm -f "$_SKEL_DCONF"
+    ok "Eliminado $_SKEL_DCONF (evita que nuevos usuarios hereden el fondo estándar de Ubuntu)"
+fi
+
+# ── Capa 2: dconf system-db:local ──────────────────────────────────────────
 mkdir -p /etc/dconf/profile
 [ -f /etc/dconf/profile/user ] || printf 'user-db:user\nsystem-db:local\n' > /etc/dconf/profile/user
 
@@ -78,8 +110,26 @@ picture-uri-dark='file:///usr/share/backgrounds/iac-iesmhp.png'
 picture-options='zoom'
 WALLEOF
 
-# En chroot no hay entorno gráfico; dconf update puede fallar — se aplicará en el primer login.
-dconf update 2>/dev/null && ok "dconf actualizado" || info "dconf se aplicará en el primer inicio (normal en chroot)"
+# Pantalla de inicio de sesión GDM: logotipo del IES
+_GDM_WM="$RAIZDISTRO/imagenesIES/watermark.png"
+if [ -f "$_GDM_WM" ]; then
+    cp "$_GDM_WM" /usr/share/backgrounds/iac-iesmhp-watermark.png
+    cat > /etc/dconf/profile/gdm << 'GDMPROF'
+user-db:user
+system-db:gdm
+GDMPROF
+    mkdir -p /etc/dconf/db/gdm.d
+    cat > /etc/dconf/db/gdm.d/00-login-screen << 'GDMEOF'
+[org/gnome/login-screen]
+logo='/usr/share/backgrounds/iac-iesmhp-watermark.png'
+GDMEOF
+    ok "Logo GDM configurado: /usr/share/backgrounds/iac-iesmhp-watermark.png"
+else
+    info "watermark.png no encontrado en $RAIZDISTRO/imagenesIES/ — logo GDM omitido"
+fi
+
+dconf update && ok "dconf actualizado (system-db compilado)" \
+    || info "dconf update falló en chroot — el schema override (capa 1) garantiza el fondo igualmente"
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Eliminar autostart del Live CD del sistema instalado"
