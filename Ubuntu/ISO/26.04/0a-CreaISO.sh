@@ -365,6 +365,83 @@ DCONFEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 3. PERSONALIZAR PLYMOUTH EN EL INITRD DEL LIVE CD
+# ─────────────────────────────────────────────────────────────────────────────
+customize_plymouth_initrd() {
+    step "Personalizando Plymouth en el initrd del Live CD"
+
+    local initrd_path="${ISO_DIR}/casper/initrd"
+    local bgrt_png="${SCRIPT_DIR}/imagenesIES/bgrt-fallback.png"
+    local watermark_png="${SCRIPT_DIR}/imagenesIES/watermark.png"
+
+    if [[ ! -f "$initrd_path" ]]; then
+        warn "No se encontró casper/initrd — splash del Live CD sin personalizar."
+        return 0
+    fi
+    if [[ ! -f "$bgrt_png" ]] || [[ ! -f "$watermark_png" ]]; then
+        warn "Faltan imágenes Plymouth en imagenesIES/ — splash del Live CD sin personalizar."
+        return 0
+    fi
+
+    local overlay_dir="${WORK_DIR}/plymouth_initrd_overlay"
+    local found_bgrt=0
+    local found_watermark=0
+
+    # Detectar rutas reales con lsinitramfs si está disponible (initramfs-tools)
+    if command -v lsinitramfs &>/dev/null; then
+        log "  Escaneando initrd con lsinitramfs..."
+        while IFS= read -r rel; do
+            rel="${rel#./}"
+            case "$(basename "$rel")" in
+                bgrt-fallback.png)
+                    mkdir -p "${overlay_dir}/$(dirname "$rel")"
+                    cp "${bgrt_png}" "${overlay_dir}/${rel}"
+                    log "  bgrt-fallback.png → ${rel}"
+                    found_bgrt=1
+                    ;;
+                watermark.png)
+                    mkdir -p "${overlay_dir}/$(dirname "$rel")"
+                    cp "${watermark_png}" "${overlay_dir}/${rel}"
+                    log "  watermark.png → ${rel}"
+                    found_watermark=1
+                    ;;
+            esac
+        done < <(lsinitramfs "${initrd_path}" 2>/dev/null | grep '\.png$' || true)
+    fi
+
+    # Fallback: rutas conocidas de Ubuntu 24.04+/26.04
+    # 2-SetupSOdesdeLiveCD.sh copia bgrt-fallback.png a ambos directorios (spinner y bgrt)
+    if [[ "$found_bgrt" -eq 0 ]]; then
+        [[ "$found_bgrt" -eq 0 ]] && warn "  lsinitramfs no detectó bgrt-fallback.png → usando rutas por defecto"
+        for rel in \
+            "usr/share/plymouth/themes/bgrt/bgrt-fallback.png" \
+            "usr/share/plymouth/themes/spinner/bgrt-fallback.png"; do
+            mkdir -p "${overlay_dir}/$(dirname "$rel")"
+            cp "${bgrt_png}" "${overlay_dir}/${rel}"
+            log "  bgrt-fallback.png → ${rel} (ruta por defecto)"
+        done
+    fi
+    if [[ "$found_watermark" -eq 0 ]]; then
+        local wm_rel="usr/share/plymouth/themes/spinner/watermark.png"
+        warn "  lsinitramfs no detectó watermark.png → usando ruta por defecto"
+        mkdir -p "${overlay_dir}/$(dirname "$wm_rel")"
+        cp "${watermark_png}" "${overlay_dir}/${wm_rel}"
+        log "  watermark.png → ${wm_rel} (ruta por defecto)"
+    fi
+
+    # Empaquetar como cpio sin comprimir y concatenar al final del initrd.
+    # El kernel Linux procesa múltiples segmentos initrd concatenados en orden;
+    # el último segmento sobreescribe ficheros duplicados de los anteriores.
+    # Es el mismo mecanismo que usa el microcode temprano (cpio prepended).
+    local overlay_cpio="${WORK_DIR}/plymouth_overlay.cpio"
+    (cd "${overlay_dir}" && find . | sort | cpio --create --owner 0:0 --format=newc 2>/dev/null) \
+        > "${overlay_cpio}"
+
+    cat "${overlay_cpio}" >> "${initrd_path}"
+    log "Plymouth del Live CD personalizado ($(du -sh "${overlay_cpio}" | cut -f1) añadidos al initrd)."
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 4. CONFIGURAR GRUB PARA ARRANQUE AUTOMÁTICO
 # ─────────────────────────────────────────────────────────────────────────────
 configure_grub() {
@@ -505,6 +582,7 @@ main() {
     check_inputs
     extract_iso
     customize_squashfs
+    customize_plymouth_initrd
     configure_grub
     remove_bios_boot
     get_efi_boot_params
