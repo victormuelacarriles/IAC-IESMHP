@@ -5,7 +5,7 @@
 #  Funciona tanto dentro del chroot (llamado desde 2-SetupSOdesdeLiveCD.sh)
 #  como en el sistema ya arrancado (llamado desde 3-SetupPrimerInicio.sh).
 # =============================================================================
-VERSIONSCRIPT="1.1-20260502"
+VERSIONSCRIPT="1.2-20260502"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 RAIZLOG="/var/log/$REPO/$DISTRO"
@@ -60,9 +60,11 @@ else
         if [ -z "$LISTADO" ]; then
             _avs "No se pudo inspeccionar el initramfs (herramienta no disponible)"
         else
-            # NVMe
-            if echo "$LISTADO" | grep -q nvme; then
-                _ok "  Driver NVMe: presente en initramfs"
+            # NVMe: verificar que hay un .ko real, no solo un directorio
+            if echo "$LISTADO" | grep -qE 'nvme.*\.ko'; then
+                _ok "  Driver NVMe: módulo .ko presente en initramfs"
+            elif echo "$LISTADO" | grep -q 'nvme'; then
+                _avs "  Driver NVMe: referencia nvme en initramfs pero sin .ko — puede no cargar"
             else
                 _err "  Driver NVMe: AUSENTE en initramfs → kernel panic al arrancar"
                 _avs "  Fix: echo MODULES=most > /etc/initramfs-tools/conf.d/modules && update-initramfs -u -k $KVER"
@@ -126,6 +128,24 @@ else
             else
                 _err "  UUID INCOHERENTE: grub.cfg=$GRUB_ROOT_UUID  fstab=$FSTAB_ROOT_UUID → kernel panic seguro"
             fi
+        fi
+    fi
+
+    # Verificar línea initrd — su ausencia provoca VFS panic (unknown-block 0,0)
+    # porque el kernel no puede resolver UUID sin initramfs
+    INITRD_LINE=$(awk '/menuentry .Ubuntu[^,]/{f=1} f && /^\s+initrd\s/{print; exit}' /boot/grub/grub.cfg)
+    if [ -z "$INITRD_LINE" ]; then
+        _err "  initrd: línea AUSENTE en grub.cfg → kernel arranca SIN initramfs → VFS panic (unknown-block 0,0)"
+        _avs "  Fix: update-grub (con initramfs ya en /boot/) y re-aplicar parche UUID si es necesario"
+    else
+        INITRD_PATH=$(echo "$INITRD_LINE" | awk '{print $2}')
+        _inf "  initrd line: ${INITRD_LINE}"
+        INITRD_REAL=$(realpath "${INITRD_PATH}" 2>/dev/null || echo "${INITRD_PATH}")
+        if [ -f "${INITRD_REAL}" ]; then
+            _ok "  initrd apunta a fichero existente: ${INITRD_REAL}"
+        else
+            _err "  initrd apunta a ${INITRD_PATH} que NO existe → VFS panic"
+            _avs "  Fix: update-initramfs -c -k all && update-grub"
         fi
     fi
 fi

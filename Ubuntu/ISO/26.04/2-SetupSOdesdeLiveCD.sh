@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.3-20260430"
+VERSIONSCRIPT="22.4-20260502"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -331,6 +331,29 @@ else
     info "Kernels en /lib/modules/: $(ls /lib/modules/ 2>/dev/null | tr '\n' ' ')"
     exit 1
 fi
+
+# ── Asegurar línea initrd en grub.cfg ──────────────────────────────────────────
+# grub.cfg se generó en el paso anterior cuando initrd.img-${KERNEL} aún no existía
+# (solo había symlinks colgantes). grub/10_linux usa 'test -e' → omite la línea
+# initrd → el kernel arranca sin initramfs → VFS panic (unknown-block 0,0).
+# Ahora que el initramfs existe, regeneramos grub.cfg con la línea initrd correcta.
+info "Verificando línea initrd en grub.cfg..."
+if ! grep -qE '^\s+initrd\s' "$GRUB_CFG" 2>/dev/null; then
+    info "  grub.cfg sin línea initrd — re-ejecutando update-grub..."
+    update-grub 2>&1 | grep -E '^(Found|Generating|done|Warning|Adding)' | sed 's/^/    /' || true
+    # Re-aplicar parche UUID (update-grub en chroot escribe root=/dev/...)
+    ROOT_DEV_STEP10="/dev/$ROOT"
+    ROOT_UUID_STEP10=$(blkid -s UUID -o value "$ROOT_DEV_STEP10" 2>/dev/null || true)
+    if [ -n "$ROOT_UUID_STEP10" ] && grep -q "root=${ROOT_DEV_STEP10}" "$GRUB_CFG" 2>/dev/null; then
+        sed -i "s|root=${ROOT_DEV_STEP10}\b|root=UUID=${ROOT_UUID_STEP10}|g" "$GRUB_CFG"
+        ok "grub.cfg re-parcheado: root=${ROOT_DEV_STEP10} → root=UUID=${ROOT_UUID_STEP10}"
+    fi
+    ok "grub.cfg regenerado con línea initrd"
+else
+    ok "grub.cfg ya tiene línea initrd — correcto"
+fi
+info "Líneas linux+initrd en grub.cfg (verificación final):"
+grep -E '^\s*(linux|initrd)\s' "$GRUB_CFG" 2>/dev/null | head -8 | sed 's/^/    /' || true
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Servicio 3-SetupPrimerInicio (primer arranque)"

@@ -152,5 +152,8 @@ Antes de modificar un script, consulta ese directorio para evitar repetir correc
 
 ### Bugs corregidos en 4-Comprobaciones.sh (historial para no repetirlos)
 
+- **2026-05-02 — Línea `initrd` ausente en grub.cfg no detectada (sección 2)**: el check solo verificaba la línea `linux` pero no la línea `initrd`. Si `update-grub` corre antes de que exista el initramfs (orden de operaciones en `2-SetupSOdesdeLiveCD.sh`), grub.cfg se genera sin `initrd` → kernel panic `unknown-block(0,0)`. **Fix**: nuevo check de la línea `initrd` en sección 2; en `2-SetupSOdesdeLiveCD.sh` se re-ejecuta `update-grub` tras `update-initramfs` si falta la línea.
+- **2026-05-02 — Falso positivo NVMe (sección 1)**: `grep -q nvme` coincide con directorios como `kernel/drivers/nvme/` sin que haya ningún `.ko` real. **Fix**: `grep -qE 'nvme.*\.ko'` para verificar la presencia del módulo real.
+
 - **2026-04-30 — Falso positivo casper (sección 5)**: el check usaba `dpkg -l casper | grep "^ii"`. `2-SetupSOdesdeLiveCD.sh` borra los hooks con `rm -rf` sin pasar por `apt remove`, así que dpkg sigue marcando el paquete como instalado aunque los hooks no existan. **Fix**: buscar hooks en disco con `find /usr/share/initramfs-tools /etc/initramfs-tools -name '*casper*'`; si no hay ficheros → `[OK]`.
 - **2026-04-30 — Falso positivo UUID EFI (sección 3)**: el regex `UUID=\K[a-f0-9-]+` trunca los UUIDs FAT/vfat (formato `68AA-2FED`) en la primera letra mayúscula, extrayendo solo `68`. `blkid -U 68` no encuentra nada → `[ERR]` falso. **Fix**: regex `[a-fA-F0-9-]+` (añadir `A-F`).
