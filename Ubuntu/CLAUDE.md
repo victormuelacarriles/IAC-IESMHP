@@ -10,10 +10,10 @@ Automatización del despliegue de Ubuntu 26.04 Desktop en equipos del IES Miguel
 
 ### Protocolo de diagnóstico (seguir en este orden)
 1. Leer el fichero de cambios más reciente en `Ubuntu/RegistroDeCambios/` para saber qué se tocó en la última sesión y qué consecuencias puede haber tenido.
-2. Leer el log pegado o el fichero `Ubuntu/ISO/26.04/logs/Ubuntu/4-Comprobaciones.sh.log`.
+2. Leer el log pegado o los ficheros de log en `Ubuntu/ISO/26.04/logs/ (ficheros *.log y *.steps)
 3. **Antes de proponer un fix**, cruzar cada `[ERR]` con la lista de falsos positivos conocidos documentada más abajo — muchos errores son del propio script de diagnóstico, no del sistema instalado.
 4. Si el error es real (no falso positivo), buscar en el script correspondiente la línea exacta que lo genera y proponer el cambio mínimo necesario.
-5. Documentar el fix en `Ubuntu/RegistroDeCambios/YYYYMMDD-Cambios.md` (crear el fichero del día si no existe).
+5. Documentar el fix en `Ubuntu/RegistroDeCambios/YYYYMMDD-Cambios.md` (crear el fichero del día si no existe. Indicar dentro del fichero la hora de los cambios.).
 
 ---
 

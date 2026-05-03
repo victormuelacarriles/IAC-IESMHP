@@ -287,15 +287,13 @@ fi
 echo " ssh ubuntu@${IP}   Log: /mnt$LOGFILE      " | tee -a "$LOGFILE"
 echo "================================================================" | tee -a "$LOGFILE"
 if [ "$ERRORES" -eq 0 ]; then
-    for i in 20 19 18 17 16 15 14 13 12 1110 9 8 7 6 5 4 3 2 1; do
+    for i in 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10 9 8 7 6 5 4 3 2 1; do
         echo -ne "\r Reiniciando en $i segundos... (Ctrl+C para cancelar)  " | tee -a "$LOGFILE"
         sleep 1
     done
     echo | tee -a "$LOGFILE"
     echo "Descomentar la línea 'reboot' para reiniciar el sistema" | tee -a "$LOGFILE"
-    #reboot
-    #Eliminar esta lina
-    read -n 1 -s -r -p ")reboot(->Presiona cualquier tecla para continuar..."
+    reboot
 else
     read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
 fi

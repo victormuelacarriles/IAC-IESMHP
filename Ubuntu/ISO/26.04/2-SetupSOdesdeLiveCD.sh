@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.13-20260503"
+VERSIONSCRIPT="22.14-20260503"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -242,13 +242,19 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Usuarios (root y usuario)"
 # ─────────────────────────────────────────────────────────────────────────────
+if id usuario &>/dev/null; then
+    info "Usuario 'usuario' ya existe"
+else
+    useradd -m -s /bin/bash -p '*' usuario
+    ok "Usuario 'usuario' creado"
+fi
+adduser usuario sudo 2>/dev/null || usermod -aG sudo usuario
+ok "Usuario 'usuario' en grupo sudo"
+
 # Ubuntu 26.04: chpasswd usa PAM con pam_pwquality (mínimo 8 chars).
-# Las contraseñas cortas ('root', 'usuario') son rechazadas con exit≠0 silencioso.
-# Solución: generar hash SHA-512 con openssl y usar chpasswd -e (escribe directo
-# a /etc/shadow sin pasar por PAM quality checks).
-# Ubuntu 26.04: usar Python para escribir directamente en /etc/shadow,
-# evitando PAM (pam_pwquality rechaza contraseñas cortas) y cualquier
-# problema de escaping de '$' en el hash SHA-512.
+# Escribir hash SHA-512 directamente en /etc/shadow para evitar pam_pwquality.
+# IMPORTANTE: 'usuario' debe existir en /etc/shadow antes de este bloque.
+# Por eso useradd está ANTES de aquí (movido de su posición original).
 python3 - << 'PYEOF'
 import subprocess, re, sys
 for user, pw in [('root', 'root'), ('usuario', 'usuario')]:
@@ -259,11 +265,11 @@ for user, pw in [('root', 'root'), ('usuario', 'usuario')]:
                      r'\g<1>:' + h.replace('\\', '\\\\') + ':',
                      content, flags=re.MULTILINE)
     if updated == content:
-        print(f'[WARN] {user} no encontrado en /etc/shadow', flush=True)
+        print(f'[ERR] {user} no encontrado en /etc/shadow', flush=True)
+        sys.exit(1)
     else:
         with open('/etc/shadow', 'w') as f:
             f.write(updated)
-        # Verificar que quedó bien
         with open('/etc/shadow', 'r') as f:
             check = f.read()
         found = re.search(r'^' + re.escape(user) + r':(\$[^:]+):', check, re.MULTILINE)
@@ -274,15 +280,6 @@ for user, pw in [('root', 'root'), ('usuario', 'usuario')]:
             sys.exit(1)
 PYEOF
 ok "Contraseñas root y usuario establecidas en /etc/shadow"
-
-if id usuario &>/dev/null; then
-    info "Usuario 'usuario' ya existe"
-else
-    useradd -m -s /bin/bash -p '*' usuario
-    ok "Usuario 'usuario' creado"
-fi
-adduser usuario sudo 2>/dev/null || usermod -aG sudo usuario
-ok "Usuario 'usuario' en grupo sudo"
 
 # Diagnóstico: verificar /etc/nologin (bloquea login de TODOS los usuarios normales)
 if [ -f /etc/nologin ]; then
