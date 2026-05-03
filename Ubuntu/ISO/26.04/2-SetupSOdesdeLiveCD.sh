@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.10-20260503"
+VERSIONSCRIPT="22.11-20260503"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -397,6 +397,50 @@ ok "Screensaver del GDM greeter deshabilitado (evita pantalla de bloqueo de 'GDM
 dconf update && ok "dconf recompilado (gdm screensaver settings incluidos)" \
     || info "dconf update falló en chroot — las bases GDM se compilarán en el primer arranque"
 
+# ── Servicio early-boot: escribe GDM config ANTES de que display-manager arranque ─────
+# Garantía final contra auto-login: aunque algo sobreescriba /etc/gdm3/custom.conf
+# (casper.service, postinst de gdm3 durante full-upgrade, etc.), este servicio
+# se ejecuta en CADA arranque Before=display-manager.service y lo corrige.
+# 3-SetupPrimerInicio tiene After=graphical.target → llega tarde; este servicio
+# llega a tiempo.
+cat > /usr/local/sbin/iac-gdm-noautologin.sh << 'GDMEARLYSCRIPT'
+#!/bin/bash
+mkdir -p /etc/gdm3
+cat > /etc/gdm3/custom.conf << 'GDM3EARLY'
+[daemon]
+AutomaticLoginEnable=false
+TimedLoginEnable=false
+InitialSetupEnable=false
+
+[security]
+
+[xdmcp]
+
+[chooser]
+
+[debug]
+GDM3EARLY
+GDMEARLYSCRIPT
+chmod +x /usr/local/sbin/iac-gdm-noautologin.sh
+
+cat > /etc/systemd/system/iac-gdm-noautologin.service << 'GDMEARLYUNIT'
+[Unit]
+Description=IAC: enforce GDM sin auto-login antes de display-manager
+DefaultDependencies=no
+Before=display-manager.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/iac-gdm-noautologin.sh
+
+[Install]
+WantedBy=display-manager.service
+GDMEARLYUNIT
+systemctl enable iac-gdm-noautologin.service
+ok "Servicio iac-gdm-noautologin habilitado (Before=display-manager en cada arranque)"
+
 # ─────────────────────────────────────────────────────────────────────────────
 paso "GRUB (grub-install + update-grub)"
 # ─────────────────────────────────────────────────────────────────────────────
@@ -495,6 +539,11 @@ done
 find /usr/share/initramfs-tools /etc/initramfs-tools \
      -name '*casper*' -exec rm -rf {} + 2>/dev/null || true
 ok "Hooks de casper eliminados ($CASPER_HOOKS_REMOVED ficheros/dirs encontrados)"
+
+# Enmascarar casper.service en systemd: en Ubuntu 26.04 casper puede tener un
+# servicio de userspace que modifica /etc/gdm3/custom.conf antes del primer login.
+ln -sf /dev/null /etc/systemd/system/casper.service 2>/dev/null || true
+info "casper.service enmascarado en systemd (symlink → /dev/null)"
 
 info "Configurando MODULES=most y RESUME=none..."
 mkdir -p /etc/initramfs-tools/conf.d
