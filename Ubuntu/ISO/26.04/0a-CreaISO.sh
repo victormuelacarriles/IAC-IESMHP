@@ -379,25 +379,18 @@ DCONFEOF
         warn "Plymouth: faltan imágenes en imagenesIES/ — Live CD usará logos Ubuntu"
     fi
 
-    # GDM auto-login: deshabilitar en el squashfs antes del rsync al disco instalado.
-    # El 2-SetupSOdesdeLiveCD.sh también lo fija en chroot, pero si algo lo regenera
-    # entre el rsync y el chroot (o el chroot no alcanza ese momento), el squashfs ya está limpio.
-    local _gdm_conf="${SQUASHFS_DIR}/etc/gdm3/custom.conf"
-    mkdir -p "${SQUASHFS_DIR}/etc/gdm3"
-    cat > "$_gdm_conf" << 'GDMSQEOF'
-[daemon]
-AutomaticLoginEnable=false
-TimedLoginEnable=false
+    # GDM: NO se toca custom.conf en el squashfs.
+    # Casper escribe /etc/gdm3/custom.conf en tiempo de ejecución para habilitar
+    # el auto-login de 'ubuntu' en el Live CD. Si ponemos AutomaticLoginEnable=false
+    # aquí, ese valor prevalece y el Live CD se queda en la pantalla de login.
+    # El sistema instalado lo gestiona 2-SetupSOdesdeLiveCD.sh (chroot) +
+    # 3-SetupPrimerInicio.sh (post-upgrade), que son las capas correctas.
 
-[security]
-
-[xdmcp]
-
-[chooser]
-
-[debug]
-GDMSQEOF
-    log "  GDM: auto-login deshabilitado en squashfs"
+    # ── Zona horaria del Live CD ───────────────────────────────────────────────
+    step "Configurando zona horaria Europe/Madrid en el squashfs"
+    ln -sf /usr/share/zoneinfo/Europe/Madrid "${SQUASHFS_DIR}/etc/localtime"
+    echo "Europe/Madrid" > "${SQUASHFS_DIR}/etc/timezone"
+    log "  Zona horaria Live CD: Europe/Madrid"
 
     log "Reempaquetando SquashFS..."
     rm "${squashfs_path}"

@@ -164,6 +164,7 @@ cat > /etc/gdm3/custom.conf << 'GDM3POSTEOF'
 [daemon]
 AutomaticLoginEnable=false
 TimedLoginEnable=false
+InitialSetupEnable=false
 
 [security]
 
@@ -173,7 +174,7 @@ TimedLoginEnable=false
 
 [debug]
 GDM3POSTEOF
-echoverde "GDM: auto-login deshabilitado (post-upgrade)"
+echoverde "GDM: auto-login e initial-setup deshabilitados (post-upgrade)"
 
 # Limpiar caché de paquetes
 echoverde "Limpiando caché de paquetes segunda vez..."

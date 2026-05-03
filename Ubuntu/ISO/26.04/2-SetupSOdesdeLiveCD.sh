@@ -44,7 +44,7 @@ info "Log completo : $LOG2"
 info "Fichero pasos: $STEPS"
 
 # ─────────────────────────────────────────────────────────────────────────────
-paso "Idioma y teclado español"
+paso "Idioma, teclado y zona horaria"
 # ─────────────────────────────────────────────────────────────────────────────
 sed -i 's/# es_ES.UTF-8/es_ES.UTF-8/g' /etc/locale.gen
 locale-gen es_ES.UTF-8
@@ -62,6 +62,11 @@ sources=[('xkb', 'es')]
 region='es_ES.UTF-8'
 LANGEOF
 ok "Idioma y teclado configurados"
+
+ln -sf /usr/share/zoneinfo/Europe/Madrid /etc/localtime
+echo "Europe/Madrid" > /etc/timezone
+dpkg-reconfigure -f noninteractive tzdata 2>/dev/null || true
+ok "Zona horaria configurada: Europe/Madrid ($(date '+%Z %z'))"
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Fondo de escritorio (todos los usuarios)"
@@ -339,6 +344,7 @@ cat > "$GDM_CONF" << 'GDMEOF'
 [daemon]
 AutomaticLoginEnable=false
 TimedLoginEnable=false
+InitialSetupEnable=false
 
 [security]
 
@@ -348,23 +354,30 @@ TimedLoginEnable=false
 
 [debug]
 GDMEOF
-ok "GDM config sobrescrita (auto-login deshabilitado)"
+ok "GDM config sobrescrita (auto-login e initial-setup deshabilitados)"
 info "Contenido final de $GDM_CONF:"
 while IFS= read -r l; do info "  $l"; done < "$GDM_CONF"
 
 # gnome-initial-setup se lanza en el primer arranque si no existe este flag.
 # GDM lo detecta y muestra el asistente de bienvenida EN VEZ de la pantalla de login,
 # resultando en "acceder directamente al escritorio" + "cuenta no disponible" al abrir terminal.
+# Rutas antiguas (gnome-initial-setup < 46, Ubuntu <= 24.04)
 mkdir -p /var/lib/gdm3/.config
 touch /var/lib/gdm3/.config/gnome-initial-setup-done
 mkdir -p /etc/skel/.config
 touch /etc/skel/.config/gnome-initial-setup-done
+# Rutas nuevas (gnome-initial-setup >= 46, Ubuntu 26.04+)
+mkdir -p /var/lib/gdm3/.local/share
+touch /var/lib/gdm3/.local/share/gnome-initial-setup-done
+mkdir -p /etc/skel/.local/share
+touch /etc/skel/.local/share/gnome-initial-setup-done
 if [ -d /home/usuario ]; then
-    mkdir -p /home/usuario/.config
+    mkdir -p /home/usuario/.config /home/usuario/.local/share
     touch /home/usuario/.config/gnome-initial-setup-done
-    chown -R usuario:usuario /home/usuario/.config
+    touch /home/usuario/.local/share/gnome-initial-setup-done
+    chown -R usuario:usuario /home/usuario/.config /home/usuario/.local
 fi
-ok "gnome-initial-setup marcado como completado (evita bypass de pantalla de login GDM)"
+ok "gnome-initial-setup marcado como completado (rutas antiguas y nuevas)"
 
 # Deshabilitar el bloqueo de pantalla en la sesión del GDM greeter.
 # GDM en Ubuntu 26.04 corre el greeter como sesión Wayland del usuario 'gdm'.
