@@ -84,25 +84,43 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 - Pasa las particiones al chroot mediante `/mnt/tmp/.iac-partitions.env` porque `lsblk` dentro del chroot ve los mount points del host, no del sistema instalado.
 - Si `2-SetupSOdesdeLiveCD.sh` termina con la línea literal `Correcto`, reinicia automáticamente; si no, espera 100000 s para diagnóstico.
 
-### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot
+### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot (v22.14-20260503)
 - Genera `/etc/fstab` con UUIDs reales leídos de `blkid`.
+- **Fondo de escritorio** (dos capas): GSettings schema override (`99-iac-iesmhp-wallpaper.gschema.override`) como valor predeterminado compilado, más `dconf system-db:local` como override en runtime. Si `dconf update` falla en chroot, la capa GSettings garantiza el fondo igualmente.
+- **Plymouth logos**: copia `bgrt-fallback.png` y `watermark.png` desde `imagenesIES/` a los temas spinner/bgrt **antes** de `update-initramfs`, para que la imagen instalada use los logos del IES.
+- **Elimina autostart del Live CD**: borra `iac-iesmhp-setup.desktop` de `/etc/skel/.config/autostart` y `/home/ubuntu/.config/autostart` para que GNOME no lo ejecute en cada login del sistema instalado.
+- **GDM — anti-autologin (multicapa)**:
+  1. `AccountsService/users/ubuntu` eliminado + `usuario` registrado.
+  2. `debconf-set-selections` pre-configura gdm3 con auto-login=false antes de que `dpkg --configure -a` pueda leer debconf del Live CD.
+  3. `/etc/gdm3/custom.conf.d` eliminado + `custom.conf` sobrescrito con `AutomaticLoginEnable=false`, `TimedLoginEnable=false`, `InitialSetupEnable=false`, `WaylandEnable=true`.
+  4. `iac-gdm-noautologin.service` (nuevo): `Before=display-manager.service` + `After=local-fs.target`, escribe `custom.conf` en **cada** arranque antes de que GDM lo lea. Cubre el caso de que postinst de gdm3 o `full-upgrade` sobreescriban la config.
+  5. `casper.service` enmascarado vía symlink a `/dev/null` para impedir que casper userspace re-habilite auto-login.
+- **gnome-initial-setup**: marcadores creados en rutas antiguas (`~/.config/`) y nuevas (`~/.local/share/`, Ubuntu 26.04+) para `gdm3`, `skel` y `usuario`. Evita que GDM lance el asistente de bienvenida como sesión propia ("GDM Greeter").
+- **Contraseñas via Python inline**: genera hash SHA-512 con `openssl passwd -6` y lo escribe directamente en `/etc/shadow` via regex, sin pasar por PAM (`pam_pwquality` rechaza contraseñas cortas como 'root'/'usuario'). `useradd` se ejecuta **antes** de este bloque para que el usuario exista en shadow. Si el hash no queda escrito, sale con `sys.exit(1)`.
+- **Check `/etc/nologin`**: si existe, bloquea todos los logins normales. El script lo detecta y elimina.
+- **VMware — Wayland software rendering**: tras instalar el servicio GDM, detecta VMware con `systemd-detect-virt`. Si es VMware, escribe `LIBGL_ALWAYS_SOFTWARE=1` en `/etc/environment` para que Mesa llvmpipe permita iniciar sesiones Wayland sin aceleración 3D. En máquinas físicas, `systemd-detect-virt` devuelve "none" y este bloque no se ejecuta.
 - **Parche grub.cfg**: `update-grub` en chroot a veces escribe `root=/dev/nvme0n1p3` en lugar de `root=UUID=...`. El script lo detecta y parchea con `sed`.
-- **Casper hooks**: se eliminan directamente con `rm -rf` (sin `apt remove`) para evitar que los triggers dpkg se bloqueen en el chroot. Los hooks afectados: `/usr/share/initramfs-tools/hooks/casper` y variantes.
-- `update-initramfs -u -k all` tarda 2–4 min; es el paso más lento del chroot.
+- **Casper hooks**: se eliminan directamente con `rm -rf` (sin `apt remove`) para evitar que los triggers dpkg se bloqueen en el chroot. Hooks afectados: `/usr/share/initramfs-tools/hooks/casper` y variantes.
+- `update-initramfs -c -k all` (create, no update) tarda 2–4 min; es el paso más lento. Se usa `-c` porque en sistemas instalados desde squashfs no existe initramfs previo y `-u` no crearía uno nuevo.
+- **Re-ejecución de `update-grub` tras initramfs**: si grub.cfg no tiene línea `initrd` (generado cuando initrd.img aún no existía), se re-ejecuta `update-grub` y se re-aplica el parche UUID.
 - Crea el servicio systemd `3-SetupPrimerInicio.service` con `WantedBy=multi-user.target`.
 - Termina siempre con `echo "Correcto"` si todo fue bien (1-SetupLiveCD lo comprueba con `tail -n1`).
 
 ### 3-SetupPrimerInicio.sh — Primer arranque
 - Detecta el aula por el tercer octeto de la IP: 72→IABD, 32→SMRV.
 - Configura proxy apt según aula: `10.0.72.140:3128` (IABD) o `10.0.32.119:3128` (SMRV).
+- `export DEBIAN_FRONTEND=noninteractive` + `debconf-set-selections` para gdm3 antes de `dpkg --configure -a`. Evita que el postinst de gdm3 regenere `custom.conf` con auto-login del Live CD.
+- `dpkg --configure -a` y `apt-get full-upgrade` usan `-o Dpkg::Options::="--force-confold"` para no reemplazar `custom.conf` con la versión del paquete.
+- Bloque **post-upgrade**: sobreescribe `/etc/gdm3/custom.conf` con `AutomaticLoginEnable=false` + `InitialSetupEnable=false` + `WaylandEnable=true` tras el upgrade, por si gdm3 lo regeneró.
+- En VMware: instala `open-vm-tools-desktop` y confirma/añade `LIBGL_ALWAYS_SOFTWARE=1` en `/etc/environment`.
 - Instala `ssh` y `ansible`, habilita `PermitRootLogin yes` y hace `apt-get full-upgrade`.
 - Muestra progreso al usuario mediante diálogos `zenity` en todas las sesiones gráficas activas.
 - Se autodeshabilita con triple mecanismo: `systemctl disable` + `rm` del `.service` + `mv "$0" "$0.borrado"`.
 - Ejecuta `NombreIP.sh` (resuelve MAC→hostname y opcionalmente convierte DHCP a IP estática).
 - Ejecuta `Auto-Ansible.sh` y lanza directamente `ansible-playbook roles.yaml` desde `$RAIZANSIBLE`.
 
-### 4-Comprobaciones.sh — Diagnóstico
-Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de hooks casper, grub.cfg con UUIDs, fstab vs blkid, paquetes dpkg rotos, servicio SSH. Genera resumen de errores/warnings al final. Útil como primer análisis al pegar un log.
+### 4-Comprobaciones.sh — Diagnóstico (v1.2-20260502)
+Comprueba en 8 secciones: (1) kernel+initramfs+NVMe+casper, (2) grub.cfg con UUIDs+línea initrd, (3) fstab vs blkid, (4) lsblk particiones, (5) paquetes clave (casper por ficheros en disco, no dpkg; ubiquity; dpkg --audit), (6) initramfs-tools config (MODULES=most, RESUME=none), (7) GRUB EFI instalado (grubx64.efi, módulos), (8) servicios systemd fallidos + SSH (solo si sistema arrancado, no en chroot). Genera resumen ERRORES/AVISOS al final. **Cuando ERRORES=0, reinicia automáticamente tras cuenta atrás de 30 s.** Útil como primer análisis al pegar un log.
 
 **Falsos positivos conocidos en 4-Comprobaciones.sh** — verificar antes de asumir que el sistema está roto:
 
@@ -149,11 +167,16 @@ Antes de modificar un script, consulta ese directorio para evitar repetir correc
 - **`0b-Github.sh` línea 54**: comentario `#####FALLA AQUí!` — en alguna versión se bloqueaba antes del `apt-get install git`. Mitigado enmascarando `update-initramfs` (tanto `/usr/local/sbin/` como `/usr/sbin/`) y `man-db` antes de cualquier apt.
 - **`Auto-Ansible.sh` línea 38**: `ssh-keygen -F $HOSTNAME` falla. Pendiente de corrección.
 - **snapd en Live CD**: si en futuras ISOs snapd vuelve a arrancar, los síntomas son arranque lento (~3 min) y bloqueo de `ubuntu-desktop-bootstrap` antes del autostart.
+- **Wayland en VMware sin 3D**: si la sesión Wayland sigue fallando en la VM (GDM vuelve al login sin mensaje de error), verificar **Habilitar aceleración 3D** en Display → Accelerate 3D graphics de VMware. Con eso y `open-vm-tools-desktop`, Wayland funciona sin necesidad de `LIBGL_ALWAYS_SOFTWARE`.
 
-### Bugs corregidos en 4-Comprobaciones.sh (historial para no repetirlos)
+### Bugs corregidos (historial para no repetirlos)
 
-- **2026-05-02 — Línea `initrd` ausente en grub.cfg no detectada (sección 2)**: el check solo verificaba la línea `linux` pero no la línea `initrd`. Si `update-grub` corre antes de que exista el initramfs (orden de operaciones en `2-SetupSOdesdeLiveCD.sh`), grub.cfg se genera sin `initrd` → kernel panic `unknown-block(0,0)`. **Fix**: nuevo check de la línea `initrd` en sección 2; en `2-SetupSOdesdeLiveCD.sh` se re-ejecuta `update-grub` tras `update-initramfs` si falta la línea.
-- **2026-05-02 — Falso positivo NVMe (sección 1)**: `grep -q nvme` coincide con directorios como `kernel/drivers/nvme/` sin que haya ningún `.ko` real. **Fix**: `grep -qE 'nvme.*\.ko'` para verificar la presencia del módulo real.
-
-- **2026-04-30 — Falso positivo casper (sección 5)**: el check usaba `dpkg -l casper | grep "^ii"`. `2-SetupSOdesdeLiveCD.sh` borra los hooks con `rm -rf` sin pasar por `apt remove`, así que dpkg sigue marcando el paquete como instalado aunque los hooks no existan. **Fix**: buscar hooks en disco con `find /usr/share/initramfs-tools /etc/initramfs-tools -name '*casper*'`; si no hay ficheros → `[OK]`.
-- **2026-04-30 — Falso positivo UUID EFI (sección 3)**: el regex `UUID=\K[a-f0-9-]+` trunca los UUIDs FAT/vfat (formato `68AA-2FED`) en la primera letra mayúscula, extrayendo solo `68`. `blkid -U 68` no encuentra nada → `[ERR]` falso. **Fix**: regex `[a-fA-F0-9-]+` (añadir `A-F`).
+- **2026-05-03 — Login imposible: `useradd` después del bloque Python de contraseñas**: el bloque Python (línea ~252) corría antes de `useradd`. 'usuario' no existía en `/etc/shadow` → Python imprimía `[WARN]` y continuaba; `useradd` creaba al usuario con contraseña bloqueada (`*`). **Fix**: `useradd` movido antes del bloque Python; `[WARN]` → `[ERR]` + `sys.exit(1)` si el usuario no existe en shadow.
+- **2026-05-03 — Contraseñas rechazadas por `pam_pwquality`**: `chpasswd` en Ubuntu 26.04 aplica PAM con mínimo 8 caracteres. 'root' (4) y 'usuario' (7) son rechazadas silenciosamente. **Fix**: Python inline genera hash SHA-512 con `openssl passwd -6` y lo escribe directamente en `/etc/shadow` via regex, sin pasar por PAM.
+- **2026-05-03 — GDM Greeter automático en primer arranque**: `3-SetupPrimerInicio.service` llega `After=graphical.target` → tarde para corregir `custom.conf` si casper.service o postinst de gdm3 lo sobreescribieron. **Fix**: nuevo `iac-gdm-noautologin.service` con `Before=display-manager.service` que escribe `custom.conf` en cada arranque antes de que GDM lo lea.
+- **2026-05-03 — `gnome-initial-setup` lanzado como sesión GDM**: Ubuntu 26.04 necesita `InitialSetupEnable=false` en `custom.conf` y marcadores en `~/.local/share/gnome-initial-setup-done` (ruta nueva ≥ 46) además de `~/.config/`. **Fix**: añadido `InitialSetupEnable=false` a todos los configs GDM; marcadores creados en ambas rutas.
+- **2026-05-03 — Auto-login en squashfs rompía Live CD**: escribir `AutomaticLoginEnable=false` en `0a-CreaISO.sh` impedía que casper configurara el auto-login del Live CD en runtime. **Fix**: revertido; el fix correcto es solo en el chroot (`2-SetupSOdesdeLiveCD.sh`).
+- **2026-05-02 — Línea `initrd` ausente en grub.cfg (sección 2 de comprobaciones)**: `update-grub` corre antes de que exista el initramfs → grub.cfg sin línea `initrd` → kernel panic `unknown-block(0,0)`. **Fix**: re-ejecutar `update-grub` tras `update-initramfs`; nuevo check en sección 2 de `4-Comprobaciones.sh`.
+- **2026-05-02 — Falso positivo NVMe (sección 1)**: `grep -q nvme` coincidía con directorios sin `.ko` real. **Fix**: `grep -qE 'nvme.*\.ko'`.
+- **2026-04-30 — Falso positivo casper (sección 5)**: check con `dpkg -l` marcaba error aunque los hooks ya estuvieran borrados del disco. **Fix**: `find` en disco; si no hay ficheros → `[OK]`.
+- **2026-04-30 — Falso positivo UUID EFI (sección 3)**: regex `[a-f0-9-]+` truncaba UUIDs FAT con mayúsculas (`68AA-2FED` → `68`). **Fix**: `[a-fA-F0-9-]+`.
