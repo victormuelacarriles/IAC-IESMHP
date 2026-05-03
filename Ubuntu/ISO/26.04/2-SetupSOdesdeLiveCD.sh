@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.11-20260503"
+VERSIONSCRIPT="22.12-20260503"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -242,7 +242,11 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Usuarios (root y usuario)"
 # ─────────────────────────────────────────────────────────────────────────────
-echo "root:root" | chpasswd
+# Ubuntu 26.04: chpasswd usa PAM con pam_pwquality (mínimo 8 chars).
+# Las contraseñas cortas ('root', 'usuario') son rechazadas con exit≠0 silencioso.
+# Solución: generar hash SHA-512 con openssl y usar chpasswd -e (escribe directo
+# a /etc/shadow sin pasar por PAM quality checks).
+echo "root:$(openssl passwd -6 'root')" | chpasswd -e
 ok "Contraseña root establecida"
 
 if id usuario &>/dev/null; then
@@ -251,7 +255,7 @@ else
     useradd -m -s /bin/bash usuario
     ok "Usuario 'usuario' creado"
 fi
-echo "usuario:usuario" | chpasswd
+echo "usuario:$(openssl passwd -6 'usuario')" | chpasswd -e
 adduser usuario sudo 2>/dev/null || usermod -aG sudo usuario
 ok "Usuario 'usuario' en grupo sudo"
 
