@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.9-20260502"
+VERSIONSCRIPT="22.10-20260503"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -301,6 +301,31 @@ ok "AccountsService: usuario 'usuario' registrado"
 GDM_CONF=/etc/gdm3/custom.conf
 mkdir -p /etc/gdm3
 
+# Diagnóstico: mostrar TODO lo que hay en /etc/gdm3/ para identificar fuentes de auto-login.
+info "── Diagnóstico /etc/gdm3/ ──"
+find /etc/gdm3 -type f 2>/dev/null | sort | while read -r f; do
+    info "Fichero: $f"
+    while IFS= read -r l; do info "  $l"; done < "$f"
+done || info "  (directorio /etc/gdm3 vacío o no existe)"
+
+# Diagnóstico: PAM gdm — auto-login bypasea contraseña via pam_gdm_autologin
+info "── Diagnóstico PAM gdm* ──"
+ls /etc/pam.d/gdm* 2>/dev/null | while read -r f; do
+    info "Fichero PAM: $f"
+    while IFS= read -r l; do info "  $l"; done < "$f"
+done || info "  (no hay ficheros pam.d/gdm*)"
+
+# Diagnóstico: debconf values de gdm3 (postinst puede regenerar custom.conf con estos valores)
+info "── Diagnóstico debconf gdm3 ──"
+debconf-show gdm3 2>/dev/null | while read -r l; do info "  $l"; done || info "  (debconf-show gdm3 falló)"
+
+# Pre-configurar debconf para que el postinst de gdm3 no regenere auto-login.
+# dpkg --configure -a (en 3-SetupPrimerInicio.sh) puede ejecutar el postinst de gdm3,
+# el cual lee debconf para regenerar custom.conf con AutomaticLoginEnable.
+echo "gdm3 gdm3/daemon_section/AutomaticLoginEnable boolean false" | debconf-set-selections 2>/dev/null || true
+echo "gdm3 gdm3/daemon_section/AutomaticLogin string " | debconf-set-selections 2>/dev/null || true
+info "debconf gdm3 pre-configurado (auto-login=false)"
+
 # Eliminar cualquier fichero drop-in del Live CD que pueda re-habilitar el auto-login.
 # Ubuntu 26.04 puede usar /etc/gdm3/custom.conf.d/ para sus overrides de live session.
 if [ -d /etc/gdm3/custom.conf.d ]; then
@@ -312,8 +337,8 @@ fi
 
 cat > "$GDM_CONF" << 'GDMEOF'
 [daemon]
-AutomaticLoginEnable=False
-TimedLoginEnable=False
+AutomaticLoginEnable=false
+TimedLoginEnable=false
 
 [security]
 

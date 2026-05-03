@@ -92,7 +92,12 @@ timedatectl set-timezone Europe/Madrid
 timedatectl set-ntp true
 
 echoverde "Arreglando posibles problemas de configuración de paquetes..."
-dpkg --configure -a
+# Pre-configurar debconf ANTES de dpkg --configure -a para que el postinst de gdm3
+# no regenere /etc/gdm3/custom.conf con auto-login habilitado (valores del Live CD).
+export DEBIAN_FRONTEND=noninteractive
+echo "gdm3 gdm3/daemon_section/AutomaticLoginEnable boolean false" | debconf-set-selections 2>/dev/null || true
+echo "gdm3 gdm3/daemon_section/AutomaticLogin string " | debconf-set-selections 2>/dev/null || true
+dpkg --configure -a -o Dpkg::Options::="--force-confold"
 
 echoverde "Configuramos proxy de aula si procede..."
 # #Si el tercer octeto de la IP es 72=>estamos en aula IABD:
@@ -130,7 +135,7 @@ apt-get update --fix-missing
 
 #Instalado SSH server
 echoverde "Instalando servidor SSH+ansible y limpiando..."
-apt-get install -y ssh ansible
+apt-get install -y -o Dpkg::Options::="--force-confold" ssh ansible
 # Configurar SSH para permitir el acceso root
 sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 # Reiniciar el servicio SSH para aplicar los cambios
@@ -148,8 +153,27 @@ apt-get autoremove -y
 
 echoverde "Actualizando el sistema..."
 apt-get update -y
-apt-get full-upgrade -y
+apt-get full-upgrade -y -o Dpkg::Options::="--force-confold"
 echoverde "Actualizado el sistema..."
+
+# Re-aplicar configuración GDM post-upgrade: si gdm3 se actualizó, su postinst puede
+# haber regenerado custom.conf con los valores del Live CD (AutomaticLoginEnable=true).
+echoverde "Re-aplicando configuración GDM (deshabilitar auto-login post-upgrade)..."
+mkdir -p /etc/gdm3
+cat > /etc/gdm3/custom.conf << 'GDM3POSTEOF'
+[daemon]
+AutomaticLoginEnable=false
+TimedLoginEnable=false
+
+[security]
+
+[xdmcp]
+
+[chooser]
+
+[debug]
+GDM3POSTEOF
+echoverde "GDM: auto-login deshabilitado (post-upgrade)"
 
 # Limpiar caché de paquetes
 echoverde "Limpiando caché de paquetes segunda vez..."

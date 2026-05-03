@@ -379,6 +379,26 @@ DCONFEOF
         warn "Plymouth: faltan imágenes en imagenesIES/ — Live CD usará logos Ubuntu"
     fi
 
+    # GDM auto-login: deshabilitar en el squashfs antes del rsync al disco instalado.
+    # El 2-SetupSOdesdeLiveCD.sh también lo fija en chroot, pero si algo lo regenera
+    # entre el rsync y el chroot (o el chroot no alcanza ese momento), el squashfs ya está limpio.
+    local _gdm_conf="${SQUASHFS_DIR}/etc/gdm3/custom.conf"
+    mkdir -p "${SQUASHFS_DIR}/etc/gdm3"
+    cat > "$_gdm_conf" << 'GDMSQEOF'
+[daemon]
+AutomaticLoginEnable=false
+TimedLoginEnable=false
+
+[security]
+
+[xdmcp]
+
+[chooser]
+
+[debug]
+GDMSQEOF
+    log "  GDM: auto-login deshabilitado en squashfs"
+
     log "Reempaquetando SquashFS..."
     rm "${squashfs_path}"
     mksquashfs "${SQUASHFS_DIR}" "${squashfs_path}" -noappend || err "Fallo al reempaquetar SquashFS."
