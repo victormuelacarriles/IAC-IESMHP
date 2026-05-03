@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.12-20260503"
+VERSIONSCRIPT="22.13-20260503"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -246,18 +246,51 @@ paso "Usuarios (root y usuario)"
 # Las contraseñas cortas ('root', 'usuario') son rechazadas con exit≠0 silencioso.
 # Solución: generar hash SHA-512 con openssl y usar chpasswd -e (escribe directo
 # a /etc/shadow sin pasar por PAM quality checks).
-echo "root:$(openssl passwd -6 'root')" | chpasswd -e
-ok "Contraseña root establecida"
+# Ubuntu 26.04: usar Python para escribir directamente en /etc/shadow,
+# evitando PAM (pam_pwquality rechaza contraseñas cortas) y cualquier
+# problema de escaping de '$' en el hash SHA-512.
+python3 - << 'PYEOF'
+import subprocess, re, sys
+for user, pw in [('root', 'root'), ('usuario', 'usuario')]:
+    h = subprocess.check_output(['openssl', 'passwd', '-6', pw], text=True).strip()
+    with open('/etc/shadow', 'r') as f:
+        content = f.read()
+    updated = re.sub(r'^(' + re.escape(user) + r'):[^:]*:',
+                     r'\g<1>:' + h.replace('\\', '\\\\') + ':',
+                     content, flags=re.MULTILINE)
+    if updated == content:
+        print(f'[WARN] {user} no encontrado en /etc/shadow', flush=True)
+    else:
+        with open('/etc/shadow', 'w') as f:
+            f.write(updated)
+        # Verificar que quedó bien
+        with open('/etc/shadow', 'r') as f:
+            check = f.read()
+        found = re.search(r'^' + re.escape(user) + r':(\$[^:]+):', check, re.MULTILINE)
+        if found:
+            print(f'[OK ] {user}: hash {found.group(1)[:8]}... escrito en shadow', flush=True)
+        else:
+            print(f'[ERR] {user}: hash NO quedó en shadow', flush=True)
+            sys.exit(1)
+PYEOF
+ok "Contraseñas root y usuario establecidas en /etc/shadow"
 
 if id usuario &>/dev/null; then
     info "Usuario 'usuario' ya existe"
 else
-    useradd -m -s /bin/bash usuario
+    useradd -m -s /bin/bash -p '*' usuario
     ok "Usuario 'usuario' creado"
 fi
-echo "usuario:$(openssl passwd -6 'usuario')" | chpasswd -e
 adduser usuario sudo 2>/dev/null || usermod -aG sudo usuario
 ok "Usuario 'usuario' en grupo sudo"
+
+# Diagnóstico: verificar /etc/nologin (bloquea login de TODOS los usuarios normales)
+if [ -f /etc/nologin ]; then
+    err "/etc/nologin existe — bloqueará logins! Eliminando..."
+    rm -f /etc/nologin
+else
+    ok "Sin /etc/nologin (correcto)"
+fi
 
 if [ -f /root/.ssh/authorized_keys ]; then
     mkdir -p /home/usuario/.ssh
@@ -349,6 +382,7 @@ cat > "$GDM_CONF" << 'GDMEOF'
 AutomaticLoginEnable=false
 TimedLoginEnable=false
 InitialSetupEnable=false
+WaylandEnable=true
 
 [security]
 
@@ -358,7 +392,7 @@ InitialSetupEnable=false
 
 [debug]
 GDMEOF
-ok "GDM config sobrescrita (auto-login e initial-setup deshabilitados)"
+ok "GDM config sobrescrita (auto-login e initial-setup deshabilitados, Wayland habilitado)"
 info "Contenido final de $GDM_CONF:"
 while IFS= read -r l; do info "  $l"; done < "$GDM_CONF"
 
@@ -415,6 +449,7 @@ cat > /etc/gdm3/custom.conf << 'GDM3EARLY'
 AutomaticLoginEnable=false
 TimedLoginEnable=false
 InitialSetupEnable=false
+WaylandEnable=true
 
 [security]
 
@@ -444,6 +479,19 @@ WantedBy=display-manager.service
 GDMEARLYUNIT
 systemctl enable iac-gdm-noautologin.service
 ok "Servicio iac-gdm-noautologin habilitado (Before=display-manager en cada arranque)"
+
+# Soporte Wayland en VMware: mutter (compositor GNOME) necesita EGL/DRM para Wayland.
+# En VMware sin aceleración 3D habilitada, mutter falla al iniciarse → GDM vuelve al
+# login sin mensaje de error. LIBGL_ALWAYS_SOFTWARE=1 fuerza llvmpipe (software renderer
+# de Mesa) y permite que Wayland funcione sin GPU virtual. Solo se aplica si el chroot
+# detecta entorno VMware; las máquinas físicas no entran en este bloque.
+_VIRT_CHR=$(systemd-detect-virt 2>/dev/null || true)
+info "Entorno de virtualización detectado en chroot: ${_VIRT_CHR:-ninguno}"
+if echo "$_VIRT_CHR" | grep -qi "vmware"; then
+    grep -q 'LIBGL_ALWAYS_SOFTWARE' /etc/environment 2>/dev/null \
+        || echo 'LIBGL_ALWAYS_SOFTWARE=1' >> /etc/environment
+    ok "VMware: LIBGL_ALWAYS_SOFTWARE=1 → /etc/environment (Wayland funciona sin GPU 3D)"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "GRUB (grub-install + update-grub)"

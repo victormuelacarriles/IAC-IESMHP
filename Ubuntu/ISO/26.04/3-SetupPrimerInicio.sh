@@ -156,6 +156,18 @@ apt-get update -y
 apt-get full-upgrade -y -o Dpkg::Options::="--force-confold"
 echoverde "Actualizado el sistema..."
 
+# Soporte Wayland en VMware: instalar open-vm-tools-desktop (integración clipboard/resize
+# en Wayland) y confirmar/añadir LIBGL_ALWAYS_SOFTWARE (por si no se aplicó en el chroot).
+_VIRT=$(systemd-detect-virt 2>/dev/null || true)
+echoverde "Entorno de virtualización: ${_VIRT:-ninguno}"
+if echo "$_VIRT" | grep -qi "vmware"; then
+    echoverde "VMware detectado — instalando open-vm-tools-desktop para soporte Wayland..."
+    apt-get install -y -o Dpkg::Options::="--force-confold" open-vm-tools-desktop || true
+    grep -q 'LIBGL_ALWAYS_SOFTWARE' /etc/environment 2>/dev/null \
+        || echo 'LIBGL_ALWAYS_SOFTWARE=1' >> /etc/environment
+    echoverde "VMware Wayland: open-vm-tools-desktop instalado, LIBGL_ALWAYS_SOFTWARE=1 confirmado"
+fi
+
 # Re-aplicar configuración GDM post-upgrade: si gdm3 se actualizó, su postinst puede
 # haber regenerado custom.conf con los valores del Live CD (AutomaticLoginEnable=true).
 echoverde "Re-aplicando configuración GDM (deshabilitar auto-login post-upgrade)..."
@@ -165,6 +177,7 @@ cat > /etc/gdm3/custom.conf << 'GDM3POSTEOF'
 AutomaticLoginEnable=false
 TimedLoginEnable=false
 InitialSetupEnable=false
+WaylandEnable=true
 
 [security]
 
@@ -174,7 +187,7 @@ InitialSetupEnable=false
 
 [debug]
 GDM3POSTEOF
-echoverde "GDM: auto-login e initial-setup deshabilitados (post-upgrade)"
+echoverde "GDM: auto-login e initial-setup deshabilitados, Wayland habilitado (post-upgrade)"
 
 # Limpiar caché de paquetes
 echoverde "Limpiando caché de paquetes segunda vez..."
