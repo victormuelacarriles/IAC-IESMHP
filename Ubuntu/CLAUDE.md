@@ -84,7 +84,7 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 - Pasa las particiones al chroot mediante `/mnt/tmp/.iac-partitions.env` porque `lsblk` dentro del chroot ve los mount points del host, no del sistema instalado.
 - Si `2-SetupSOdesdeLiveCD.sh` termina con la línea literal `Correcto`, reinicia automáticamente; si no, espera 100000 s para diagnóstico.
 
-### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot (v22.14-20260503)
+### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot (v22.15-20260504)
 - Genera `/etc/fstab` con UUIDs reales leídos de `blkid`.
 - **Fondo de escritorio** (dos capas): GSettings schema override (`99-iac-iesmhp-wallpaper.gschema.override`) como valor predeterminado compilado, más `dconf system-db:local` como override en runtime. Si `dconf update` falla en chroot, la capa GSettings garantiza el fondo igualmente.
 - **Plymouth logos**: copia `bgrt-fallback.png` y `watermark.png` desde `imagenesIES/` a los temas spinner/bgrt **antes** de `update-initramfs`, para que la imagen instalada use los logos del IES.
@@ -99,6 +99,8 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 - **Contraseñas via Python inline**: genera hash SHA-512 con `openssl passwd -6` y lo escribe directamente en `/etc/shadow` via regex, sin pasar por PAM (`pam_pwquality` rechaza contraseñas cortas como 'root'/'usuario'). `useradd` se ejecuta **antes** de este bloque para que el usuario exista en shadow. Si el hash no queda escrito, sale con `sys.exit(1)`.
 - **Check `/etc/nologin`**: si existe, bloquea todos los logins normales. El script lo detecta y elimina.
 - **VMware — Wayland software rendering**: tras instalar el servicio GDM, detecta VMware con `systemd-detect-virt`. Si es VMware, escribe `LIBGL_ALWAYS_SOFTWARE=1` en `/etc/environment` para que Mesa llvmpipe permita iniciar sesiones Wayland sin aceleración 3D. En máquinas físicas, `systemd-detect-virt` devuelve "none" y este bloque no se ejecuta.
+- **Timeout y menú GRUB**: `GRUB_TIMEOUT=5` y `GRUB_TIMEOUT_STYLE=menu` se fijan en `/etc/default/grub` para que el menú sea visible 5 s antes de arrancar la entrada por defecto.
+- **Segunda entrada GRUB (modo texto)**: se crea `/etc/grub.d/11_iac_texto`, un script ejecutable que `update-grub` invoca en cada regeneración. Genera una entrada `'Ubuntu - Sin entorno grafico (modo texto)'` con `systemd.unit=multi-user.target`, que arranca en consola sin GDM/GNOME. El script lee el kernel, el initrd y el UUID de root dinámicamente (`/boot/vmlinuz-*`, `/boot/initrd.img-*`, `/etc/fstab`), por lo que sobrevive a actualizaciones de kernel.
 - **Parche grub.cfg**: `update-grub` en chroot a veces escribe `root=/dev/nvme0n1p3` en lugar de `root=UUID=...`. El script lo detecta y parchea con `sed`.
 - **Casper hooks**: se eliminan directamente con `rm -rf` (sin `apt remove`) para evitar que los triggers dpkg se bloqueen en el chroot. Hooks afectados: `/usr/share/initramfs-tools/hooks/casper` y variantes.
 - `update-initramfs -c -k all` (create, no update) tarda 2–4 min; es el paso más lento. Se usa `-c` porque en sistemas instalados desde squashfs no existe initramfs previo y `-u` no crearía uno nuevo.
@@ -171,6 +173,7 @@ Antes de modificar un script, consulta ese directorio para evitar repetir correc
 
 ### Bugs corregidos (historial para no repetirlos)
 
+- **2026-05-04 — GRUB sin menú visible y sin opción de modo texto**: el timeout era 0 (`GRUB_TIMEOUT_STYLE=hidden`) y solo existía una entrada de arranque. **Fix**: `GRUB_TIMEOUT=5` + `GRUB_TIMEOUT_STYLE=menu` en `/etc/default/grub`; nuevo `/etc/grub.d/11_iac_texto` que genera la segunda entrada `systemd.unit=multi-user.target` en cada `update-grub`.
 - **2026-05-03 — Login imposible: `useradd` después del bloque Python de contraseñas**: el bloque Python (línea ~252) corría antes de `useradd`. 'usuario' no existía en `/etc/shadow` → Python imprimía `[WARN]` y continuaba; `useradd` creaba al usuario con contraseña bloqueada (`*`). **Fix**: `useradd` movido antes del bloque Python; `[WARN]` → `[ERR]` + `sys.exit(1)` si el usuario no existe en shadow.
 - **2026-05-03 — Contraseñas rechazadas por `pam_pwquality`**: `chpasswd` en Ubuntu 26.04 aplica PAM con mínimo 8 caracteres. 'root' (4) y 'usuario' (7) son rechazadas silenciosamente. **Fix**: Python inline genera hash SHA-512 con `openssl passwd -6` y lo escribe directamente en `/etc/shadow` via regex, sin pasar por PAM.
 - **2026-05-03 — GDM Greeter automático en primer arranque**: `3-SetupPrimerInicio.service` llega `After=graphical.target` → tarde para corregir `custom.conf` si casper.service o postinst de gdm3 lo sobreescribieron. **Fix**: nuevo `iac-gdm-noautologin.service` con `Before=display-manager.service` que escribe `custom.conf` en cada arranque antes de que GDM lo lea.

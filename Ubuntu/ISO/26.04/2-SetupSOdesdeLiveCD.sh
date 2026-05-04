@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.14-20260503"
+VERSIONSCRIPT="22.15-20260504"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -501,6 +501,39 @@ ok "grub-install OK"
 sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' /etc/default/grub
 grep -q "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub \
     || echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"' >> /etc/default/grub
+
+# Mostrar el menú 5 s antes de arrancar la entrada por defecto
+sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/'           /etc/default/grub
+grep -q '^GRUB_TIMEOUT='       /etc/default/grub || echo 'GRUB_TIMEOUT=5'          >> /etc/default/grub
+sed -i 's/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/' /etc/default/grub
+grep -q '^GRUB_TIMEOUT_STYLE=' /etc/default/grub || echo 'GRUB_TIMEOUT_STYLE=menu' >> /etc/default/grub
+ok "GRUB: timeout=5 s y menú visible"
+
+# Segunda entrada GRUB: arrancar sin entorno gráfico (systemd.unit=multi-user.target).
+# El script /etc/grub.d/11_iac_texto se ejecuta en cada update-grub, por lo que
+# la entrada sobrevive a actualizaciones de paquetes que regeneren grub.cfg.
+cat > /etc/grub.d/11_iac_texto << 'GRUBTEXT'
+#!/bin/bash
+# IAC-IESMHP: entrada GRUB sin entorno grafico
+LINUX=$(ls /boot/vmlinuz-* 2>/dev/null | grep -v '\.old$' | sort -V | tail -1)
+INITRD=$(ls /boot/initrd.img-* 2>/dev/null | grep -v '\.old$' | sort -V | tail -1)
+[ -z "$LINUX" ] && exit 0
+[ -z "$INITRD" ] && exit 0
+LINUX_BASE="${LINUX#/boot/}"
+INITRD_BASE="${INITRD#/boot/}"
+ROOT_UUID=$(awk '$2 == "/" && $1 ~ /^UUID=/ { sub(/^UUID=/, "", $1); print $1; exit }' /etc/fstab 2>/dev/null)
+[ -z "$ROOT_UUID" ] && ROOT_UUID=$(grub-probe -t fs_uuid / 2>/dev/null || true)
+[ -z "$ROOT_UUID" ] && exit 0
+cat << EOF
+menuentry 'Ubuntu - Sin entorno grafico (modo texto)' --class ubuntu --class gnu-linux --class gnu --class os {
+    search --no-floppy --fs-uuid --set=root ${ROOT_UUID}
+    linux   /${LINUX_BASE} root=UUID=${ROOT_UUID} ro quiet splash systemd.unit=multi-user.target
+    initrd  /${INITRD_BASE}
+}
+EOF
+GRUBTEXT
+chmod +x /etc/grub.d/11_iac_texto
+ok "Script /etc/grub.d/11_iac_texto creado (segunda entrada: sin entorno grafico)"
 
 info "Ejecutando update-grub..."
 update-grub
