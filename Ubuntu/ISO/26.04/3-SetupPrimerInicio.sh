@@ -91,44 +91,46 @@ echoverde "Ajustadando la hora del sistema..."
 timedatectl set-timezone Europe/Madrid
 timedatectl set-ntp true
 
-echoverde "Arreglando posibles problemas de configuración de paquetes..."
-# Pre-configurar debconf ANTES de dpkg --configure -a para que el postinst de gdm3
-# no regenere /etc/gdm3/custom.conf con auto-login habilitado (valores del Live CD).
-export DEBIAN_FRONTEND=noninteractive
-echo "gdm3 gdm3/daemon_section/AutomaticLoginEnable boolean false" | debconf-set-selections 2>/dev/null || true
-echo "gdm3 gdm3/daemon_section/AutomaticLogin string " | debconf-set-selections 2>/dev/null || true
-dpkg --configure -a -o Dpkg::Options::="--force-confold"
 
-echoverde "Configuramos proxy de aula si procede..."
-# #Si el tercer octeto de la IP es 72=>estamos en aula IABD:
-# #                                32=>estamos en aula SMRD
-IP3=$(ip addr show $(ip route | grep default | awk '{print $5}') | grep 'inet ' | awk '{print $2}' | cut -d'.' -f3)
-echoverde "IP3=$IP3 (interfaz: $(ip route | grep default | awk '{print $5}'))"
-if [ "$IP3" == "72" ]; then
-    echoverde "Estamos en aula IABD, configuramos proxy 10.0.72.140:3128"
-    rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
-    echo 'Acquire::http::Proxy "http://10.0.72.140:3128";'> /etc/apt/apt.conf.d/00aptproxy
-    echo 'Acquire::https::Proxy "DIRECT";'> /etc/apt/apt.conf.d/00aptproxy
-    #TODO: usar Acquire::http::Proxy-Auto-Detect script.sh
-    #DONDE script.sh contiene:
-        ##!/bin/sh
-        # IP de tu servidor apt-cacher
-        #SERVER_IP="10.0.72.140"
-        #PORT="3128"
-        # Comprueba si el puerto responde con una espera máxima de 1 segundo (-w 1)
-        #if nc -z -w 1 $SERVER_IP $PORT; then
-        #    echo "http://$SERVER_IP:$PORT"
-        #else
-        #    echo "DIRECT"
-        #fi
+echoverde "=== $SCRIPT3 detenido: $(date) ==="
+exit 0
 
+# echoverde "Arreglando posibles problemas de configuración de paquetes..."
+# # Pre-configurar debconf ANTES de dpkg --configure -a para que el postinst de gdm3
+# # no regenere /etc/gdm3/custom.conf con auto-login habilitado (valores del Live CD).
+# export DEBIAN_FRONTEND=noninteractive
+# echo "gdm3 gdm3/daemon_section/AutomaticLoginEnable boolean false" | debconf-set-selections 2>/dev/null || true
+# echo "gdm3 gdm3/daemon_section/AutomaticLogin string " | debconf-set-selections 2>/dev/null || true
+# dpkg --configure -a -o Dpkg::Options::="--force-confold"
 
-elif [ "$IP3" == "32" ]; then
-    echoverde "Estamos en aula SMRV, configuramos proxy  10.0.32.119:3128"
-    rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
-    echo 'Acquire::http::Proxy "http://10.0.32.119:3128";'> /etc/apt/apt.conf.d/00aptproxy
-    echo 'Acquire::https::Proxy "DIRECT";'> /etc/apt/apt.conf.d/00aptproxy
-fi
+# echoverde "Configuramos proxy de aula si procede..."
+# # #Si el tercer octeto de la IP es 72=>estamos en aula IABD:
+# # #                                32=>estamos en aula SMRD
+# IP3=$(ip addr show $(ip route | grep default | awk '{print $5}') | grep 'inet ' | awk '{print $2}' | cut -d'.' -f3)
+# echoverde "IP3=$IP3 (interfaz: $(ip route | grep default | awk '{print $5}'))"
+# if [ "$IP3" == "72" ]; then
+#     echoverde "Estamos en aula IABD, configuramos proxy 10.0.72.140:3128"
+#     rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
+#     echo 'Acquire::http::Proxy "http://10.0.72.140:3128";'> /etc/apt/apt.conf.d/00aptproxy
+#     echo 'Acquire::https::Proxy "DIRECT";'> /etc/apt/apt.conf.d/00aptproxy
+#     #TODO: usar Acquire::http::Proxy-Auto-Detect script.sh
+#     #DONDE script.sh contiene:
+#         ##!/bin/sh
+#         # IP de tu servidor apt-cacher
+#         #SERVER_IP="10.0.72.140"
+#         #PORT="3128"
+#         # Comprueba si el puerto responde con una espera máxima de 1 segundo (-w 1)
+#         #if nc -z -w 1 $SERVER_IP $PORT; then
+#         #    echo "http://$SERVER_IP:$PORT"
+#         #else
+#         #    echo "DIRECT"
+#         #fi
+# elif [ "$IP3" == "32" ]; then
+#     echoverde "Estamos en aula SMRV, configuramos proxy  10.0.32.119:3128"
+#     rm /etc/apt/apt.conf.d/00aptproxy 2>/dev/null || true
+#     echo 'Acquire::http::Proxy "http://10.0.32.119:3128";'> /etc/apt/apt.conf.d/00aptproxy
+#     echo 'Acquire::https::Proxy "DIRECT";'> /etc/apt/apt.conf.d/00aptproxy
+# fi
 
 echoverde "Voy a actualizar lista de paquetes"
 apt-get update --fix-missing
