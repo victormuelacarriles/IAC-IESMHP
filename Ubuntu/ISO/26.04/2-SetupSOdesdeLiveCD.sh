@@ -50,7 +50,6 @@ sed -i 's/# es_ES.UTF-8/es_ES.UTF-8/g' /etc/locale.gen
 locale-gen es_ES.UTF-8
 
 printf 'LANG=es_ES.UTF-8\nLC_ALL=es_ES.UTF-8\nLANGUAGE=es_ES\n' > /etc/default/locale
-
 printf 'XKBLAYOUT=es\nXKBMODEL=pc105\nXKBVARIANT=\nXKBOPTIONS=\n' > /etc/default/keyboard
 
 mkdir -p /etc/dconf/db/local.d
