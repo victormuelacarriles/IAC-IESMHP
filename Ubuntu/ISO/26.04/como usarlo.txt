@@ -14,3 +14,12 @@ git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh && sudo ./0
 
 #Me puedo descargar los logs con : 
 (Get-Content -Path "C:\Users\vmuela\.ssh\known_hosts") -notmatch "10\.0\.72\.51" | Set-Content -Path "C:\Users\vmuela\.ssh\known_hosts"; scp -r -O -o StrictHostKeyChecking=accept-new ubuntu@10.0.72.51:/mnt/var/log/IAC-IESMHP/Ubuntu "E:\Usuarios\vmuela\OneDrive - Educantabria\_20FP25-26\Dep\IAC-IESMHP\Ubuntu\ISO\26.04\logs"
+
+
+
+#Haciendo: 
+#  Arranca pero directamente a usuario "GDM". Para ir a modo texto Ctrl+Alt+F2
+#
+#  Se puede entrar en modo texto desde el grub. Para luego arrancar el modo gráfico:  sudo systemctl start gdm3
+#
+# Depurar y averiguar por qué no entra se ven los usuarios. 
