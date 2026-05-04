@@ -509,6 +509,14 @@ sed -i 's/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/' /etc/default/grub
 grep -q '^GRUB_TIMEOUT_STYLE=' /etc/default/grub || echo 'GRUB_TIMEOUT_STYLE=menu' >> /etc/default/grub
 ok "GRUB: timeout=5 s y menú visible"
 
+# Ocultar submenu "Advanced options" y entradas "Memory test"
+sed -i '/^GRUB_DISABLE_SUBMENU=/d' /etc/default/grub
+echo 'GRUB_DISABLE_SUBMENU=y' >> /etc/default/grub
+for _memtest in /etc/grub.d/20_memtest86+ /etc/grub.d/30_memtest86+; do
+    [ -f "$_memtest" ] && chmod -x "$_memtest" && info "Deshabilitado: $_memtest"
+done
+ok "GRUB: Advanced options y Memory test deshabilitados (quedan: Ubuntu, texto, UEFI)"
+
 # Segunda entrada GRUB: arrancar sin entorno gráfico (systemd.unit=multi-user.target).
 # El script /etc/grub.d/11_iac_texto se ejecuta en cada update-grub, por lo que
 # la entrada sobrevive a actualizaciones de paquetes que regeneren grub.cfg.
@@ -527,8 +535,8 @@ ROOT_UUID=$(awk '$2 == "/" && $1 ~ /^UUID=/ { sub(/^UUID=/, "", $1); print $1; e
 cat << EOF
 menuentry 'Ubuntu - Sin entorno grafico (modo texto)' --class ubuntu --class gnu-linux --class gnu --class os {
     search --no-floppy --fs-uuid --set=root ${ROOT_UUID}
-    linux   /${LINUX_BASE} root=UUID=${ROOT_UUID} ro quiet splash systemd.unit=multi-user.target
-    initrd  /${INITRD_BASE}
+    linux   /boot/${LINUX_BASE} root=UUID=${ROOT_UUID} ro text systemd.unit=multi-user.target
+    initrd  /boot/${INITRD_BASE}
 }
 EOF
 GRUBTEXT
