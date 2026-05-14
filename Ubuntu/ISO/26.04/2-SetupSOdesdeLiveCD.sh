@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.15-20260504"
+VERSIONSCRIPT="22.16-20260514"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -336,6 +336,23 @@ SystemAccount=false
 ACCTEOF
 ok "AccountsService: usuario 'usuario' registrado"
 
+# Registrar 'gdm-greeter' (Ubuntu 26.04+) en AccountsService para forzar la sesión
+# de login. Sin esto, GDM lanza para el greeter 'gnome-session' sin --session=, que
+# cae al valor por defecto de dconf (session-name='ubuntu') → el greeter arranca el
+# escritorio Ubuntu en vez del formulario de login. SystemAccount=true lo oculta del
+# selector de usuarios.
+if id gdm-greeter &>/dev/null; then
+    cat > "$ACCTS_DIR/gdm-greeter" << 'ACCTGRTEOF'
+[User]
+Session=gnome-login
+XSession=gnome-login
+SystemAccount=true
+ACCTGRTEOF
+    ok "AccountsService: gdm-greeter forzado a sesión 'gnome-login'"
+else
+    info "Usuario 'gdm-greeter' no presente en este sistema — se omite AccountsService"
+fi
+
 GDM_CONF=/etc/gdm3/custom.conf
 mkdir -p /etc/gdm3
 
@@ -414,21 +431,42 @@ fi
 ok "gnome-initial-setup marcado como completado (rutas antiguas y nuevas)"
 
 # Deshabilitar el bloqueo de pantalla en la sesión del GDM greeter.
-# GDM en Ubuntu 26.04 corre el greeter como sesión Wayland del usuario 'gdm'.
+# GDM en Ubuntu 26.04 corre el greeter como sesión Wayland del usuario 'gdm-greeter'.
 # Si el screensaver lo bloquea, aparece "GDM Greeter" en la pantalla de bloqueo
-# y el usuario no puede desbloquearlo (no conoce la contraseña del usuario 'gdm').
-mkdir -p /etc/dconf/db/gdm.d
+# y el usuario no puede desbloquearlo (no conoce la contraseña del usuario greeter).
+#
+# Y CRÍTICO: session-name='gnome-login' fuerza a gnome-session (invocado sin --session=
+# para el usuario gdm-greeter) a cargar /usr/share/gnome-session/sessions/gnome-login.session
+# (Kiosk=true → formulario de login). Sin esto, gnome-session lee session-name del dconf
+# del usuario y cae al valor por defecto del sistema ('ubuntu') → el greeter arranca el
+# escritorio Ubuntu (gnome-shell --mode=ubuntu) en lugar del login. Se bloquea la clave
+# en /etc/dconf/db/gdm.d/locks/ para que ningún dconf de usuario pueda sobreescribirla.
+mkdir -p /etc/dconf/db/gdm.d /etc/dconf/db/gdm.d/locks
 cat >> /etc/dconf/db/gdm.d/00-login-screen << 'GDMLOCKEOF'
 
 [org/gnome/desktop/session]
 idle-delay=uint32 0
+session-name='gnome-login'
 
 [org/gnome/desktop/screensaver]
 lock-enabled=false
 lock-delay=uint32 3600
 GDMLOCKEOF
-ok "Screensaver del GDM greeter deshabilitado (evita pantalla de bloqueo de 'GDM Greeter')"
-dconf update && ok "dconf recompilado (gdm screensaver settings incluidos)" \
+cat > /etc/dconf/db/gdm.d/locks/00-session-name << 'GDMLOCKSESS'
+/org/gnome/desktop/session/session-name
+GDMLOCKSESS
+ok "Screensaver del GDM greeter deshabilitado y session-name='gnome-login' fijado+bloqueado"
+
+# Perfil dconf para el nuevo usuario 'gdm-greeter' (Ubuntu 26.04+). Apunta al mismo
+# system-db que el usuario 'gdm' para que ambos lean session-name='gnome-login'.
+# Sin este perfil, el gdm-greeter usa el profile por defecto y no ve el system-db gdm.
+cat > /etc/dconf/profile/gdm-greeter << 'GDMGRTPROF'
+user-db:user
+system-db:gdm
+GDMGRTPROF
+ok "Perfil dconf /etc/dconf/profile/gdm-greeter creado (apunta a system-db:gdm)"
+
+dconf update && ok "dconf recompilado (gdm screensaver + session-name)" \
     || info "dconf update falló en chroot — las bases GDM se compilarán en el primer arranque"
 
 # ── Servicio early-boot: escribe GDM config ANTES de que display-manager arranque ─────
