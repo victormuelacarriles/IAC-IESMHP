@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.17-20260515"
+VERSIONSCRIPT="22.18-20260515"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -197,9 +197,12 @@ ok "fstab generado con UUIDs"
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Limpiar fuentes APT del Live CD (cdrom:)"
 # ─────────────────────────────────────────────────────────────────────────────
-# El Live CD añade una entrada 'deb cdrom:[Ubuntu ...]/ resolute main' que
-# apunta al ISO montado en /cdrom. El rsync copia esa configuración al sistema
-# instalado, donde /cdrom no existe → 'apt update' falla con:
+# El Live CD añade una entrada APT que apunta al ISO montado en /cdrom. Puede
+# venir con dos formatos de URI:
+#   - 'cdrom:[Ubuntu ...]/'   (apt-cdrom tradicional)
+#   - 'file:/cdrom'           (Ubuntu 26.04 DEB822, observado en la práctica)
+# El rsync copia esa configuración al sistema instalado, donde /cdrom no existe
+# → 'apt update' falla con:
 #   "El repositorio file:/cdrom resolute Release no tiene un fichero de Publicación"
 #
 # Cubrimos las dos ubicaciones posibles:
@@ -208,23 +211,36 @@ paso "Limpiar fuentes APT del Live CD (cdrom:)"
 
 CDROM_LIMPIO=0
 
-# 1) sources.list clásico y ficheros .list: eliminar líneas 'deb [opts] cdrom:...'
+# Regex de URI cdrom (ambos formatos): 'cdrom:' o 'file:/cdrom'
+_CDROM_URI='(cdrom:|file:/+cdrom)'
+
+# 1) sources.list clásico y ficheros .list: eliminar líneas 'deb [opts] cdrom...'
 for _src in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
     [ -f "$_src" ] || continue
-    if grep -qE '^[[:space:]]*deb(-src)?[[:space:]]+(\[[^]]*\][[:space:]]+)?cdrom:' "$_src"; then
-        info "Antes de limpiar — entradas cdrom: en $_src:"
-        grep -nE 'cdrom:' "$_src" | sed 's/^/    /' || true
-        sed -i -E '/^[[:space:]]*deb(-src)?[[:space:]]+(\[[^]]*\][[:space:]]+)?cdrom:/d' "$_src"
-        ok "Eliminadas líneas 'deb cdrom:' de $_src"
+    if grep -qE "^[[:space:]]*deb(-src)?[[:space:]]+(\[[^]]*\][[:space:]]+)?${_CDROM_URI}" "$_src"; then
+        info "Antes de limpiar — entradas cdrom en $_src:"
+        grep -nE "${_CDROM_URI}" "$_src" | sed 's/^/    /' || true
+        sed -i -E "/^[[:space:]]*deb(-src)?[[:space:]]+(\[[^]]*\][[:space:]]+)?${_CDROM_URI}/d" "$_src"
+        ok "Eliminadas líneas cdrom de $_src"
         CDROM_LIMPIO=$((CDROM_LIMPIO + 1))
     fi
 done
 
-# 2) DEB822 (.sources): si el bloque tiene URI cdrom:, borrar el fichero entero.
-#    En Ubuntu 26.04 el cdrom suele venir en su propio fichero (p.ej. ubuntu-cdrom.sources).
+# 2) DEB822 (.sources): si el bloque tiene URI cdrom (cualquier formato), o si
+#    el propio nombre del fichero contiene 'cdrom' (p.ej. ubuntu-cdrom.sources
+#    en Ubuntu 26.04), borrar el fichero entero.
 for _src in /etc/apt/sources.list.d/*.sources; do
     [ -f "$_src" ] || continue
-    if grep -qE '^URIs:[[:space:]]*cdrom:' "$_src" || grep -qE '^URIs:.*[[:space:]]cdrom:' "$_src"; then
+    _name=$(basename "$_src")
+    _match=0
+    if grep -qE "^URIs:[[:space:]]*${_CDROM_URI}" "$_src" \
+       || grep -qE "^URIs:.*[[:space:]]${_CDROM_URI}" "$_src"; then
+        _match=1
+    fi
+    case "$_name" in
+        *cdrom*) _match=1 ;;
+    esac
+    if [ "$_match" -eq 1 ]; then
         info "Fichero DEB822 con cdrom: $_src — contenido:"
         sed 's/^/    /' "$_src"
         rm -f "$_src"
@@ -234,9 +250,9 @@ for _src in /etc/apt/sources.list.d/*.sources; do
 done
 
 if [ "$CDROM_LIMPIO" -eq 0 ]; then
-    info "Ninguna fuente APT con cdrom: encontrada (nada que limpiar)"
+    info "Ninguna fuente APT con cdrom encontrada (nada que limpiar)"
 else
-    ok "Total de fuentes APT con cdrom: limpiadas: $CDROM_LIMPIO"
+    ok "Total de fuentes APT con cdrom limpiadas: $CDROM_LIMPIO"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
