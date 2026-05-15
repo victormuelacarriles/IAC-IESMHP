@@ -93,7 +93,7 @@ timedatectl set-ntp true
 
 
 echoverde "=== $SCRIPT3 detenido: $(date) ==="
-exit 0
+
 
 # echoverde "Arreglando posibles problemas de configuración de paquetes..."
 # # Pre-configurar debconf ANTES de dpkg --configure -a para que el postinst de gdm3
