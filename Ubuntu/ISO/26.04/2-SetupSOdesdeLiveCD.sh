@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.16-20260514"
+VERSIONSCRIPT="22.17-20260515"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -193,6 +193,51 @@ UUID=$UUID_SWAP  none       swap  sw          0 0
 EOF
 cat /etc/fstab
 ok "fstab generado con UUIDs"
+
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Limpiar fuentes APT del Live CD (cdrom:)"
+# ─────────────────────────────────────────────────────────────────────────────
+# El Live CD añade una entrada 'deb cdrom:[Ubuntu ...]/ resolute main' que
+# apunta al ISO montado en /cdrom. El rsync copia esa configuración al sistema
+# instalado, donde /cdrom no existe → 'apt update' falla con:
+#   "El repositorio file:/cdrom resolute Release no tiene un fichero de Publicación"
+#
+# Cubrimos las dos ubicaciones posibles:
+#  - /etc/apt/sources.list (formato clásico una-línea)
+#  - /etc/apt/sources.list.d/*.list y *.sources (DEB822, usado por Ubuntu 26.04)
+
+CDROM_LIMPIO=0
+
+# 1) sources.list clásico y ficheros .list: eliminar líneas 'deb [opts] cdrom:...'
+for _src in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
+    [ -f "$_src" ] || continue
+    if grep -qE '^[[:space:]]*deb(-src)?[[:space:]]+(\[[^]]*\][[:space:]]+)?cdrom:' "$_src"; then
+        info "Antes de limpiar — entradas cdrom: en $_src:"
+        grep -nE 'cdrom:' "$_src" | sed 's/^/    /' || true
+        sed -i -E '/^[[:space:]]*deb(-src)?[[:space:]]+(\[[^]]*\][[:space:]]+)?cdrom:/d' "$_src"
+        ok "Eliminadas líneas 'deb cdrom:' de $_src"
+        CDROM_LIMPIO=$((CDROM_LIMPIO + 1))
+    fi
+done
+
+# 2) DEB822 (.sources): si el bloque tiene URI cdrom:, borrar el fichero entero.
+#    En Ubuntu 26.04 el cdrom suele venir en su propio fichero (p.ej. ubuntu-cdrom.sources).
+for _src in /etc/apt/sources.list.d/*.sources; do
+    [ -f "$_src" ] || continue
+    if grep -qE '^URIs:[[:space:]]*cdrom:' "$_src" || grep -qE '^URIs:.*[[:space:]]cdrom:' "$_src"; then
+        info "Fichero DEB822 con cdrom: $_src — contenido:"
+        sed 's/^/    /' "$_src"
+        rm -f "$_src"
+        ok "Eliminado: $_src"
+        CDROM_LIMPIO=$((CDROM_LIMPIO + 1))
+    fi
+done
+
+if [ "$CDROM_LIMPIO" -eq 0 ]; then
+    info "Ninguna fuente APT con cdrom: encontrada (nada que limpiar)"
+else
+    ok "Total de fuentes APT con cdrom: limpiadas: $CDROM_LIMPIO"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Verificar conectividad a Internet"
