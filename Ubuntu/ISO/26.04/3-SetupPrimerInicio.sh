@@ -3,7 +3,7 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e # lo desactivamos para que no se pare en errores de 
 
-VERSIONSCRIPT="22.1-20260126-17:05"       #Versión del script
+VERSIONSCRIPT="22.19-20260515"       #Versión del script
 SCRIPT3=$(basename "$0")
 echo "$SCRIPT3 (vs$VERSIONSCRIPT)"
 #Nos quedamos solo con el nombre del script sin ruta
@@ -216,8 +216,13 @@ chmod +x "$SCRIPT5ansible"
 mostrar_mensaje "Intentamos finalizar autoconfiguración con Ansible"
 set +e # desactivamos para que no se pare en errores de ansible
 cd "$RAIZANSIBLE/" || exit 1
+# El interprete Python cambia con cada version de Ubuntu (26.04 'resolute' ya
+# no trae /usr/bin/python3.12). Resolverlo en runtime en vez de codificarlo a
+# fuego: el symlink /usr/bin/python3 siempre apunta al Python por defecto.
+PYINT="$(command -v python3 || echo /usr/bin/python3)"
+echoverde "Interprete Python para Ansible: $PYINT"
 ansible-playbook -i localhost, --connection=local roles.yaml \
-    -e 'ansible_python_interpreter=/usr/bin/python3.12' \
+    -e "ansible_python_interpreter=$PYINT" \
     --ssh-extra-args="-o StrictHostKeyChecking=no" \
     || echorojo "Error en la autoconfiguración ansible"
 
@@ -229,7 +234,9 @@ SCRIPT4="$RAIZDISTRO/4-Comprobaciones.sh"
 if [ -f "$SCRIPT4" ]; then
     echoverde "Ejecutando comprobaciones finales del sistema..."
     chmod +x "$SCRIPT4"
-    bash "$SCRIPT4" 2>&1 | tee -a "$FLOG" || true
+    # No re-redirigir a $FLOG: stdout/stderr ya pasan por el 'tee -a $FLOG'
+    # del exec inicial. Un 'tee -a $FLOG' aqui duplicaria esta seccion.
+    bash "$SCRIPT4" || true
 fi
 
 echoverde "=== $SCRIPT3 finalizado: $(date) ==="

@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.18-20260515"
+VERSIONSCRIPT="22.19-20260515"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -843,8 +843,11 @@ Conflicts=shutdown.target
 Type=oneshot
 Environment=LC_ALL=es_ES.UTF-8
 ExecStart=/bin/bash $RAIZDISTRO/$SCRIPT3
-StandardOutput=append:$RAIZLOG/$SCRIPT3.log
-StandardError=append:$RAIZLOG/$SCRIPT3.log
+# El log al fichero lo gestiona el propio script con 'exec > >(tee -a ...)'.
+# NO usar StandardOutput/StandardError=append: aqui o cada linea se grabaria
+# DOS veces (una por el tee del script, otra por systemd). Se deja en journal.
+StandardOutput=journal
+StandardError=journal
 TimeoutSec=0
 RemainAfterExit=yes
 
