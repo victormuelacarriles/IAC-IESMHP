@@ -1,0 +1,4 @@
+- name: Reiniciar gnome-remote-desktop
+  systemd:
+    name: gnome-remote-desktop.service
+    state: restarted

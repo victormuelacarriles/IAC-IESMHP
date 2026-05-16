@@ -95,7 +95,7 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 - Muestra progreso al usuario mediante diálogos `zenity` en todas las sesiones gráficas activas.
 - Se autodeshabilita con triple mecanismo: `systemctl disable` + `rm` del `.service` + `mv "$0" "$0.borrado"`.
 - Ejecuta `NombreIP.sh` (resuelve MAC→hostname y opcionalmente convierte DHCP a IP estática).
-- Ejecuta `Auto-Ansible.sh` y lanza directamente `ansible-playbook roles.yaml` desde `$RAIZANSIBLE`.
+- Ejecuta `Auto-Ansible.sh` y lanza directamente `ansible-playbook roles.yaml` desde `$RAIZANSIBLE` (ver sección **Configuración post-instalación con Ansible**).
 
 ### 4-Comprobaciones.sh — Diagnóstico
 Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de hooks casper, grub.cfg con UUIDs, fstab vs blkid, paquetes dpkg rotos, servicio SSH. Genera resumen de errores/warnings al final. Útil como primer análisis al pegar un log.
@@ -108,6 +108,27 @@ Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de 
 |-----------|---------------------|-------------------|
 | Distancia | NVMe 0.5 TB (/, EFI, swap) | NVMe 2.0 TB (/home) |
 | CEIABD    | NVMe 0.5 TB (/, EFI, swap) | SDA  1.0 TB (/home) |
+
+---
+
+## Configuración post-instalación con Ansible
+
+Una vez instalado el SO, `3-SetupPrimerInicio.sh` lanza `ansible-playbook roles.yaml`
+para configurar el equipo (software, NFS de aula, drivers, claves SSH…). Toda esta
+parte vive en `Ubuntu/ansible/` y está **documentada con sus propios CLAUDE.md**:
+
+- **`Ubuntu/ansible/CLAUDE.md`** — describe `roles.yaml` (el playbook maestro), los
+  inventarios `*.ini`, los comandos de ejecución, el estado de cada rol
+  (activo / comentado / legacy) y las convenciones (caché apt, detección de aula
+  por IP, equipo `-00` = servidor).
+- **`Ubuntu/ansible/roles/<rol>/CLAUDE.md`** — un fichero por rol con sus tareas,
+  variables (`defaults/`) e issues conocidos. Roles documentados: `basicos`,
+  `certificados`, `comparteaula` (+ legacy `comparteaula32`/`comparteaula72`),
+  `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al
+  antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `contenedores`.
+
+**Al diagnosticar o modificar la fase Ansible, leer primero esos CLAUDE.md** (en
+especial el de `Ubuntu/ansible/` para saber qué roles están activos en `roles.yaml`).
 
 ---
 

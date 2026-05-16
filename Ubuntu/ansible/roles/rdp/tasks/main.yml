@@ -1,0 +1,83 @@
+# Rol `rdp` — acceso remoto por RDP usando el servidor nativo de GNOME
+# (gnome-remote-desktop) que trae Ubuntu Desktop 26.04. Sustituye al antiguo
+# rol `xrdp`, innecesario desde que GNOME gestiona RDP de forma nativa con
+# `grdctl --system`.
+
+- name: Instalar gnome-remote-desktop (servidor RDP nativo de GNOME)
+  apt:
+    name: gnome-remote-desktop
+    state: present
+    update_cache: false
+
+- name: Crear el directorio de configuración de gnome-remote-desktop
+  file:
+    path: "{{ rdp_tls_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Generar el certificado TLS autofirmado para RDP (solo si no existe)
+  command: >
+    openssl req -newkey rsa:2048 -nodes
+    -keyout {{ rdp_tls_dir }}/tls.key
+    -x509 -days {{ rdp_cert_days }}
+    -out {{ rdp_tls_dir }}/tls.crt
+    -subj "{{ rdp_cert_subject }}"
+  args:
+    creates: "{{ rdp_tls_dir }}/tls.crt"
+  notify: Reiniciar gnome-remote-desktop
+
+# El usuario interno del servicio (lo crea el paquete gnome-remote-desktop)
+# necesita poder leer la clave y el certificado.
+- name: Asignar propietario y permisos a la clave TLS
+  file:
+    path: "{{ rdp_tls_dir }}/tls.key"
+    owner: gnome-remote-desktop
+    group: gnome-remote-desktop
+    mode: "0600"
+
+- name: Asignar propietario y permisos al certificado TLS
+  file:
+    path: "{{ rdp_tls_dir }}/tls.crt"
+    owner: gnome-remote-desktop
+    group: gnome-remote-desktop
+    mode: "0600"
+
+- name: Leer el estado actual del servidor RDP de GNOME
+  command: grdctl --system status
+  register: grd_status
+  changed_when: false
+  failed_when: false
+
+# Solo se (re)configura si el RDP no está ya habilitado con las rutas TLS
+# correctas. Así el rol es idempotente y no reinicia el servicio en cada pase.
+- name: Configurar el servidor RDP de GNOME (si no está ya configurado/activo)
+  when: >
+    grd_status.rc != 0
+    or 'Status: enabled' not in grd_status.stdout
+    or (rdp_tls_dir + '/tls.crt') not in grd_status.stdout
+    or (rdp_tls_dir + '/tls.key') not in grd_status.stdout
+  block:
+    - name: Indicar a grdctl la ruta de la clave TLS
+      command: grdctl --system rdp set-tls-key {{ rdp_tls_dir }}/tls.key
+      notify: Reiniciar gnome-remote-desktop
+
+    - name: Indicar a grdctl la ruta del certificado TLS
+      command: grdctl --system rdp set-tls-cert {{ rdp_tls_dir }}/tls.crt
+      notify: Reiniciar gnome-remote-desktop
+
+    - name: Configurar las credenciales RDP
+      command: grdctl --system rdp set-credentials {{ rdp_username }} {{ rdp_password }}
+      no_log: true
+      notify: Reiniciar gnome-remote-desktop
+
+    - name: Habilitar el servidor RDP de GNOME
+      command: grdctl --system rdp enable
+      notify: Reiniciar gnome-remote-desktop
+
+- name: Asegurar que el servicio gnome-remote-desktop (system) está activo y habilitado
+  systemd:
+    name: gnome-remote-desktop.service
+    state: started
+    enabled: true

@@ -1,0 +1,12 @@
+# Variables del rol `rdp` (servidor RDP nativo de GNOME en Ubuntu 26.04)
+
+# Credenciales con las que se accede por RDP al equipo.
+rdp_username: "ubuntu"
+rdp_password: "ubuntu"
+
+# Directorio donde vive el certificado TLS del servidor RDP de GNOME.
+rdp_tls_dir: "/etc/gnome-remote-desktop"
+
+# Parámetros del certificado autofirmado que se genera si no existe.
+rdp_cert_days: 3650
+rdp_cert_subject: "/CN=gnome-remote-desktop"

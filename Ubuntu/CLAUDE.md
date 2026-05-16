@@ -126,6 +126,12 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 - Ejecuta `NombreIP.sh` (resuelve MAC→hostname y opcionalmente convierte DHCP a IP estática).
 - Ejecuta `Auto-Ansible.sh` y lanza directamente `ansible-playbook roles.yaml` desde `$RAIZANSIBLE`.
 
+### Configuración Ansible (post-instalación)
+La fase Ansible (software, NFS de aula, drivers, claves SSH…) está **documentada con sus propios CLAUDE.md** dentro de `Ubuntu/ansible/`:
+- `Ubuntu/ansible/CLAUDE.md` — describe `roles.yaml` (playbook maestro), inventarios `*.ini`, comandos de ejecución, estado de cada rol (activo/comentado/legacy) y convenciones (caché apt, detección de aula por IP, equipo `-00` = servidor NFS).
+- `Ubuntu/ansible/roles/<rol>/CLAUDE.md` — un fichero por rol (`basicos`, `certificados`, `comparteaula` + legacy `comparteaula32`/`comparteaula72`, `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `contenedores`) con tareas, variables e issues conocidos.
+- **Al diagnosticar/modificar la fase Ansible, leer primero esos CLAUDE.md** (sobre todo el de `Ubuntu/ansible/` para saber qué roles están activos en `roles.yaml`).
+
 ### 4-Comprobaciones.sh — Diagnóstico (v1.2-20260502)
 Comprueba en 8 secciones: (1) kernel+initramfs+NVMe+casper, (2) grub.cfg con UUIDs+línea initrd, (3) fstab vs blkid, (4) lsblk particiones, (5) paquetes clave (casper por ficheros en disco, no dpkg; ubiquity; dpkg --audit), (6) initramfs-tools config (MODULES=most, RESUME=none), (7) GRUB EFI instalado (grubx64.efi, módulos), (8) servicios systemd fallidos + SSH (solo si sistema arrancado, no en chroot). Genera resumen ERRORES/AVISOS al final. **Cuando ERRORES=0, reinicia automáticamente tras cuenta atrás de 30 s.** Útil como primer análisis al pegar un log.
 

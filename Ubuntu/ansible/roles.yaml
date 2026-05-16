@@ -26,7 +26,7 @@
      - nvidia
      - certificados
      - obs
-     #- xrdp
+     - rdp           # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
      - vscode
      #TODO: virtualbox falla. A raiz de poner el servidor de caches apt, no instala la versión concreta que le digo
      #- virtualbox #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
