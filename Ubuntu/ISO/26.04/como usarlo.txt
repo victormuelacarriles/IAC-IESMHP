@@ -24,8 +24,8 @@ git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh && sudo ./0
 
 
 #Haciendo: 
-#  Arranca pero directamente a usuario "GDM". Para ir a modo texto Ctrl+Alt+F2  (usuario/usuario)
-#
-#  Se puede entrar en modo texto desde el grub. Para luego arrancar el modo gráfico:  sudo systemctl start gdm3
-#
-# Depurar y averiguar por qué no entra se ven los usuarios. 
+#  
+#  En máquina virtual parece que funciona bien. 
+#  En máquina fisica (equipo de CIABD08, en dep informática):
+#        llega hasta ansible, pero se queda trabado en la instalación de nvidia. [estoy probando de nuevo desde 0]
+#        --> se ha vuelto a trabar. Ansible comienza a instalar nvidia, pero no quedan logs de registro. 

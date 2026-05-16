@@ -3,7 +3,7 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e # lo desactivamos para que no se pare en errores de 
 
-VERSIONSCRIPT="22.19-20260515"       #Versión del script
+VERSIONSCRIPT="22.20-20260515"       #Versión del script
 SCRIPT3=$(basename "$0")
 echo "$SCRIPT3 (vs$VERSIONSCRIPT)"
 #Nos quedamos solo con el nombre del script sin ruta
@@ -21,11 +21,49 @@ SCRIPT5ansible="$RAIZDISTRO/utiles/Auto-Ansible.sh"
 
 VERLOGSCRIPT="/home/usuario/verLog.sh"
 
-#Fichero de log del servicio
+#Ficheros de log del servicio de primer arranque
 FLOG="$RAIZLOG/$SCRIPT3.log"
+# 5-PrimerArranque.log: log CONSOLIDADO y resistente a cuelgues de TODO el
+# proceso que lanza el servicio (este script + NombreIP.sh + Auto-Ansible.sh +
+# ansible-playbook + 4-Comprobaciones.sh). Cada linea se reescribe a disco al
+# instante (open/append/close por linea, sin buffer de tee que se pierda) y un
+# 'sync' periodico vacia el page cache cada 3 s. Objetivo: si una maquina
+# FISICA con GPU NVIDIA se congela compilando/insertando el modulo del driver
+# (cuelgue duro del kernel), el log queda en disco hasta la ultima linea
+# escrita -> esa linea identifica el paso que provoco el cuelgue.
+FLOG5="$RAIZLOG/5-PrimerArranque.log"
 mkdir -p "$RAIZLOG"
-# Todo stdout+stderr va al terminal (journal en systemd) Y al fichero de log
-exec > >(tee -a "$FLOG") 2>&1
+
+# Guardamos stdout/stderr originales: los captura el journal de systemd
+# (StandardOutput=journal). Seguimos enviando copia al journal sin volver a
+# anexar al fichero (ver bug 2026-05-15 "log duplicado").
+exec 3>&1 4>&2
+
+# Consumidor de log: antepone hora a cada linea, la graba en los DOS ficheros
+# reabriendolos por linea (flush inmediato a kernel) y la reenvia al journal.
+exec > >(
+    while IFS= read -r _linea; do
+        printf '%(%H:%M:%S)T %s\n' -1 "$_linea" | tee -a "$FLOG" "$FLOG5" >&3
+    done
+) 2>&1
+
+# Flush periodico del page cache: un cuelgue duro del kernel (tipico al
+# insertar el modulo NVIDIA en hardware real) pierde como mucho los ~3 s
+# ultimos de log en vez de todo lo no escrito a disco.
+( while :; do sync; sleep 3; done ) &
+_SYNC_PID=$!
+
+# Al terminar (fin normal, reboot del rol nvidia, parada del servicio, senal):
+# dejar marca en el log, parar el sync periodico y forzar un sync final.
+_cerrar_log() {
+    local _rc=$?
+    echo -e "\033[33m=== $SCRIPT3 FINALIZA/INTERRUMPIDO (rc=$_rc): $(date) ===\033[0m"
+    kill "$_SYNC_PID" 2>/dev/null || true
+    sleep 0.3            # que el consumidor procese y grabe la ultima linea
+    sync
+}
+trap _cerrar_log EXIT
+trap 'exit 143' TERM INT HUP
 
 # Function to show a message to all graphical sessions
 mostrar_mensaje() {
@@ -221,6 +259,12 @@ cd "$RAIZANSIBLE/" || exit 1
 # fuego: el symlink /usr/bin/python3 siempre apunta al Python por defecto.
 PYINT="$(command -v python3 || echo /usr/bin/python3)"
 echoverde "Interprete Python para Ansible: $PYINT"
+echoamarillo "=== Lanzando ansible-playbook roles.yaml: $(date) ==="
+echoamarillo "AVISO: el rol 'nvidia' instala/compila el driver. En una maquina"
+echoamarillo "FISICA con GPU NVIDIA este es el punto tipico de cuelgue. Si"
+echoamarillo "5-PrimerArranque.log se corta tras 'TASK [nvidia : ...]', el"
+echoamarillo "equipo se congelo instalando el driver NVIDIA en ese paso."
+sync   # marcador garantizado en disco ANTES del paso que suele colgar
 ansible-playbook -i localhost, --connection=local roles.yaml \
     -e "ansible_python_interpreter=$PYINT" \
     --ssh-extra-args="-o StrictHostKeyChecking=no" \

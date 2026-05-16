@@ -56,6 +56,9 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 # 2-SetupSOdesdeLiveCD.steps   ← resumen de pasos con timestamps (diagnóstico rápido)
 # 3-SetupPrimerInicio.sh.log   ← primer arranque
 # 4-Comprobaciones.sh.log      ← diagnóstico
+# 5-PrimerArranque.log         ← log CONSOLIDADO y resistente a cuelgues de todo
+#                                 lo que lanza 3-SetupPrimerInicio.service. Cada
+#                                 línea con hora; sobrevive a cuelgues NVIDIA.
 ```
 
 ---
