@@ -26,7 +26,9 @@
     -subj "{{ rdp_cert_subject }}"
   args:
     creates: "{{ rdp_tls_dir }}/tls.crt"
-  notify: Reiniciar gnome-remote-desktop
+  # Sin handler de reinicio: el bloque de configuración hace parar→configurar→
+  # arrancar de forma determinista. Un restart adicional al final del play
+  # reintroduciría la carrera que pierde la config (ver bug 2026-05-16).
 
 # El usuario interno del servicio (lo crea el paquete gnome-remote-desktop)
 # necesita poder leer la clave y el certificado.
@@ -52,6 +54,15 @@
 
 # Solo se (re)configura si el RDP no está ya habilitado con las rutas TLS
 # correctas. Así el rol es idempotente y no reinicia el servicio en cada pase.
+#
+# IMPORTANTE — orden parar → configurar → arrancar (bug 2026-05-16):
+# Si el daemon `gnome-remote-desktop` (system) está CORRIENDO cuando se ejecutan
+# los `grdctl --system set-*/enable`, grdctl escribe `grd.conf` en disco pero el
+# daemon vivo mantiene su estado (vacío) en memoria. Un reinicio posterior del
+# servicio hace que el daemon viejo, al pararse, vuelque su estado vacío SOBRE
+# `grd.conf` → la config se pierde y el RDP queda `disabled` tras el reboot.
+# Por eso se PARA el servicio antes de configurar y se ARRANCA después: ningún
+# daemon vivo puede pisar `grd.conf`.
 - name: Configurar el servidor RDP de GNOME (si no está ya configurado/activo)
   when: >
     grd_status.rc != 0
@@ -59,25 +70,39 @@
     or (rdp_tls_dir + '/tls.crt') not in grd_status.stdout
     or (rdp_tls_dir + '/tls.key') not in grd_status.stdout
   block:
+    - name: Parar gnome-remote-desktop antes de configurar (evita pisar grd.conf)
+      systemd:
+        name: gnome-remote-desktop.service
+        state: stopped
+
     - name: Indicar a grdctl la ruta de la clave TLS
       command: grdctl --system rdp set-tls-key {{ rdp_tls_dir }}/tls.key
-      notify: Reiniciar gnome-remote-desktop
 
     - name: Indicar a grdctl la ruta del certificado TLS
       command: grdctl --system rdp set-tls-cert {{ rdp_tls_dir }}/tls.crt
-      notify: Reiniciar gnome-remote-desktop
 
     - name: Configurar las credenciales RDP
       command: grdctl --system rdp set-credentials {{ rdp_username }} {{ rdp_password }}
       no_log: true
-      notify: Reiniciar gnome-remote-desktop
 
     - name: Habilitar el servidor RDP de GNOME
       command: grdctl --system rdp enable
-      notify: Reiniciar gnome-remote-desktop
 
 - name: Asegurar que el servicio gnome-remote-desktop (system) está activo y habilitado
   systemd:
     name: gnome-remote-desktop.service
     state: started
     enabled: true
+
+# Post-condición: si tras configurar y arrancar el RDP no quedó realmente
+# `enabled` con las rutas TLS correctas, el play debe FALLAR de forma ruidosa
+# (antes el rol terminaba "ok" dejando el RDP apagado en silencio).
+- name: Verificar que el servidor RDP quedó habilitado
+  command: grdctl --system status
+  register: grd_status_post
+  changed_when: false
+  failed_when: >
+    grd_status_post.rc != 0
+    or 'Status: enabled' not in grd_status_post.stdout
+    or (rdp_tls_dir + '/tls.crt') not in grd_status_post.stdout
+    or (rdp_tls_dir + '/tls.key') not in grd_status_post.stdout
