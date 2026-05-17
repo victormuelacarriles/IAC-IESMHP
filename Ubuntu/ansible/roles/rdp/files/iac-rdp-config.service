@@ -11,4 +11,4 @@ RemainAfterExit=yes
 ExecStart=/usr/local/sbin/iac-rdp-config.sh
 
 [Install]
-WantedBy=gnome-remote-desktop.service
+WantedBy=multi-user.target

@@ -71,13 +71,20 @@
     owner: root
     group: root
     mode: "0644"
-  register: rdp_unit
 
-- name: Habilitar iac-rdp-config.service (reafirma la config en cada arranque)
-  systemd:
-    name: iac-rdp-config.service
-    enabled: true
-    daemon_reload: "{{ rdp_unit.changed }}"
+# Se habilita creando el symlink .wants A MANO (es exactamente lo que hace
+# `systemctl enable` para WantedBy=multi-user.target), NO con el módulo
+# `systemd`. Motivo (bug 2026-05-17): el módulo `systemd` con `daemon_reload`
+# CUELGA el playbook en el primer arranque (`systemctl daemon-reload` se
+# bloquea ejecutado dentro de `3-SetupPrimerInicio.service`). El symlink lo
+# lee systemd en el siguiente arranque sin necesidad de daemon-reload, y este
+# arranque ya se configura ejecutando el script directamente más abajo.
+- name: Habilitar iac-rdp-config.service (symlink, sin systemctl/daemon-reload)
+  file:
+    src: /etc/systemd/system/iac-rdp-config.service
+    dest: /etc/systemd/system/multi-user.target.wants/iac-rdp-config.service
+    state: link
+    force: true
 
 - name: Leer el estado actual del servidor RDP de GNOME
   command: grdctl --system status

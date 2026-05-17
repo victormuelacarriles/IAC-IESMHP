@@ -25,11 +25,12 @@ configuración**, que son texto plano y deterministas.
      (owner `gnome-remote-desktop`, `0664`).
    - `…/.local/share/gnome-remote-desktop/credentials.ini` → usuario/contraseña
      en formato GVariant (owner `gnome-remote-desktop`, `0600`).
-5. Despliega y **habilita `iac-rdp-config.service`** (desde
-   `files/iac-rdp-config.service`): `oneshot`, `Before=gnome-remote-desktop`,
-   `WantedBy=gnome-remote-desktop.service`. Reafirma esos ficheros **en cada
-   arranque antes de que arranque el daemon RDP** (mismo patrón que
-   `iac-gdm-noautologin.service`).
+5. Despliega `iac-rdp-config.service` (desde `files/iac-rdp-config.service`):
+   `oneshot`, `Before=gnome-remote-desktop.service`,
+   `WantedBy=multi-user.target`. Lo **habilita creando el symlink `.wants` a
+   mano** (módulo `file`, no `systemd`/`daemon-reload` — ver bug 2026-05-17).
+   Reafirma los ficheros **en cada arranque antes del daemon RDP** (mismo
+   patrón que `iac-gdm-noautologin.service`).
 6. Lee `grdctl --system status` y, **solo si el RDP no está ya habilitado con
    las rutas TLS correctas**: para el daemon → ejecuta `iac-rdp-config.sh` →
    arranca el daemon (con el daemon parado nadie puede pisar `grd.conf`).
@@ -79,7 +80,17 @@ configuración**, que son texto plano y deterministas.
   (almacén GKeyFile propio) pero `set-tls-*`/`enable` **no** (necesitan el
   daemon vivo) → quedaba `Status: disabled`, `TLS (null)`, `Password: hidden`,
   y la verificación hacía `failed=1` (vscode y posteriores no se ejecutaban).
-  **Fix definitivo**: no usar `grdctl` para configurar; **escribir
-  directamente** `grd.conf` y `credentials.ini` (contenido capturado de una
-  máquina donde funcionó y persistió tras reboot) + `iac-rdp-config.service`
-  que los reafirma `Before=gnome-remote-desktop` en cada arranque.
+  **Fix**: no usar `grdctl` para configurar; **escribir directamente**
+  `grd.conf` y `credentials.ini` (contenido capturado de una máquina donde
+  funcionó y persistió tras reboot) + `iac-rdp-config.service` que los
+  reafirma `Before=gnome-remote-desktop` en cada arranque.
+- **2026-05-17 (2) — el playbook se CUELGA al habilitar `iac-rdp-config.service`**:
+  la tarea usaba el módulo `systemd` con `daemon_reload`; `systemctl
+  daemon-reload` ejecutado dentro de `3-SetupPrimerInicio.service` durante el
+  primer arranque se bloquea indefinidamente → el play nunca llega a `vscode`
+  ni a habilitar `gnome-remote-desktop.service` (queda `disabled`). El script
+  `iac-rdp-config.sh` a mano (stop→script→start) deja el RDP `enabled` (la
+  estrategia es correcta). **Fix**: habilitar el unit creando el symlink
+  `multi-user.target.wants/iac-rdp-config.service` con el módulo `file` (sin
+  `systemctl` ni `daemon-reload`, no puede colgarse); `WantedBy=` pasa de
+  `gnome-remote-desktop.service` a `multi-user.target` (desacoplado).
