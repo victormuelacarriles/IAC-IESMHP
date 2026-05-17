@@ -3,7 +3,8 @@
     "allow": [
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(bash -n \"e:/Usuarios/vmuela/OneDrive - Educantabria/_20FP25-26/Dep/IAC-IESMHP/Ubuntu/ISO/26.04/3-SetupPrimerInicio.sh\")"
+      "Bash(bash -n \"e:/Usuarios/vmuela/OneDrive - Educantabria/_20FP25-26/Dep/IAC-IESMHP/Ubuntu/ISO/26.04/3-SetupPrimerInicio.sh\")",
+      "Bash(grep -iA12 'iac-gdm-noautologin')"
     ]
   }
 }

@@ -4,8 +4,12 @@
 rdp_username: "ubuntu"
 rdp_password: "ubuntu"
 
-# Directorio donde vive el certificado TLS del servidor RDP de GNOME.
+# Directorio donde vive el certificado TLS y el grd.conf del servidor RDP.
 rdp_tls_dir: "/etc/gnome-remote-desktop"
+
+# Directorio donde gnome-remote-desktop guarda credentials.ini (GKeyFile
+# fallback, bajo el HOME del usuario de sistema gnome-remote-desktop).
+rdp_creds_dir: "/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop"
 
 # Parámetros del certificado autofirmado que se genera si no existe.
 rdp_cert_days: 3650

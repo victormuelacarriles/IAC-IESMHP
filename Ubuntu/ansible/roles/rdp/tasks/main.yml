@@ -1,7 +1,15 @@
 # Rol `rdp` — acceso remoto por RDP usando el servidor nativo de GNOME
 # (gnome-remote-desktop) que trae Ubuntu Desktop 26.04. Sustituye al antiguo
-# rol `xrdp`, innecesario desde que GNOME gestiona RDP de forma nativa con
-# `grdctl --system`.
+# rol `xrdp`.
+#
+# ESTRATEGIA (tras los bugs 2026-05-16/17): NO se configura con `grdctl`.
+# En gnome-remote-desktop 50 + VM sin TPM, las escrituras de `grdctl --system
+# rdp set-tls-*/enable` solo cuajan con el daemon vivo y se perdían en el
+# primer arranque desatendido (el daemon volcaba su estado vacío sobre
+# grd.conf). En su lugar se DESPLIEGAN directamente los dos ficheros de
+# configuración (texto plano, deterministas), y un servicio
+# `iac-rdp-config.service` los reafirma en CADA arranque, Before=
+# gnome-remote-desktop.service (mismo patrón que `iac-gdm-noautologin.service`).
 
 - name: Instalar gnome-remote-desktop (servidor RDP nativo de GNOME)
   apt:
@@ -26,9 +34,6 @@
     -subj "{{ rdp_cert_subject }}"
   args:
     creates: "{{ rdp_tls_dir }}/tls.crt"
-  # Sin handler de reinicio: el bloque de configuración hace parar→configurar→
-  # arrancar de forma determinista. Un restart adicional al final del play
-  # reintroduciría la carrera que pierde la config (ver bug 2026-05-16).
 
 # El usuario interno del servicio (lo crea el paquete gnome-remote-desktop)
 # necesita poder leer la clave y el certificado.
@@ -46,47 +51,63 @@
     group: gnome-remote-desktop
     mode: "0600"
 
+# --- Despliegue determinista de la configuración -------------------------
+# El script escribe grd.conf (enable + rutas TLS) y credentials.ini
+# (usuario/contraseña) con el contenido EXACTO que en una máquina de
+# referencia quedó funcionando y persistió tras reboot.
+- name: Desplegar el script de configuración RDP (iac-rdp-config.sh)
+  template:
+    src: iac-rdp-config.sh.j2
+    dest: /usr/local/sbin/iac-rdp-config.sh
+    owner: root
+    group: root
+    mode: "0755"
+  no_log: true            # contiene la contraseña RDP
+
+- name: Desplegar la unidad systemd iac-rdp-config.service
+  copy:
+    src: iac-rdp-config.service
+    dest: /etc/systemd/system/iac-rdp-config.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: rdp_unit
+
+- name: Habilitar iac-rdp-config.service (reafirma la config en cada arranque)
+  systemd:
+    name: iac-rdp-config.service
+    enabled: true
+    daemon_reload: "{{ rdp_unit.changed }}"
+
 - name: Leer el estado actual del servidor RDP de GNOME
   command: grdctl --system status
   register: grd_status
   changed_when: false
   failed_when: false
 
-# Solo se (re)configura si el RDP no está ya habilitado con las rutas TLS
-# correctas. Así el rol es idempotente y no reinicia el servicio en cada pase.
-#
-# IMPORTANTE — orden parar → configurar → arrancar (bug 2026-05-16):
-# Si el daemon `gnome-remote-desktop` (system) está CORRIENDO cuando se ejecutan
-# los `grdctl --system set-*/enable`, grdctl escribe `grd.conf` en disco pero el
-# daemon vivo mantiene su estado (vacío) en memoria. Un reinicio posterior del
-# servicio hace que el daemon viejo, al pararse, vuelque su estado vacío SOBRE
-# `grd.conf` → la config se pierde y el RDP queda `disabled` tras el reboot.
-# Por eso se PARA el servicio antes de configurar y se ARRANCA después: ningún
-# daemon vivo puede pisar `grd.conf`.
-- name: Configurar el servidor RDP de GNOME (si no está ya configurado/activo)
+# Solo se (re)aplica si el RDP no está ya habilitado con las rutas TLS
+# correctas (idempotencia: no rebota el servicio en cada pase de un aula).
+# Orden: parar daemon → escribir ficheros buenos → arrancar daemon. Con el
+# daemon parado nadie puede pisar grd.conf; al arrancar lo lee ya correcto.
+- name: Aplicar la configuración RDP (si no está ya habilitada)
   when: >
     grd_status.rc != 0
     or 'Status: enabled' not in grd_status.stdout
     or (rdp_tls_dir + '/tls.crt') not in grd_status.stdout
     or (rdp_tls_dir + '/tls.key') not in grd_status.stdout
   block:
-    - name: Parar gnome-remote-desktop antes de configurar (evita pisar grd.conf)
+    - name: Parar gnome-remote-desktop antes de escribir la config
       systemd:
         name: gnome-remote-desktop.service
         state: stopped
 
-    - name: Indicar a grdctl la ruta de la clave TLS
-      command: grdctl --system rdp set-tls-key {{ rdp_tls_dir }}/tls.key
+    - name: Escribir grd.conf y credentials.ini (ejecuta iac-rdp-config.sh)
+      command: /usr/local/sbin/iac-rdp-config.sh
 
-    - name: Indicar a grdctl la ruta del certificado TLS
-      command: grdctl --system rdp set-tls-cert {{ rdp_tls_dir }}/tls.crt
-
-    - name: Configurar las credenciales RDP
-      command: grdctl --system rdp set-credentials {{ rdp_username }} {{ rdp_password }}
-      no_log: true
-
-    - name: Habilitar el servidor RDP de GNOME
-      command: grdctl --system rdp enable
+    - name: Arrancar gnome-remote-desktop con la config ya escrita
+      systemd:
+        name: gnome-remote-desktop.service
+        state: started
 
 - name: Asegurar que el servicio gnome-remote-desktop (system) está activo y habilitado
   systemd:
@@ -94,7 +115,7 @@
     state: started
     enabled: true
 
-# Post-condición: si tras configurar y arrancar el RDP no quedó realmente
+# Post-condición: si tras desplegar la config el RDP no quedó realmente
 # `enabled` con las rutas TLS correctas, el play debe FALLAR de forma ruidosa
 # (antes el rol terminaba "ok" dejando el RDP apagado en silencio).
 - name: Verificar que el servidor RDP quedó habilitado

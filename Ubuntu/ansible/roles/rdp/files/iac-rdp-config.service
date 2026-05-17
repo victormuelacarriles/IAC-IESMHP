@@ -1,0 +1,14 @@
+[Unit]
+Description=IAC: reafirmar configuracion RDP (gnome-remote-desktop) antes del daemon
+DefaultDependencies=no
+Before=gnome-remote-desktop.service
+After=local-fs.target
+ConditionPathExists=/usr/local/sbin/iac-rdp-config.sh
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/iac-rdp-config.sh
+
+[Install]
+WantedBy=gnome-remote-desktop.service
