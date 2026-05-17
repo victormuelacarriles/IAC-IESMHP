@@ -26,16 +26,19 @@ configuración**, que son texto plano y deterministas.
    - `…/.local/share/gnome-remote-desktop/credentials.ini` → usuario/contraseña
      en formato GVariant (owner `gnome-remote-desktop`, `0600`).
 5. Despliega `iac-rdp-config.service` (desde `files/iac-rdp-config.service`):
-   `oneshot`, `Before=gnome-remote-desktop.service`,
-   `WantedBy=multi-user.target`. Lo **habilita creando el symlink `.wants` a
-   mano** (módulo `file`, no `systemd`/`daemon-reload` — ver bug 2026-05-17).
-   Reafirma los ficheros **en cada arranque antes del daemon RDP** (mismo
-   patrón que `iac-gdm-noautologin.service`).
+   `oneshot`, `Wants=gnome-remote-desktop.service`,
+   `Before=gnome-remote-desktop.service`, `WantedBy=multi-user.target`. Lo
+   **habilita creando el symlink `.wants` a mano** (módulo `file`, no
+   `systemd`/`daemon-reload`/`enable` — ver bugs 2026-05-17). En cada arranque
+   reafirma los ficheros **y arrastra (`Wants=`) al daemon RDP** ordenado
+   después (mismo patrón que `iac-gdm-noautologin.service`).
 6. Lee `grdctl --system status` y, **solo si el RDP no está ya habilitado con
    las rutas TLS correctas**: para el daemon → ejecuta `iac-rdp-config.sh` →
    arranca el daemon (con el daemon parado nadie puede pisar `grd.conf`).
-7. Asegura `gnome-remote-desktop.service` (instancia *system*) `started` y
-   `enabled`.
+7. Asegura `gnome-remote-desktop.service` (instancia *system*) `started` **solo
+   para este arranque** (`state: started`, **sin `enabled`** — el arranque
+   automático lo da `iac-rdp-config.service` con `Wants=`; `systemctl enable`
+   desde Ansible se cuelga en el primer arranque).
 8. **Verifica** con `grdctl --system status` que quedó `enabled` con las rutas
    TLS; si no, el play **falla** (no termina "ok" con el RDP apagado).
 
@@ -84,13 +87,22 @@ configuración**, que son texto plano y deterministas.
   `grd.conf` y `credentials.ini` (contenido capturado de una máquina donde
   funcionó y persistió tras reboot) + `iac-rdp-config.service` que los
   reafirma `Before=gnome-remote-desktop` en cada arranque.
-- **2026-05-17 (2) — el playbook se CUELGA al habilitar `iac-rdp-config.service`**:
-  la tarea usaba el módulo `systemd` con `daemon_reload`; `systemctl
-  daemon-reload` ejecutado dentro de `3-SetupPrimerInicio.service` durante el
-  primer arranque se bloquea indefinidamente → el play nunca llega a `vscode`
-  ni a habilitar `gnome-remote-desktop.service` (queda `disabled`). El script
-  `iac-rdp-config.sh` a mano (stop→script→start) deja el RDP `enabled` (la
-  estrategia es correcta). **Fix**: habilitar el unit creando el symlink
-  `multi-user.target.wants/iac-rdp-config.service` con el módulo `file` (sin
-  `systemctl` ni `daemon-reload`, no puede colgarse); `WantedBy=` pasa de
-  `gnome-remote-desktop.service` a `multi-user.target` (desacoplado).
+- **2026-05-17 (2) — cuelgue al habilitar `iac-rdp-config.service`
+  (`daemon_reload`)**: el módulo `systemd` con `daemon_reload` →
+  `systemctl daemon-reload` dentro de `3-SetupPrimerInicio.service` se bloquea.
+  **Fix**: habilitar el unit con el módulo `file` (symlink
+  `multi-user.target.wants/…`, sin `systemctl`/`daemon-reload`); `WantedBy=`
+  pasa a `multi-user.target`.
+- **2026-05-17 (3) — el cuelgue se movió a `Asegurar … enabled: true`**:
+  resuelto (2), el play avanzó por todo el bloque (`grdctl status` salió
+  `enabled` y persistió tras reboot) pero se volvió a colgar en la tarea
+  siguiente, `systemd: state: started, enabled: true` sobre
+  `gnome-remote-desktop.service`. Patrón confirmado: el módulo `systemd`
+  ejecutando **`systemctl enable`** (igual que `daemon-reload`) se cuelga en el
+  primer arranque dentro de `3-SetupPrimerInicio.service`; `stop`/`started`
+  (sin `enabled`) **no** cuelgan. En el run viejo no pasaba porque
+  `gnome-remote-desktop.service` ya venía `enabled` (enable = no-op). **Fix**:
+  quitar `enabled: true` (queda solo `state: started` para este arranque);
+  `iac-rdp-config.service` añade `Wants=gnome-remote-desktop.service` para
+  arrastrar el daemon en cada arranque → no se necesita `systemctl enable`
+  desde Ansible.

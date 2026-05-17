@@ -116,11 +116,16 @@
         name: gnome-remote-desktop.service
         state: started
 
-- name: Asegurar que el servicio gnome-remote-desktop (system) está activo y habilitado
+# OJO: NO usar `enabled: true` aquí. El módulo `systemd` ejecutando
+# `systemctl enable` se CUELGA en el primer arranque dentro de
+# `3-SetupPrimerInicio.service` (igual que `daemon-reload` — bugs 2026-05-17).
+# El arranque automático en cada boot lo garantiza `iac-rdp-config.service`
+# (habilitado por symlink, `Wants=gnome-remote-desktop.service`). Aquí solo se
+# arranca el daemon para ESTE arranque (state: started NO cuelga).
+- name: Asegurar que el servicio gnome-remote-desktop (system) está activo (este arranque)
   systemd:
     name: gnome-remote-desktop.service
     state: started
-    enabled: true
 
 # Post-condición: si tras desplegar la config el RDP no quedó realmente
 # `enabled` con las rutas TLS correctas, el play debe FALLAR de forma ruidosa
