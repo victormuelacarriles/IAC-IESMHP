@@ -10,7 +10,8 @@
       "Bash(python3 -)",
       "Bash(bash -n \"e:/Usuarios/vmuela/OneDrive - Educantabria/_20FP25-26/Dep/IAC-IESMHP/Ubuntu/ISO/26.04/2-SetupSOdesdeLiveCD.sh\")",
       "Bash(python -c \"import yaml,sys; yaml.safe_load\\(open\\('Ubuntu/ansible/roles/nvidia/tasks/main.yml',encoding='utf-8'\\)\\); print\\('YAML OK tasks/main.yml'\\)\")",
-      "Bash(python3 -c \"import yaml,sys; yaml.safe_load\\(open\\('Ubuntu/ansible/roles/nvidia/tasks/main.yml',encoding='utf-8'\\)\\); print\\('YAML OK tasks/main.yml'\\)\")"
+      "Bash(python3 -c \"import yaml,sys; yaml.safe_load\\(open\\('Ubuntu/ansible/roles/nvidia/tasks/main.yml',encoding='utf-8'\\)\\); print\\('YAML OK tasks/main.yml'\\)\")",
+      "Bash(python -c \"import yaml,sys; d=list\\(yaml.safe_load_all\\(open\\('Ubuntu/ansible/roles/nvidia/tasks/main.yml',encoding='utf-8'\\)\\)\\); print\\('yaml.safe_load OK; tasks:', sum\\(len\\(x\\) for x in d if x\\)\\)\")"
     ]
   }
 }

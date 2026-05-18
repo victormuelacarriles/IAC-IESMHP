@@ -35,6 +35,29 @@
     DEBIAN_FRONTEND: noninteractive
     NEEDRESTART_MODE: a
   block:
+    # En el PRIMER ARRANQUE, justo despues del `apt-get full-upgrade` de
+    # 3-SetupPrimerInicio.sh, los timers apt-daily / apt-daily-upgrade, el
+    # servicio unattended-upgrades y packagekit se activan y agarran
+    # /var/lib/dpkg/lock-frontend. `ubuntu-drivers install` invoca apt por
+    # debajo: si choca con ese lock mientras otro proceso instala/compila se
+    # queda esperando y deja dpkg a medio configurar (sintoma del cuelgue en
+    # maquina FISICA). DEBIAN_FRONTEND=noninteractive NO arregla esto: hay que
+    # callar esos procesos ANTES de tocar apt. Best-effort: el servicio puede
+    # no existir (p. ej. packagekit) -> failed_when:false.
+    - name: Silenciar apt en segundo plano (timers/servicios que retienen el lock)
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+        - apt-daily.service
+        - apt-daily-upgrade.service
+        - unattended-upgrades.service
+        - packagekit.service
+      changed_when: false
+      failed_when: false
+
     # Si un paso previo (p. ej. apt-get full-upgrade de 3-SetupPrimerInicio.sh)
     # dejo paquetes desempaquetados pero sin configurar, terminarlos ahora para
     # que `ubuntu-drivers install` no parta de un dpkg roto. Best-effort: no
@@ -59,12 +82,59 @@
       changed_when: false
       failed_when: false
 
-    - name: Instalar el driver NVIDIA recomendado por Ubuntu (soporte nativo)
-      command: ubuntu-drivers install
-      register: ubuntu_drivers_install
+    # Bloquear hasta que el lock de dpkg/apt quede libre (o 600 s). apt usa
+    # flock sobre lock-frontend, asi que este flock espera exactamente a lo
+    # mismo, sin depender de psmisc/fuser. Aun habiendo parado los timers,
+    # puede haber un dpkg en curso terminando; mejor esperarlo que colisionar.
+    - name: Esperar a que el lock de dpkg/apt quede libre antes de instalar
+      command: flock -w 600 /var/lib/dpkg/lock-frontend true
+      changed_when: false
+      failed_when: false
       when:
         - nvidia_smi_pre.rc != 0
         - required_nvidia_driver | length == 0
+
+    - name: Instalar el driver NVIDIA recomendado por Ubuntu (no interactivo, timeout duro)
+      # `command:` crudo no tiene techo: si pese al frontend no interactivo
+      # algo se atasca, Ansible esperaria para siempre (issue conocido del
+      # rol). `timeout -k 60 1800` pone tope duro (SIGTERM a 30 min, SIGKILL
+      # 60 s despues); `</dev/null` da EOF a cualquier lectura de stdin en vez
+      # de bloquear; el environment refuerza el modo no interactivo de
+      # debconf/needrestart/apt-listchanges.
+      shell: timeout -k 60 1800 ubuntu-drivers install </dev/null
+      register: ubuntu_drivers_install
+      changed_when: ubuntu_drivers_install.rc == 0
+      # rc=124 -> timeout agotado. NO abortamos el playbook (rol best-effort
+      # dentro del flujo mayor): el estado real lo reporta el debug siguiente
+      # y el check nvidia-smi posterior.
+      failed_when: false
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+        DEBCONF_NONINTERACTIVE_SEEN: "true"
+        NEEDRESTART_MODE: a
+        APT_LISTCHANGES_FRONTEND: none
+      when:
+        - nvidia_smi_pre.rc != 0
+        - required_nvidia_driver | length == 0
+
+    - name: Avisar si la instalación del driver NVIDIA no terminó limpiamente
+      debug:
+        msg: >
+          ubuntu-drivers install devolvió rc={{ ubuntu_drivers_install.rc }}.
+          {% if ubuntu_drivers_install.rc == 124 %}TIMEOUT (30 min): revisar lock de apt o Secure Boot.{% endif %}
+      when:
+        - ubuntu_drivers_install is defined
+        - ubuntu_drivers_install.rc is defined
+        - ubuntu_drivers_install.rc != 0
+
+    # Si la instalacion (o un timeout que matara apt/dpkg a media faena) dejo
+    # dpkg interrumpido, terminarlo aqui automaticamente -> el operario ya no
+    # tiene que hacer `sudo dpkg --configure -a` a mano para desbloquear.
+    - name: Terminar configuración de dpkg interrumpida por la instalación
+      command: dpkg --configure -a
+      changed_when: false
+      failed_when: false
+      when: nvidia_smi_pre.rc != 0
 
     - name: Instalar una serie concreta del driver NVIDIA (solo si se ha forzado)
       apt:

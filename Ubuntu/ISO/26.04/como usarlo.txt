@@ -25,11 +25,7 @@ git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh && sudo ./0
 
 #Haciendo: 
 #   En máquina fisica (equipo de CIABD08, en dep informática):
-#        llega hasta ansible, pero se queda trabado en la instalación de nvidia. [estoy probando de nuevo desde 0]
-#        --> se ha vuelto a trabar. Ansible comienza a instalar nvidia, pero no quedan logs de registro. 
-#        (Se supone que está arreglado: hay que probarlo en la física)
-
 # -> intentar quitar la espera de "Please remove ..."
-# -> mensajes en el primer arranque
 # -> formateo ZFS y deduplicación
 # -> mapeo NFS de cabina
+# -> falla nvidia en equipo físico real (se bloquea )

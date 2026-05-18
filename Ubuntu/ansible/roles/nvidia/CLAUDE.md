@@ -59,6 +59,25 @@ Instala el driver propietario de NVIDIA **solo si se detecta una GPU NVIDIA** en
   equipos: **deshabilitar Secure Boot en el firmware** (práctica habitual con
   el driver propietario) o implementar enrolado MOK automático (fuera del
   alcance del fix mínimo).
-- `command: ubuntu-drivers install` no tiene timeout duro. Si algo se cuelga
-  pese al frontend no interactivo, Ansible esperaría indefinidamente. Posible
-  endurecimiento futuro: `async`/`poll` (complica la lógica `is changed`).
+- **Cuelgue en máquina FÍSICA pese a `noninteractive` (2026-05-18, 2ª iter.)**:
+  el frontend no interactivo **no** evita dos causas reales de cuelgue en el
+  primer arranque, ya mitigadas en el rol:
+  1. **Lock de dpkg/apt**: tras el `apt-get full-upgrade` de
+     `3-SetupPrimerInicio.sh`, los timers `apt-daily`/`apt-daily-upgrade`,
+     `unattended-upgrades` y `packagekit` agarran `lock-frontend`.
+     `ubuntu-drivers install` (apt por debajo) colisiona → dpkg a medio
+     configurar. **Mitigación**: 1ª tarea del bloque para esos
+     timers/servicios (`systemd state=stopped`, best-effort) + tarea
+     `flock -w 600 /var/lib/dpkg/lock-frontend` antes de instalar.
+  2. **Sin timeout duro**: `command:` crudo esperaría para siempre.
+     **Mitigación**: el install pasa a `shell: timeout -k 60 1800
+     ubuntu-drivers install </dev/null` con environment no interactivo
+     reforzado (`DEBIAN_FRONTEND`, `DEBCONF_NONINTERACTIVE_SEEN`,
+     `NEEDRESTART_MODE=a`, `APT_LISTCHANGES_FRONTEND=none`),
+     `changed_when: rc==0`, `failed_when:false` (rol best-effort; rc=124 =
+     timeout, se avisa por `debug`). Tras instalar, `dpkg --configure -a`
+     defensivo → ya no hace falta el `sudo dpkg --configure -a` manual.
+  - **Caveat Secure Boot inalterado**: si la máquina física tiene Secure Boot
+    **activo**, con `noninteractive` el módulo queda **sin firmar → no carga**
+    (`nvidia-smi` falla; no es un cuelgue). Solución: deshabilitar Secure Boot
+    en el firmware o enrolado MOK automático (fuera de alcance).
