@@ -301,10 +301,6 @@ apt-get autoremove -y
 echoverde "Recompilando configuración dconf (fondo de escritorio y ajustes del sistema)..."
 dconf update 2>/dev/null || true
 
-echoverde "Desactivando y borrando el servicio de actualización en primer arranque..."
-systemctl disable 3-SetupPrimerInicio.service
-rm /etc/systemd/system/3-SetupPrimerInicio.service
-mv "$0" "$0.borrado" # Renombrar el script para evitar que se ejecute de nuevo
 
 mostrar_mensaje "Intentamos cambiar IP y nombre de nuevo"
 chmod +x "$SCRIPT4nombreip"
@@ -362,8 +358,14 @@ else
 fi
 sync   # asegura en disco el resultado (ok o error) de ansible antes de seguir
 
+echoverde "Desactivando y borrando el servicio de actualización en primer arranque..."
+systemctl disable 3-SetupPrimerInicio.service
+rm /etc/systemd/system/3-SetupPrimerInicio.service
+mv "$0" "$0.borrado" # Renombrar el script para evitar que se ejecute de nuevo
+
+
 #Reinciando en 30 segundos y avisando a los usuarios
-mostrar_mensaje "Sistema actualizado. SSH root/root"
+
 
 # Comprobaciones finales del sistema
 SCRIPT4="$RAIZDISTRO/4-Comprobaciones.sh"
@@ -376,7 +378,7 @@ if [ -f "$SCRIPT4" ]; then
 fi
 
 echoverde "=== $SCRIPT3 finalizado: $(date) ==="
-echoverde "Reiniciando el sistema en 30 segundos..."
+mostrar_mensaje "Sistema actualizado y configurado. Reiniciando en 30 segundos..."
 sleep 30
 rm -f "$VERLOGSCRIPT"
-reboot now
+systemctl reboot -i
