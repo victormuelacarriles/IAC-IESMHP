@@ -24,7 +24,7 @@
      - clienteNAS    #Configura el cliente NFS para el NAS del instituto (y lo monta en /mnt/nas)
      #- comparteaula  # Rol unificado: detecta aula por IP (72/32) y configura servidor/cliente NFS según corresponda
      # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml
-     - nvidia
+     #- nvidia
      - certificados
      - obs
      - rdp           # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
