@@ -21,18 +21,20 @@
         update_cache: yes
   roles:
      - basicos       #cosas que debieras estar desde el livecd pero que recomprobamos #[python, pip, pipx, ansible] 
-     - clienteNAS    #Configura el cliente NFS para el NAS del instituto (y lo monta en /mnt/nas)
-     #- comparteaula  # Rol unificado: detecta aula por IP (72/32) y configura servidor/cliente NFS según corresponda
+
+     
      # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml
      #- nvidia
      - certificados
      - obs
      - rdp           # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
      - vscode
+     - clienteNAS    #Configura el cliente NFS para el NAS del instituto (y lo monta en /mnt/nas)
+     #- vmware  #TODO: pide compilar (como sudo) en el primer arranque. Hay que evitarlo.
+     #- comparteaula  # Rol unificado: detecta aula por IP (72/32) y configura servidor/cliente NFS según corresponda
      #TODO: virtualbox falla. A raiz de poner el servidor de caches apt, no instala la versión concreta que le digo
      #- virtualbox #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
     #             #TODO: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
-     #- vmware  #TODO: pide compilar (como sudo) en el primer arranque. Hay que evitarlo.
      #- contenedores  #[docker y podman  (+sus compose)]    #por hacer
 
 #POR HACER:
