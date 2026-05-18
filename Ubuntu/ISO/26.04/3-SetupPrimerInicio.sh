@@ -159,8 +159,8 @@ echoverde "Kernel: $(uname -r)"
 
 echoverde "Lanzando mensaje en sesiones gráficas activas..." 
 mostrar_mensaje "Actualizando: (SSH no disponible)" 
-echoverde "Ejecutando actualización del sistema en primer arranque en 20sg.." 
-sleep 20 # Espera 20 segundos para asegurar que el sistema esté completamente arrancado
+echoverde "Ejecutando actualización del sistema en primer arranque en 5sg.." 
+sleep 5 # Espera 5 segundos para asegurar que el sistema esté completamente arrancado
 
 echoverde "Ajustadando la hora del sistema..."
 timedatectl set-timezone Europe/Madrid
@@ -378,7 +378,7 @@ if [ -f "$SCRIPT4" ]; then
 fi
 
 echoverde "=== $SCRIPT3 finalizado: $(date) ==="
-mostrar_mensaje "Sistema actualizado y configurado. Reiniciando en 30 segundos..."
-sleep 30
+mostrar_mensaje "Sistema actualizado y configurado. Reiniciando en 5 segundos..."
+sleep 5
 rm -f "$VERLOGSCRIPT"
 systemctl reboot -i
