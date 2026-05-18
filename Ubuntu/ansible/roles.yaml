@@ -21,11 +21,9 @@
         update_cache: yes
   roles:
      - basicos       #cosas que debieras estar desde el livecd pero que recomprobamos #[python, pip, pipx, ansible] 
-
-     
      # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml
-     #- nvidia
      - certificados
+     - nvidia
      - obs
      - rdp           # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
      - vscode
