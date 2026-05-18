@@ -28,10 +28,9 @@
      - rdp           # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
      - vscode
      - clienteNAS    #Configura el cliente NFS para el NAS del instituto (y lo monta en /mnt/nas)
-     - vmware        #
+     - vmware        #sigue fallando la compilación. error raro de: "[Apploader] Use shipped Linux kernel AIO access library" 
      #- comparteaula  # Rol unificado: detecta aula por IP (72/32) y configura servidor/cliente NFS según corresponda
      #TODO: virtualbox falla. A raiz de poner el servidor de caches apt, no instala la versión concreta que le digo
-     #- virtualbox #Roles para virtualbox: virtualbox  (instal)  ; virtualboxFUERA (desinstala virtualbox y sus repositorios)
     #             #TODO: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
      #- contenedores  #[docker y podman  (+sus compose)]    #por hacer
 

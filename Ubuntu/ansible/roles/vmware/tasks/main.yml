@@ -42,5 +42,5 @@
   when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
 
 - name: Ejecutar post-instalación de VMware(2/2) (compilación)
-  command: "/usr/lib/vmware/bin/vmware-modconfig --console --install-all"
+  command: "vmware-modconfig --console --install-all"
   when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
