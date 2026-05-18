@@ -3,6 +3,9 @@
 #vs 25/6/2025
 set -e
 
+#por hacer: Obtenemos el tipo de distribución (mint o ubuntu) a partir de la info del sistema
+
+
 DISTRO="Mint"
 RAIZSCRIPTS="/opt/iesmhp$DISTRO"
 RAIZLOGS="/var/log/iesmhp$DISTRO"
