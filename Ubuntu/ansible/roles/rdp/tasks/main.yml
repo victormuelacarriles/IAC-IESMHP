@@ -26,13 +26,13 @@
 # arranque, ver bugs 2026-05-17).
 
 #Comentamos por si acaso
-# - name: Permitir acciones admin por PolicyKit en sesiones RDP (sin diálogo)
-#   template:
-#     src: 49-allow-user-admin-rdp.rules.j2
-#     dest: "{{ rdp_polkit_rules_file }}"
-#     owner: root
-#     group: root
-#     mode: "0644"
+- name: Permitir acciones admin por PolicyKit en sesiones RDP (sin diálogo)
+  template:
+    src: 49-allow-user-admin-rdp.rules.j2
+    dest: "{{ rdp_polkit_rules_file }}"
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: Crear el directorio de configuración de gnome-remote-desktop
   file:
