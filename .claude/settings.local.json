@@ -7,7 +7,8 @@
       "Bash(grep -iA12 'iac-gdm-noautologin')",
       "Bash(python3 -c \"import yaml,sys; yaml.safe_load\\(open\\(r'e:/Usuarios/vmuela/OneDrive - Educantabria/_20FP25-26/Dep/IAC-IESMHP/Ubuntu/ansible/roles/rdp/tasks/main.yml'\\)\\); print\\('YAML OK tasks/main.yml'\\)\")",
       "Bash(python3 -c \"import yaml,sys; yaml.safe_load\\(open\\(r'e:/Usuarios/vmuela/OneDrive - Educantabria/_20FP25-26/Dep/IAC-IESMHP/Ubuntu/ansible/roles/rdp/defaults/main.yml'\\)\\); print\\('YAML OK defaults/main.yml'\\)\")",
-      "Bash(python3 -)"
+      "Bash(python3 -)",
+      "Bash(bash -n \"e:/Usuarios/vmuela/OneDrive - Educantabria/_20FP25-26/Dep/IAC-IESMHP/Ubuntu/ISO/26.04/2-SetupSOdesdeLiveCD.sh\")"
     ]
   }
 }

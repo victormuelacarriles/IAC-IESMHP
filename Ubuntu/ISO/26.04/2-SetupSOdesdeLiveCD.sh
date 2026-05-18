@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.19-20260515"
+VERSIONSCRIPT="22.22-20260518"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -152,6 +152,59 @@ do
         info "No presente: $_autostart_file"
     fi
 done
+
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Rehabilitar snapd y eliminar el instalador de Ubuntu (sistema instalado)"
+# ─────────────────────────────────────────────────────────────────────────────
+# 0a-CreaISO.sh enmascara snapd en el squashfs (symlinks a /dev/null) para que el
+# Live CD arranque en ~10 s en lugar de ~3 min. El rsync de 1-SetupLiveCD.sh solo
+# excluye /etc/fstab y /etc/machine-id, así que esos symlinks se copian al sistema
+# instalado y snapd queda MASKED → Firefox (snap) no arranca
+# ("Unit snapd.service is masked"). Aquí se DESenmascara y habilita SOLO en el
+# sistema instalado; el squashfs (y por tanto el arranque rápido del Live CD) no
+# se toca.
+for _snapunit in snapd.service snapd.socket snapd.seeded.service snapd.apparmor.service; do
+    _link="/etc/systemd/system/$_snapunit"
+    if [ -L "$_link" ] && [ "$(readlink "$_link" 2>/dev/null)" = "/dev/null" ]; then
+        rm -f "$_link"
+        info "  Desenmascarado (symlink → /dev/null eliminado): $_link"
+    fi
+done
+systemctl unmask snapd.service snapd.socket snapd.seeded.service snapd.apparmor.service 2>/dev/null || true
+# `systemctl enable` es offline-capable en chroot: solo crea los symlinks de la
+# sección [Install]; snapd.service/snapd.seeded se activan vía snapd.socket.
+systemctl enable snapd.socket snapd.seeded.service snapd.apparmor.service 2>/dev/null || true
+if [ -L /etc/systemd/system/snapd.service ] || [ -L /etc/systemd/system/snapd.socket ]; then
+    err "snapd sigue enmascarado tras el intento de desenmascarar — revisar manualmente"
+else
+    ok "snapd desenmascarado y snapd.socket habilitado en el sistema instalado"
+fi
+
+# El instalador de Ubuntu (snap 'ubuntu-desktop-bootstrap', el mismo asistente
+# "Instalar Ubuntu" que aparece en el Live CD) viene en el squashfs y el rsync lo
+# arrastra al sistema instalado. En un equipo ya desplegado NO debe ofrecerse
+# instalar Ubuntu. Se neutraliza por dos vías complementarias:
+#   1) override de autostart Hidden=true (protección inmediata, system-wide → vale
+#      también para usuarios nuevos, antes de que snapd reseed/arranque el snap).
+#   2) `snap remove --purge` en 3-SetupPrimerInicio.sh (snapd ya en marcha).
+mkdir -p /etc/xdg/autostart
+cat > /etc/xdg/autostart/ubuntu-desktop-bootstrap.desktop << 'BSDESKTOP'
+[Desktop Entry]
+Type=Application
+Name=Ubuntu Desktop Bootstrap
+X-GNOME-Autostart-enabled=false
+NoDisplay=true
+Hidden=true
+BSDESKTOP
+# Neutralizar también los .desktop que snapd expone para este snap.
+for _d in /var/lib/snapd/desktop/applications/ubuntu-desktop-bootstrap*.desktop \
+          /var/lib/snapd/desktop/autostart/ubuntu-desktop-bootstrap*.desktop; do
+    if [ -e "$_d" ]; then
+        rm -f "$_d"
+        info "  Eliminado .desktop de snapd: $_d"
+    fi
+done
+ok "Instalador de Ubuntu desactivado vía autostart override (purga real en 3-Setup)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Configurar /etc/fstab"

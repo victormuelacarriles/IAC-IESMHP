@@ -3,7 +3,7 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e # lo desactivamos para que no se pare en errores de 
 
-VERSIONSCRIPT="22.21-20260518"       #Versión del script
+VERSIONSCRIPT="22.22-20260518"       #Versión del script
 SCRIPT3=$(basename "$0")
 echo "$SCRIPT3 (vs$VERSIONSCRIPT)"
 #Nos quedamos solo con el nombre del script sin ruta
@@ -231,6 +231,32 @@ echoverde "Actualizando el sistema..."
 apt-get update -y
 apt-get full-upgrade -y -o Dpkg::Options::="--force-confold"
 echoverde "Actualizado el sistema..."
+
+# ── Eliminar el instalador de Ubuntu del equipo desplegado ───────────────────
+# El squashfs (y por tanto el rsync) incluye el snap 'ubuntu-desktop-bootstrap',
+# el asistente "Instalar Ubuntu" (el mismo que aparece en el Live CD). En un
+# equipo ya desplegado no debe ofrecerse instalar Ubuntu. 2-SetupSOdesdeLiveCD.sh
+# ya desenmascaró snapd y dejó un override de autostart Hidden=true como
+# protección del primer login (incluido para usuarios nuevos); aquí, con snapd
+# ya en marcha, lo purgamos definitivamente del sistema.
+if command -v snap >/dev/null 2>&1; then
+    echoverde "Esperando a que snapd termine el seed inicial..."
+    snap wait system seed.loaded 2>/dev/null || true
+    for _instsnap in ubuntu-desktop-bootstrap ubuntu-desktop-installer; do
+        if snap list "$_instsnap" >/dev/null 2>&1; then
+            echoverde "Eliminando snap instalador: $_instsnap"
+            snap remove --purge "$_instsnap" 2>&1 || true
+        fi
+    done
+    # Limpiar cualquier autostart residual que snapd hubiera expuesto para el snap
+    # (el override Hidden=true de /etc/xdg/autostart se conserva como red de seguridad).
+    rm -f /var/lib/snapd/desktop/autostart/ubuntu-desktop-bootstrap*.desktop 2>/dev/null || true
+    if snap list ubuntu-desktop-bootstrap >/dev/null 2>&1; then
+        echorojo "AVISO: ubuntu-desktop-bootstrap sigue presente tras snap remove — revisar"
+    else
+        echoverde "Instalador de Ubuntu (ubuntu-desktop-bootstrap) eliminado del sistema"
+    fi
+fi
 
 # Soporte Wayland en VMware: instalar open-vm-tools-desktop (integración clipboard/resize
 # en Wayland) y confirmar/añadir LIBGL_ALWAYS_SOFTWARE (por si no se aplicó en el chroot).
