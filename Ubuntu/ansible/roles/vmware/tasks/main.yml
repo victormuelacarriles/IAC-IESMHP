@@ -36,3 +36,7 @@
 - name: Ejecutar instalador de VMware
   command: "/tmp/VMware-Workstation.bundle --eulas-agreed --required --console"
   when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
+
+- name: Ejecutar post-instalación de VMware (compilación)
+  command: "/usr/lib/vmware/bin/vmware-setup-helper -e -o -u no -c no"
+  when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
