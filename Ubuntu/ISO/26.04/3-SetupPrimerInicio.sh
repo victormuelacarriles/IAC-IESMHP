@@ -3,7 +3,7 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e # lo desactivamos para que no se pare en errores de 
 
-VERSIONSCRIPT="22.20-20260515"       #Versión del script
+VERSIONSCRIPT="22.21-20260518"       #Versión del script
 SCRIPT3=$(basename "$0")
 echo "$SCRIPT3 (vs$VERSIONSCRIPT)"
 #Nos quedamos solo con el nombre del script sin ruta
@@ -65,29 +65,65 @@ _cerrar_log() {
 trap _cerrar_log EXIT
 trap 'exit 143' TERM INT HUP
 
-# Function to show a message to all graphical sessions
+# Envia un mensaje de progreso a TODAS las sesiones abiertas:
+#   - graficas Wayland : notify-send (popup) + zenity (ventana), usando
+#                        XDG_RUNTIME_DIR + WAYLAND_DISPLAY del usuario.
+#   - graficas X11     : zenity con DISPLAY.
+#   - SSH / consola    : texto por su terminal (wall).
+# La version vieja solo funcionaba en X11 (pasaba DISPLAY + DBUS de
+# gnome-session, que en Wayland no sirve). Patron tomado de
+# utiles/pruebaMensaje.sh. Best-effort: nunca aborta el script (set -e).
 mostrar_mensaje() {
-    local MENSAJE="${1:-'hola mundo'}"
-    local TIEMPO="${2:-3000000}"
-    IP=$(hostname -I | awk '{print $1}')
-    MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
+    local MENSAJE="${1:-hola mundo}"
+    local TIEMPO="${2:-3000000}"            # se pasa tal cual a zenity --timeout
+    local IP MAC PIE MENSAJE2 TITULO
+    IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    MAC=$(ip link show 2>/dev/null | awk '/ether/ {print $2}' | head -n 1)
+    PIE="[ $MAC ]  -  $(hostname)\n$FLOG\n         ó\n$VERLOGSCRIPT"
+    MENSAJE2="$MENSAJE\n\n$PIE"
+    TITULO="Actualizando ($IP)"
 
-    local IPMAC="[ $MAC ]  -  $(hostname)\n$FLOG\n         ó\n$VERLOGSCRIPT"
-    MENSAJE2="$MENSAJE\n\n$IPMAC"
+    # --- 1) Sesiones graficas (Wayland y X11) ---------------------------
+    local sid usuario uid tipo disp wdisp
     while read -r sid; do
-        USERNAME=$(loginctl show-session "$sid" -p Name --value)
-        DISPLAY=$(loginctl show-session "$sid" -p Display --value)
-        TYPE=$(loginctl show-session "$sid" -p Type --value)
-        # Continuar solo si hay DISPLAY
-        [[ -z "$DISPLAY" ]] && continue
-        # Obtener UID
-        USER_ID=$(id -u "$USERNAME")
-        # Obtener DBUS address de la sesión (si existe)
-        DBUS_ADDRESS=$(grep -z DBUS_SESSION_BUS_ADDRESS /proc/$(pgrep -u "$USERNAME" -n gnome-session 2>/dev/null || pgrep -u "$USERNAME" -n xfce4-session 2>/dev/null || echo 0)/environ 2>/dev/null | tr '\0' '\n' | grep DBUS_SESSION_BUS_ADDRESS= | cut -d= -f2-)
-        # Ejecutar zenity como el usuario
-        sudo -u "$USERNAME" DISPLAY="$DISPLAY" DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDRESS" \
-            zenity --info --text="$MENSAJE2" --title="Actualizando ($IP)" --timeout=$TIEMPO &
-    done < <(loginctl list-sessions --no-legend | awk '{print $1}')
+        [[ -z "$sid" ]] && continue
+        tipo=$(loginctl show-session "$sid" -p Type --value 2>/dev/null)
+        usuario=$(loginctl show-session "$sid" -p Name --value 2>/dev/null)
+        uid=$(loginctl show-session "$sid" -p User --value 2>/dev/null)
+        [[ -z "$usuario" || -z "$uid" ]] && continue
+
+        if [[ "$tipo" == "wayland" ]]; then
+            # Popup de notificacion (mas estable en Wayland)
+            sudo -u "$usuario" \
+                DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+                notify-send -u critical "$TITULO" "$MENSAJE2" 2>/dev/null || true
+            # Ventana zenity sobre el socket Wayland del usuario
+            wdisp=$(ls /run/user/"$uid"/wayland-* 2>/dev/null \
+                    | head -n1 | xargs -r basename 2>/dev/null)
+            if [[ -n "$wdisp" ]]; then
+                sudo -u "$usuario" \
+                    XDG_RUNTIME_DIR="/run/user/$uid" \
+                    WAYLAND_DISPLAY="$wdisp" \
+                    zenity --info --text="$MENSAJE2" --title="$TITULO" \
+                           --width=350 --timeout="$TIEMPO" 2>/dev/null &
+            fi
+        elif [[ "$tipo" == "x11" ]]; then
+            disp=$(loginctl show-session "$sid" -p Display --value 2>/dev/null)
+            [[ -z "$disp" ]] && disp=":0"
+            sudo -u "$usuario" DISPLAY="$disp" \
+                zenity --info --text="$MENSAJE2" --title="$TITULO" \
+                       --width=350 --timeout="$TIEMPO" 2>/dev/null &
+        fi
+    done < <(loginctl list-sessions --no-legend 2>/dev/null | awk '{print $1}')
+
+    # --- 2) Sesiones SSH / consola (texto por su terminal) --------------
+    # `wall` difunde a TODOS los terminales abiertos (pts de SSH y consolas
+    # locales); como root ignora el `mesg n` del usuario.
+    if command -v wall >/dev/null 2>&1; then
+        printf '%b\n' "=== IAC-IESMHP ===\n$MENSAJE\n\n$PIE" \
+            | wall 2>/dev/null || true
+    fi
+    return 0
 }
 
 echoverde() {

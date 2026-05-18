@@ -17,6 +17,21 @@
     state: present
     update_cache: false
 
+# --- PolicyKit: que los popups de autenticación admin no se bloqueen -----
+# En sesiones RDP/Wayland el diálogo de PolicyKit puede no mostrarse y la
+# acción falla en silencio. Esta regla concede directamente (sin diálogo) las
+# acciones administrativas habituales a los miembros del grupo
+# `rdp_polkit_admin_group`. polkitd recarga rules.d solo (no requiere
+# daemon-reload ni reiniciar polkit — clave para no colgar el primer
+# arranque, ver bugs 2026-05-17).
+- name: Permitir acciones admin por PolicyKit en sesiones RDP (sin diálogo)
+  template:
+    src: 49-allow-user-admin-rdp.rules.j2
+    dest: "{{ rdp_polkit_rules_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Crear el directorio de configuración de gnome-remote-desktop
   file:
     path: "{{ rdp_tls_dir }}"

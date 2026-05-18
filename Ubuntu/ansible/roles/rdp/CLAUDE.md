@@ -14,32 +14,43 @@ configuración**, que son texto plano y deterministas.
 
 ## Qué hace
 1. Instala el paquete **`gnome-remote-desktop`**.
-2. Crea `rdp_tls_dir` (`/etc/gnome-remote-desktop`).
-3. Genera el **certificado TLS autofirmado** (`tls.key`+`tls.crt`) con `openssl`
+2. **PolicyKit — que los popups de autenticación admin no se bloqueen**:
+   despliega `rdp_polkit_rules_file`
+   (`/etc/polkit-1/rules.d/49-allow-user-admin-rdp.rules`, desde
+   `templates/49-allow-user-admin-rdp.rules.j2`). Concede directamente
+   (`polkit.Result.YES`, **sin diálogo**) a los miembros de
+   `rdp_polkit_admin_group` (`sudo`) las acciones cuyo `action.id` empieza por
+   alguno de los prefijos de `rdp_polkit_admin_actions` (cuentas/usuarios,
+   packagekit, systemd1, NetworkManager, timedate1, locale1, hostname1,
+   color-manager, udisks2, GNOME control-center). `polkitd` recarga `rules.d`
+   solo (sin `daemon-reload` ni reinicio de polkit → no cuelga el primer
+   arranque, ver bugs 2026-05-17).
+3. Crea `rdp_tls_dir` (`/etc/gnome-remote-desktop`).
+4. Genera el **certificado TLS autofirmado** (`tls.key`+`tls.crt`) con `openssl`
    **solo si no existe** (`creates:`), válido `rdp_cert_days` días; propietario
    `gnome-remote-desktop:gnome-remote-desktop`, modo `0600`.
-4. Despliega **`/usr/local/sbin/iac-rdp-config.sh`** (desde
+5. Despliega **`/usr/local/sbin/iac-rdp-config.sh`** (desde
    `templates/iac-rdp-config.sh.j2`, `no_log`) que escribe de forma
    determinista:
    - `/etc/gnome-remote-desktop/grd.conf` → `enabled=true` + rutas TLS
      (owner `gnome-remote-desktop`, `0664`).
    - `…/.local/share/gnome-remote-desktop/credentials.ini` → usuario/contraseña
      en formato GVariant (owner `gnome-remote-desktop`, `0600`).
-5. Despliega `iac-rdp-config.service` (desde `files/iac-rdp-config.service`):
+6. Despliega `iac-rdp-config.service` (desde `files/iac-rdp-config.service`):
    `oneshot`, `Wants=gnome-remote-desktop.service`,
    `Before=gnome-remote-desktop.service`, `WantedBy=multi-user.target`. Lo
    **habilita creando el symlink `.wants` a mano** (módulo `file`, no
    `systemd`/`daemon-reload`/`enable` — ver bugs 2026-05-17). En cada arranque
    reafirma los ficheros **y arrastra (`Wants=`) al daemon RDP** ordenado
    después (mismo patrón que `iac-gdm-noautologin.service`).
-6. Lee `grdctl --system status` y, **solo si el RDP no está ya habilitado con
+7. Lee `grdctl --system status` y, **solo si el RDP no está ya habilitado con
    las rutas TLS correctas**: para el daemon → ejecuta `iac-rdp-config.sh` →
    arranca el daemon (con el daemon parado nadie puede pisar `grd.conf`).
-7. Asegura `gnome-remote-desktop.service` (instancia *system*) `started` **solo
+8. Asegura `gnome-remote-desktop.service` (instancia *system*) `started` **solo
    para este arranque** (`state: started`, **sin `enabled`** — el arranque
    automático lo da `iac-rdp-config.service` con `Wants=`; `systemctl enable`
    desde Ansible se cuelga en el primer arranque).
-8. **Verifica** con `grdctl --system status` que quedó `enabled` con las rutas
+9. **Verifica** con `grdctl --system status` que quedó `enabled` con las rutas
    TLS; si no, el play **falla** (no termina "ok" con el RDP apagado).
 
 ## Estructura
@@ -48,6 +59,9 @@ configuración**, que son texto plano y deterministas.
   `credentials.ini` (usa `rdp_username`/`rdp_password`/`rdp_tls_dir`/
   `rdp_creds_dir`).
 - `files/iac-rdp-config.service` — unidad systemd `Before=gnome-remote-desktop`.
+- `templates/49-allow-user-admin-rdp.rules.j2` — regla PolicyKit que concede
+  las acciones admin (sin diálogo) al grupo `rdp_polkit_admin_group` para los
+  prefijos de `rdp_polkit_admin_actions`.
 - `handlers/main.yml` — **sin handlers** (el de reinicio se eliminó el
   2026-05-16; reintroducía la carrera que perdía la config).
 - `defaults/main.yml`:
@@ -57,6 +71,12 @@ configuración**, que son texto plano y deterministas.
   - `rdp_creds_dir` — directorio de `credentials.ini`
     (`/var/lib/gnome-remote-desktop/.local/share/gnome-remote-desktop`).
   - `rdp_cert_days` (3650) / `rdp_cert_subject` (`/CN=gnome-remote-desktop`).
+  - `rdp_polkit_rules_file` — destino de la regla PolicyKit
+    (`/etc/polkit-1/rules.d/49-allow-user-admin-rdp.rules`).
+  - `rdp_polkit_admin_group` (`sudo`) — grupo al que se conceden las acciones.
+  - `rdp_polkit_admin_actions` — lista de **prefijos** de `action.id`
+    permitidos sin diálogo (ampliar/recortar aquí según necesidades de aula;
+    es el punto donde se afina el compromiso seguridad/comodidad).
 
 ## Estado / Notas
 - **Activo** en `roles.yaml` (sustituye a la línea comentada `#- xrdp`).
@@ -67,6 +87,12 @@ configuración**, que son texto plano y deterministas.
 - **Limitación**: `rdp_password` no debe contener comillas simples ni barras
   invertidas (se interpola en el GVariant de `credentials.ini`). Para
   `ubuntu`/`ubuntu` por defecto no hay problema.
+- **PolicyKit (compromiso seguridad/comodidad)**: la regla concede las
+  acciones admin **sin pedir contraseña** a todo el grupo `sudo` (no solo evita
+  que el popup se bloquee: lo elimina). Es lo pedido para administrar el aula
+  por RDP sin fricción; si se quiere endurecer, cambiar en la plantilla
+  `polkit.Result.YES` por `polkit.Result.AUTH_ADMIN_KEEP` (pide la contraseña
+  admin una vez y la recuerda) y/o recortar `rdp_polkit_admin_actions`.
 - Es la instancia **system** del servidor, independiente de que haya o no
   sesión gráfica iniciada — adecuado para el primer arranque desatendido.
 - Cambiar usuario/contraseña: sobrescribir `rdp_username`/`rdp_password` por
