@@ -3,7 +3,7 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e # lo desactivamos para que no se pare en errores de 
 
-VERSIONSCRIPT="22.22-20260518"       #Versión del script
+VERSIONSCRIPT="22.23-20260518"       #Versión del script
 SCRIPT3=$(basename "$0")
 echo "$SCRIPT3 (vs$VERSIONSCRIPT)"
 #Nos quedamos solo con el nombre del script sin ruta
@@ -21,17 +21,18 @@ SCRIPT5ansible="$RAIZDISTRO/utiles/Auto-Ansible.sh"
 
 VERLOGSCRIPT="/home/usuario/verLog.sh"
 
-#Ficheros de log del servicio de primer arranque
-FLOG="$RAIZLOG/$SCRIPT3.log"
-# 5-PrimerArranque.log: log CONSOLIDADO y resistente a cuelgues de TODO el
-# proceso que lanza el servicio (este script + NombreIP.sh + Auto-Ansible.sh +
-# ansible-playbook + 4-Comprobaciones.sh). Cada linea se reescribe a disco al
-# instante (open/append/close por linea, sin buffer de tee que se pierda) y un
+#Fichero de log del servicio de primer arranque
+# Un UNICO log: 3-SetupPrimerInicio.sh.log. Recoge TODO lo que lanza el
+# servicio (este script + NombreIP.sh + Auto-Ansible.sh + ansible-playbook +
+# 4-Comprobaciones.sh). Cada linea se antepone con la hora y se graba al
+# instante (consumidor por linea, sin buffer de tee que se pierda) y un
 # 'sync' periodico vacia el page cache cada 3 s. Objetivo: si una maquina
 # FISICA con GPU NVIDIA se congela compilando/insertando el modulo del driver
 # (cuelgue duro del kernel), el log queda en disco hasta la ultima linea
 # escrita -> esa linea identifica el paso que provoco el cuelgue.
-FLOG5="$RAIZLOG/5-PrimerArranque.log"
+# (2026-05-18: se elimina 5-PrimerArranque.log; era una copia identica de
+#  este fichero — el mismo 'tee' escribia ambos — y solo anadia ruido.)
+FLOG="$RAIZLOG/$SCRIPT3.log"
 mkdir -p "$RAIZLOG"
 
 # Guardamos stdout/stderr originales: los captura el journal de systemd
@@ -43,7 +44,7 @@ exec 3>&1 4>&2
 # reabriendolos por linea (flush inmediato a kernel) y la reenvia al journal.
 exec > >(
     while IFS= read -r _linea; do
-        printf '%(%H:%M:%S)T %s\n' -1 "$_linea" | tee -a "$FLOG" "$FLOG5" >&3
+        printf '%(%H:%M:%S)T %s\n' -1 "$_linea" | tee -a "$FLOG" >&3
     done
 ) 2>&1
 
@@ -321,16 +322,45 @@ cd "$RAIZANSIBLE/" || exit 1
 # fuego: el symlink /usr/bin/python3 siempre apunta al Python por defecto.
 PYINT="$(command -v python3 || echo /usr/bin/python3)"
 echoverde "Interprete Python para Ansible: $PYINT"
+
+# --- Que los errores SIEMPRE queden registrados en el log -----------------
+# 1) Frontend NO interactivo para TODO lo que lance ansible (incluidas las
+#    tareas 'command:' como el 'dpkg --configure -a' del rol clienteNAS, que
+#    NO heredan el noninteractive que el modulo apt si fija por su cuenta).
+#    Sin esto, si un paquete quedo a medio configurar y su postinst abre un
+#    dialogo debconf, dpkg espera una entrada que nunca llega (no hay TTY) ->
+#    ansible se cuelga, NO emite el 'FAILED!' y el log se corta en el TASK
+#    sin registrar el error. Con noninteractive el paso falla rapido y el
+#    fallo SI queda escrito.
+export DEBIAN_FRONTEND=noninteractive
+export DEBCONF_NONINTERACTIVE_SEEN=true
+export NEEDRESTART_MODE=a
+export APT_LISTCHANGES_FRONTEND=none
+# 2) Salida de ansible SIN buffer: Python bloquea el buffer de stdout cuando
+#    no es una TTY (aqui es la process-substitution del log). Si ansible se
+#    cuelga o lo matan con el buffer a medio llenar, esas lineas -incluido el
+#    'fatal: [...]: FAILED!'- se PIERDEN y el log se corta en el TASK sin el
+#    error. PYTHONUNBUFFERED fuerza el volcado linea a linea al log.
+export PYTHONUNBUFFERED=1
+export ANSIBLE_FORCE_COLOR=0
+
 echoamarillo "=== Lanzando ansible-playbook roles.yaml: $(date) ==="
 echoamarillo "AVISO: el rol 'nvidia' instala/compila el driver. En una maquina"
 echoamarillo "FISICA con GPU NVIDIA este es el punto tipico de cuelgue. Si"
-echoamarillo "5-PrimerArranque.log se corta tras 'TASK [nvidia : ...]', el"
-echoamarillo "equipo se congelo instalando el driver NVIDIA en ese paso."
+echoamarillo "$FLOG (3-SetupPrimerInicio.sh.log) se corta tras"
+echoamarillo "'TASK [nvidia : ...]', el equipo se congelo instalando el"
+echoamarillo "driver NVIDIA en ese paso."
 sync   # marcador garantizado en disco ANTES del paso que suele colgar
 ansible-playbook -i localhost, --connection=local roles.yaml \
     -e "ansible_python_interpreter=$PYINT" \
-    --ssh-extra-args="-o StrictHostKeyChecking=no" \
-    || echorojo "Error en la autoconfiguración ansible"
+    --ssh-extra-args="-o StrictHostKeyChecking=no"
+_RC_ANSIBLE=$?
+if [ "$_RC_ANSIBLE" -ne 0 ]; then
+    echorojo "Error en la autoconfiguración ansible (ansible-playbook rc=$_RC_ANSIBLE)"
+else
+    echoverde "ansible-playbook finalizó correctamente (rc=0)"
+fi
+sync   # asegura en disco el resultado (ok o error) de ansible antes de seguir
 
 #Reinciando en 30 segundos y avisando a los usuarios
 mostrar_mensaje "Sistema actualizado. SSH root/root"

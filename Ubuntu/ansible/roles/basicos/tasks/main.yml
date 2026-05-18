@@ -23,3 +23,9 @@
     name: ansible
     state: present
     update_cache: false
+
+- name: Instalar git (necesario para algunos roles)
+  apt:
+    name: git
+    state: present
+    update_cache: false

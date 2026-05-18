@@ -47,11 +47,14 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 # 1-SetupLiveCD.sh.log         ← particionado y copia del FS
 # 2-SetupSOdesdeLiveCD.sh.log  ← configuración en chroot
 # 2-SetupSOdesdeLiveCD.steps   ← resumen de pasos con timestamps (diagnóstico rápido)
-# 3-SetupPrimerInicio.sh.log   ← primer arranque
+# 3-SetupPrimerInicio.sh.log   ← primer arranque: log ÚNICO de TODO lo que
+#                                 lanza el servicio (este script + NombreIP +
+#                                 Auto-Ansible + ansible-playbook + 4-Compro-
+#                                 baciones). Cada línea con hora; sobrevive a
+#                                 cuelgues NVIDIA (sync periódico). Antes había
+#                                 además 5-PrimerArranque.log con el MISMO
+#                                 contenido — eliminado el 2026-05-18.
 # 4-Comprobaciones.sh.log      ← diagnóstico
-# 5-PrimerArranque.log         ← log CONSOLIDADO y resistente a cuelgues de todo
-#                                 lo que lanza 3-SetupPrimerInicio.service. Cada
-#                                 línea con hora; sobrevive a cuelgues NVIDIA.
 ```
 
 ---

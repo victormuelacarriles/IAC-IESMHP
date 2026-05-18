@@ -7,6 +7,7 @@ Reinstala/asegura el software base que el equipo *debería* traer ya desde el Li
 - `python3-pip`
 - `pipx`
 - `ansible` (vía apt)
+- `git`
 
 ## Estructura
 - `tasks/main.yml` — cuatro tareas `apt`, todas con `state: present` y `update_cache: false` (la caché ya se refresca una vez en `pre_tasks` de `roles.yaml`).

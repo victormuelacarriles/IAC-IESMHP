@@ -29,3 +29,11 @@ git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh && sudo ./0
 # -> formateo ZFS y deduplicación
 # -> mapeo NFS de cabina
 # -> falla nvidia en equipo físico real (se bloquea )
+
+
+#vmware
+#Instala: 
+#   cd /mnt/nasDepInfo/PruebaRapidosX3/_SoftwareComun
+#   ./VMware-Workstation-Full-25H2-24995812.x86_64.bundle
+#Post:
+#   /usr/lib/vmware/bin/vmware-setup-helper -e -o -u no -c no
