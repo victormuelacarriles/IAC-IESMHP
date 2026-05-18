@@ -14,6 +14,7 @@ Esta carpeta contiene la **configuración automática del equipo ya instalado**,
 | Rol | Estado en `roles.yaml` | Qué hace (resumen) |
 |-----|------------------------|--------------------|
 | [`basicos`](roles/basicos/CLAUDE.md) | ✅ activo (1º) | python3, pip, pipx, ansible |
+| [`clienteNAS`](roles/clienteNAS/CLAUDE.md) | ✅ activo (2º) | Cliente NFS del NAS del depto.: autodescubre exports (`showmount`) y los monta RO en `/mnt/nasDepInfo/` |
 | [`comparteaula`](roles/comparteaula/CLAUDE.md) | ⛔ comentado (en pruebas) | NFS unificado: detecta aula por IP, servidor/cliente |
 | [`comparteaula32`](roles/comparteaula32/CLAUDE.md) | legacy (no listado) | NFS cliente aula SMRD (NAS) |
 | [`comparteaula72`](roles/comparteaula72/CLAUDE.md) | legacy (no listado) | NFS servidor/cliente aula IABD |
