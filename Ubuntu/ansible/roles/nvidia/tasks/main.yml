@@ -20,7 +20,31 @@
 
 - name: Tareas de instalación de NVIDIA (Ubuntu Desktop 26.04 — soporte nativo)
   when: has_nvidia
+  # En maquinas FISICAS con GPU NVIDIA, el postinst del driver (DKMS /
+  # shim-signed / enrolado de clave MOK de Secure Boot) abre un dialogo
+  # debconf INTERACTIVO. `command: ubuntu-drivers install` es un comando crudo
+  # (el modulo `apt` de Ansible ya forzaria noninteractive, un `command` no) y
+  # Ansible corre SIN TTY -> ese dialogo espera una entrada que nunca llega y
+  # deja dpkg a medio configurar. Sintoma: el primer arranque se cuelga en el
+  # rol nvidia y `sudo dpkg --configure -a` lo desbloquea. En VM el rol es casi
+  # un no-op (no hay GPU NVIDIA), por eso solo falla en hardware real.
+  # DEBIAN_FRONTEND=noninteractive evita el prompt (shim-signed bajo
+  # noninteractive NO pide MOK: omite el enrolado); NEEDRESTART_MODE=a evita el
+  # whiptail de needrestart tras compilar el modulo.
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+    NEEDRESTART_MODE: a
   block:
+    # Si un paso previo (p. ej. apt-get full-upgrade de 3-SetupPrimerInicio.sh)
+    # dejo paquetes desempaquetados pero sin configurar, terminarlos ahora para
+    # que `ubuntu-drivers install` no parta de un dpkg roto. Best-effort: no
+    # aborta el playbook si dpkg no puede terminar (lo reportara el install).
+    - name: Asegurar que dpkg no quedó a medio configurar de pasos previos
+      command: dpkg --configure --pending
+      register: dpkg_pending
+      changed_when: false
+      failed_when: false
+
     # Ubuntu 26.04 trae soporte nativo de drivers NVIDIA: el metapaquete
     # ubuntu-drivers-common selecciona el driver recomendado para esta GPU.
     - name: Instalar ubuntu-drivers-common (gestor nativo de drivers de Ubuntu)

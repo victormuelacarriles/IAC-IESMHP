@@ -44,3 +44,21 @@ Instala el driver propietario de NVIDIA **solo si se detecta una GPU NVIDIA** en
 - Solo **avisa** si el driver recomendado difiere del instalado; no actualiza
   automáticamente.
 - En equipos sin NVIDIA (la mayoría de las VMs de prueba) el rol es prácticamente un no-op.
+- **Bloque envuelto en `environment:` no interactivo** (`DEBIAN_FRONTEND=noninteractive`,
+  `NEEDRESTART_MODE=a`). Imprescindible: `command: ubuntu-drivers install` es un
+  comando crudo (no el módulo `apt`, que ya forzaría noninteractive) y Ansible
+  corre sin TTY → sin esto, el `postinst` del driver en **hardware físico** abre
+  un debconf interactivo que cuelga el primer arranque y deja dpkg a medio
+  configurar. Primera tarea del bloque: `dpkg --configure --pending` defensivo.
+
+## Issues conocidos
+- **Secure Boot**: con `DEBIAN_FRONTEND=noninteractive`, `shim-signed` **no**
+  enrola la clave MOK (omite el prompt). Si la máquina física tiene **Secure
+  Boot activo**, el módulo NVIDIA quedará instalado pero **sin firmar → no
+  carga** (`nvidia-smi` falla, GNOME cae a `nouveau`/llvmpipe). Para estos
+  equipos: **deshabilitar Secure Boot en el firmware** (práctica habitual con
+  el driver propietario) o implementar enrolado MOK automático (fuera del
+  alcance del fix mínimo).
+- `command: ubuntu-drivers install` no tiene timeout duro. Si algo se cuelga
+  pese al frontend no interactivo, Ansible esperaría indefinidamente. Posible
+  endurecimiento futuro: `async`/`poll` (complica la lógica `is changed`).
