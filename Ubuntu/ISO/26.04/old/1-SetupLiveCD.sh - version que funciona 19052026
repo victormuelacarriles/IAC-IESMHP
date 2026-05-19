@@ -6,7 +6,7 @@
 #
 #  Configuraciones de disco soportadas:
 #    Distancia : NVMe 0,5 TB (/, /swap, /EFI) + NVMe 2,0 TB (/home)
-#    CEIABD    : NVMe 0,5 TB (/, /swap, /EFI, /home) + SDA  1,0 TB (/datos)
+#    CEIABD    : NVMe 0,5 TB (/, /swap, /EFI) + SDA  1,0 TB (/home)
 # =============================================================================
 set -e
 
@@ -48,8 +48,8 @@ echoverde "--------------------------------------------------------------------"
 echoverde "       Distancia     ->Disco pequeño: NVMe 0,5TB (/EFI, /swap y /)"
 echoverde "                     ->Disco grande:  NVMe 2,0TB (/home)"
 echoverde "--------------------------------------------------------------------"
-echoverde "       CEIABD        ->Disco pequeño: NVMe 0,5TB (/EFI, /swap, / y /home)"
-echoverde "                     ->Disco grande:  SDa  1,0TB (/datos)"
+echoverde "       CEIABD        ->Disco pequeño: NVMe 0,5TB (/EFI, /swap y /)"
+echoverde "                     ->Disco grande:  SDa  1,0TB (/home)"
 echoverde "--------------------------------------------------------------------"
 
 
@@ -84,8 +84,8 @@ else
             DISK_SMALL="/dev/${DISCOS_M2[0]}"
             DISK_BIG="/dev/${DISCOS_SD[0]}"
             echoverde "Equipo NVME+SD:"
-            echoverde "    /, /home -> NVMe ($DISK_SMALL)"
-            echoverde "    /datos   -> SD   ($DISK_BIG)"
+            echoverde "    /     -> NVMe ($DISK_SMALL)"
+            echoverde "    /home -> SD   ($DISK_BIG)"
         fi
     else
         DISK_SMALL="/dev/${DISCOS_M2[0]}"
@@ -128,7 +128,7 @@ parted -s "$DISK_SMALL" set 1 esp on
 parted -s "$DISK_SMALL" mkpart primary  linux-swap 513MiB  8705MiB
 parted -s "$DISK_SMALL" mkpart primary  ext4       8705MiB 100%
 
-# Disco grande: /home (2×NVMe) o /datos (NVMe+SD)
+# Disco grande: /home (todo)
 parted -s "$DISK_BIG"   mkpart primary  ext4       1MiB    100%
 
 echoverde "Discos particionados: $DISK_SMALL y $DISK_BIG"
@@ -148,27 +148,27 @@ ROOT="${DISK_SMALL}p3"
 # La nomenclatura de partición difiere entre NVMe (/dev/nvmeXnYpZ)
 # y discos SD/SATA (/dev/sdXN)
 if [[ "$DISK_BIG" == *sd* ]]; then
-    DATA_PART="${DISK_BIG}1"
+    HOME_PART="${DISK_BIG}1"
 elif [[ "$DISK_BIG" == *nvme* ]]; then
-    DATA_PART="${DISK_BIG}p1"
+    HOME_PART="${DISK_BIG}p1"
 else
-    echorojo "Error: no se pudo determinar la partición del disco grande"
+    echorojo "Error: no se pudo determinar la partición de /home"
     exit 1
 fi
 
 # ─────────────── Formatear ─────────────
-echoamarillo "Formateando (EFI=$EFI, SWAP=$SWAP, ROOT=$ROOT, DATA=$DATA_PART)..."
+echoamarillo "Formateando (EFI=$EFI, SWAP=$SWAP, ROOT=$ROOT, HOME=$HOME_PART)..."
 mkfs.fat -F32 "$EFI"
 mkswap "$SWAP"
 mkfs.ext4 -F "$ROOT"
-mkfs.ext4 -F "$DATA_PART"
+mkfs.ext4 -F "$HOME_PART"
 
-if ! blkid "$EFI" || ! blkid "$SWAP" || ! blkid "$ROOT" || ! blkid "$DATA_PART"; then
+if ! blkid "$EFI" || ! blkid "$SWAP" || ! blkid "$ROOT" || ! blkid "$HOME_PART"; then
     echorojo "Error: no se pudieron formatear correctamente las particiones"
     sleep 10 && exit 1
 fi
 echoamarillo "--- UUIDs asignados ---"
-for _part in "$EFI" "$SWAP" "$ROOT" "$DATA_PART"; do
+for _part in "$EFI" "$SWAP" "$ROOT" "$HOME_PART"; do
     blkid "$_part" 2>/dev/null || echorojo "  blkid sin datos para $_part"
 done
 echoverde "Particiones formateadas correctamente"
@@ -177,23 +177,13 @@ echoverde "Particiones formateadas correctamente"
 echoamarillo "Montando sistemas de ficheros..."
 mount "$ROOT"      /mnt
 mkdir -p /mnt/boot/efi
+mkdir -p /mnt/home
 mount "$EFI"       /mnt/boot/efi
+mount "$HOME_PART" /mnt/home
 swapon "$SWAP"
-
-# Montar disco grande: /home si es NVMe (Distancia), /datos si es SD (CEIABD)
-if [[ "$DISK_BIG" == *sd* ]]; then
-    mkdir -p /mnt/datos
-    mount "$DATA_PART" /mnt/datos
-    echoverde "Disco grande (SD) montado en /mnt/datos"
-else
-    mkdir -p /mnt/home
-    mount "$DATA_PART" /mnt/home
-    echoverde "Disco grande (NVMe) montado en /mnt/home"
-fi
-
 lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,UUID
 echoamarillo "--- Espacio disponible en puntos de montaje ---"
-df -h /mnt /mnt/boot/efi 2>/dev/null || df -h /mnt
+df -h /mnt /mnt/boot/efi /mnt/home 2>/dev/null || df -h /mnt
 echoverde "Sistemas de ficheros montados"
 
 # ─────────────── Copiar squashfs ───────
@@ -319,9 +309,9 @@ cat > /mnt/tmp/.iac-partitions.env << EOF
 PART_EFI=$EFI
 PART_SWAP=$SWAP
 PART_ROOT=$ROOT
-PART_DATA=$DATA_PART
+PART_HOME=$HOME_PART
 EOF
-echoverde "Particiones escritas para el chroot: EFI=$EFI SWAP=$SWAP ROOT=$ROOT DATA=$DATA_PART"
+echoverde "Particiones escritas para el chroot: EFI=$EFI SWAP=$SWAP ROOT=$ROOT HOME=$HOME_PART"
 
 # ─────────────── Ejecutar SCRIPT2 ──────
 echoamarillo "Ejecutando $SCRIPT2 en chroot... (${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2)"
