@@ -340,19 +340,19 @@ export APT_LISTCHANGES_FRONTEND=none
 export PYTHONUNBUFFERED=1
 export ANSIBLE_FORCE_COLOR=0
 
-echoarojo "DESACTIVADO TEMPORALMENTE ANSIBLE-PLAYBOOK PORQUE EN 26.04 HAY PROBLEMAS DE DEPENDENCIAS QUE HACEN QUE SE CUELGUE (dpkg --configure -a en el rol clienteNAS)""
-# echoamarillo "=== Lanzando ansible-playbook roles.yaml: $(date) ==="
-# sync   # marcador garantizado en disco ANTES del paso que suele colgar
-# ansible-playbook -i localhost, --connection=local roles.yaml \
-#     -e "ansible_python_interpreter=$PYINT" \
-#     --ssh-extra-args="-o StrictHostKeyChecking=no"
-# _RC_ANSIBLE=$?
-# if [ "$_RC_ANSIBLE" -ne 0 ]; then
-#     echorojo "Error en la autoconfiguración ansible (ansible-playbook rc=$_RC_ANSIBLE)"
-# else
-#     echoverde "ansible-playbook finalizó correctamente (rc=0)"
-# fi
-# sync   # asegura en disco el resultado (ok o error) de ansible antes de seguir
+
+echoamarillo "=== Lanzando ansible-playbook roles.yaml: $(date) ==="
+sync   # marcador garantizado en disco ANTES del paso que suele colgar
+ansible-playbook -i localhost, --connection=local roles.yaml \
+    -e "ansible_python_interpreter=$PYINT" \
+    --ssh-extra-args="-o StrictHostKeyChecking=no"
+_RC_ANSIBLE=$?
+if [ "$_RC_ANSIBLE" -ne 0 ]; then
+    echorojo "Error en la autoconfiguración ansible (ansible-playbook rc=$_RC_ANSIBLE)"
+else
+    echoverde "ansible-playbook finalizó correctamente (rc=0)"
+fi
+sync   # asegura en disco el resultado (ok o error) de ansible antes de seguir
 
 echoverde "Desactivando y borrando el servicio de actualización en primer arranque..."
 systemctl disable 3-SetupPrimerInicio.service
@@ -376,6 +376,6 @@ fi
 echoverde "=== $SCRIPT3 finalizado: $(date) ==="
 
 mostrar_mensaje "Sistema actualizado y configurado. Reiniciando en 5 segundos..."
-echorojo "(Salvo ansible! temporal")
+#echorojo "(Salvo ansible! temporal")
 rm -f "$VERLOGSCRIPT"
 ###sleep 5 && systemctl reboot -i
