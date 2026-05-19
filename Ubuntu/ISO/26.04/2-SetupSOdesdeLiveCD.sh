@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.22-20260518"
+VERSIONSCRIPT="22.23-20260519"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -212,40 +212,66 @@ paso "Configurar /etc/fstab"
 # lsblk dentro del chroot ve los mount points del HOST (/mnt, /mnt/boot/efi…),
 # no los del sistema instalado. Las particiones vienen del fichero creado por 1-SetupLiveCD.sh.
 PARTS_FILE=/tmp/.iac-partitions.env
+# El "disco grande" se monta como:
+#   - /home   en equipos 2×NVMe (Distancia): el disco grande NVMe es /home.
+#   - /datos  en equipos NVMe+SD (CEIABD): /home vive dentro de la raíz (NVMe,
+#             rápido) y el disco lento SD se monta como /datos.
+# 1-SetupLiveCD.sh decide esto por el tipo de disco grande y lo refleja en
+# PART_DATA (sd* → /datos, nvme* → /home). Mantenemos el mismo criterio aquí.
 if [ -f "$PARTS_FILE" ]; then
     # shellcheck disable=SC1090
     source "$PARTS_FILE"
     EFI="${PART_EFI##*/}"
     SWAP="${PART_SWAP##*/}"
     ROOT="${PART_ROOT##*/}"
-    HOME_DEV="${PART_HOME##*/}"
-    ok "Particiones leídas: EFI=$EFI  SWAP=$SWAP  ROOT=$ROOT  HOME=$HOME_DEV"
+    DATA_DEV="${PART_DATA##*/}"
+    if [[ "$PART_DATA" == *nvme* ]]; then
+        DATA_MNT="/home"
+    else
+        DATA_MNT="/datos"
+    fi
+    ok "Particiones leídas: EFI=$EFI  SWAP=$SWAP  ROOT=$ROOT  DATA=$DATA_DEV → $DATA_MNT"
 else
     err "AVISO: $PARTS_FILE no encontrado — detección automática (puede fallar en chroot)"
     EFI=$(lsblk  -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/boot/efi" {print $1}')
     SWAP=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "[SWAP]"        {print $1}')
     ROOT=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt"          {print $1}')
-    HOME_DEV=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/home" {print $1}')
+    DATA_DEV=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/home" {print $1}')
+    if [ -n "$DATA_DEV" ]; then
+        DATA_MNT="/home"
+    else
+        DATA_DEV=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/datos" {print $1}')
+        DATA_MNT="/datos"
+    fi
 fi
 
-info "EFI=/dev/$EFI  SWAP=/dev/$SWAP  ROOT=/dev/$ROOT  HOME=/dev/$HOME_DEV"
+info "EFI=/dev/$EFI  SWAP=/dev/$SWAP  ROOT=/dev/$ROOT  DATA=/dev/$DATA_DEV → $DATA_MNT"
 [ -n "$ROOT" ] || { err "ERROR: no se pudo determinar la partición root"; exit 1; }
 
 UUID_ROOT=$(blkid -s UUID -o value "/dev/$ROOT")
 UUID_EFI=$(blkid  -s UUID -o value "/dev/$EFI")
-UUID_HOME=$(blkid -s UUID -o value "/dev/$HOME_DEV")
+UUID_DATA=$(blkid -s UUID -o value "/dev/$DATA_DEV")
 UUID_SWAP=$(blkid -s UUID -o value "/dev/$SWAP")
-info "UUID ROOT=$UUID_ROOT  EFI=$UUID_EFI  HOME=$UUID_HOME  SWAP=$UUID_SWAP"
+info "UUID ROOT=$UUID_ROOT  EFI=$UUID_EFI  DATA=$UUID_DATA ($DATA_MNT)  SWAP=$UUID_SWAP"
+
+# El punto de montaje del disco grande debe existir en el sistema instalado.
+# /home ya existe; /datos hay que crearlo. Lo dejamos accesible a todos los
+# usuarios (sticky bit, como /tmp) por ser un área de datos compartida.
+if [ "$DATA_MNT" = "/datos" ]; then
+    mkdir -p /datos
+    chmod 1777 /datos
+    ok "Punto de montaje /datos creado (1777, área de datos compartida)"
+fi
 
 cat > /etc/fstab << EOF
 # /etc/fstab — generado por $0 el $(date)
 UUID=$UUID_ROOT  /          ext4  defaults  0 1
 UUID=$UUID_EFI   /boot/efi  vfat  umask=0077  0 1
-UUID=$UUID_HOME  /home      ext4  defaults  0 2
+UUID=$UUID_DATA  $DATA_MNT      ext4  defaults  0 2
 UUID=$UUID_SWAP  none       swap  sw          0 0
 EOF
 cat /etc/fstab
-ok "fstab generado con UUIDs"
+ok "fstab generado con UUIDs (disco grande → $DATA_MNT)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Limpiar fuentes APT del Live CD (cdrom:)"

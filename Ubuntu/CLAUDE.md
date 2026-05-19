@@ -82,16 +82,16 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 
 ### 1-SetupLiveCD.sh — Particionado e instalación del FS
 - **Detección de discos**: ignora USB y loop; usa `lsblk -dno NAME,SIZE,TRAN`.
-  - 2×NVMe → pequeño=`/`, grande=`/home`
-  - NVMe+SD → NVMe=`/`, SD=`/home`
-- **Esquema de particiones** (disco pequeño, GPT): EFI 512 MiB | swap 8 GiB | root resto. Disco grande: /home entero.
+  - 2×NVMe (Distancia) → pequeño=`/`, grande=`/home`
+  - NVMe+SD (CEIABD) → NVMe=`/` (con `/home` dentro de la raíz), SD=`/datos`
+- **Esquema de particiones** (disco pequeño, GPT): EFI 512 MiB | swap 8 GiB | root resto. El disco grande lleva una única partición ext4: en Distancia (NVMe) se monta en `/home`; en CEIABD (SD) se monta en `/datos` y `/home` queda dentro de la raíz NVMe (rápido). El criterio (`sd*`→`/datos`, `nvme*`→`/home`) lo fija `1-SetupLiveCD.sh` en la variable `PART_DATA` del `.iac-partitions.env`.
 - **Capas squashfs**: Ubuntu 26.04 combina `minimal.squashfs + minimal.standard.squashfs + minimal.standard.live.squashfs` con overlayfs en `/tmp/merged`; Ubuntu <24.04 usa `filesystem.squashfs` único.
 - Copia el FS con `rsync` (excluyendo `/etc/fstab` y `/etc/machine-id`).
 - Pasa las particiones al chroot mediante `/mnt/tmp/.iac-partitions.env` porque `lsblk` dentro del chroot ve los mount points del host, no del sistema instalado.
 - Si `2-SetupSOdesdeLiveCD.sh` termina con la línea literal `Correcto`, reinicia automáticamente; si no, espera 100000 s para diagnóstico.
 
-### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot (v22.17-20260515)
-- Genera `/etc/fstab` con UUIDs reales leídos de `blkid`.
+### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot (v22.23-20260519)
+- Genera `/etc/fstab` con UUIDs reales leídos de `blkid`. Lee `PART_DATA` del `.iac-partitions.env`: si es `nvme*` el disco grande va a `/home` (Distancia, 2×NVMe); si no, va a `/datos` (CEIABD, NVMe+SD) y se crea el punto de montaje `/datos` con permisos `1777` (sticky, área de datos compartida). El fallback sin fichero detecta `/mnt/home` o `/mnt/datos`.
 - **Limpia fuentes APT del Live CD (`cdrom:`)**: el rsync arrastra al sistema instalado la entrada `deb cdrom:[Ubuntu ...]/ resolute main` (o el equivalente DEB822 en `/etc/apt/sources.list.d/*.sources`) que el Live CD añade automáticamente. Sin limpiarla, `apt update` falla con "El repositorio file:/cdrom ... no tiene un fichero de Publicación". El paso depura `sources.list` y `*.list` con `sed`, y elimina los `.sources` (DEB822) cuyo `URIs:` apunte a `cdrom:`.
 - **Fondo de escritorio** (dos capas): GSettings schema override (`99-iac-iesmhp-wallpaper.gschema.override`) como valor predeterminado compilado, más `dconf system-db:local` como override en runtime. Si `dconf update` falla en chroot, la capa GSettings garantiza el fondo igualmente.
 - **Plymouth logos**: copia `bgrt-fallback.png` y `watermark.png` desde `imagenesIES/` a los temas spinner/bgrt **antes** de `update-initramfs`, para que la imagen instalada use los logos del IES.
@@ -156,7 +156,7 @@ Comprueba en 8 secciones: (1) kernel+initramfs+NVMe+casper, (2) grub.cfg con UUI
 | Aula      | Disco pequeño       | Disco grande      |
 |-----------|---------------------|-------------------|
 | Distancia | NVMe 0.5 TB (/, EFI, swap) | NVMe 2.0 TB (/home) |
-| CEIABD    | NVMe 0.5 TB (/, EFI, swap) | SDA  1.0 TB (/home) |
+| CEIABD    | NVMe 0.5 TB (/, EFI, swap, /home) | SDA  1.0 TB (/datos) |
 
 ---
 

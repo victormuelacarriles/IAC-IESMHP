@@ -75,16 +75,16 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 
 ### 1-SetupLiveCD.sh — Particionado e instalación del FS
 - **Detección de discos**: ignora USB y loop; usa `lsblk -dno NAME,SIZE,TRAN`.
-  - 2×NVMe → pequeño=`/`, grande=`/home`
-  - NVMe+SD → NVMe=`/`, SD=`/home`
-- **Esquema de particiones** (disco pequeño, GPT): EFI 512 MiB | swap 8 GiB | root resto. Disco grande: /home entero.
+  - 2×NVMe (Distancia) → pequeño=`/`, grande=`/home`
+  - NVMe+SD (CEIABD) → NVMe=`/` (con `/home` dentro), SD=`/datos`
+- **Esquema de particiones** (disco pequeño, GPT): EFI 512 MiB | swap 8 GiB | root resto. En CEIABD `/home` queda dentro de la raíz (NVMe rápido) y el disco grande SD se monta entero en `/datos`; en Distancia el disco grande NVMe es `/home` entero.
 - **Capas squashfs**: Ubuntu 26.04 combina `minimal.squashfs + minimal.standard.squashfs + minimal.standard.live.squashfs` con overlayfs en `/tmp/merged`; Ubuntu <24.04 usa `filesystem.squashfs` único.
 - Copia el FS con `rsync` (excluyendo `/etc/fstab` y `/etc/machine-id`).
 - Pasa las particiones al chroot mediante `/mnt/tmp/.iac-partitions.env` porque `lsblk` dentro del chroot ve los mount points del host, no del sistema instalado.
 - Si `2-SetupSOdesdeLiveCD.sh` termina con la línea literal `Correcto`, reinicia automáticamente; si no, espera 100000 s para diagnóstico.
 
 ### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot
-- Genera `/etc/fstab` con UUIDs reales leídos de `blkid`.
+- Genera `/etc/fstab` con UUIDs reales leídos de `blkid`. El disco grande va a `/home` si es NVMe (Distancia, 2×NVMe) o a `/datos` si es SD (CEIABD); en el caso `/datos` se crea el punto de montaje con permisos `1777`. El punto de montaje se decide igual que en `1-SetupLiveCD.sh` (por el tipo de disco en `PART_DATA`: `nvme*`→`/home`, resto→`/datos`).
 - **Parche grub.cfg**: `update-grub` en chroot a veces escribe `root=/dev/nvme0n1p3` en lugar de `root=UUID=...`. El script lo detecta y parchea con `sed`.
 - **Casper hooks**: se eliminan directamente con `rm -rf` (sin `apt remove`) para evitar que los triggers dpkg se bloqueen en el chroot. Los hooks afectados: `/usr/share/initramfs-tools/hooks/casper` y variantes.
 - `update-initramfs -u -k all` tarda 2–4 min; es el paso más lento del chroot.
@@ -110,7 +110,7 @@ Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de 
 | Aula      | Disco pequeño       | Disco grande      |
 |-----------|---------------------|-------------------|
 | Distancia | NVMe 0.5 TB (/, EFI, swap) | NVMe 2.0 TB (/home) |
-| CEIABD    | NVMe 0.5 TB (/, EFI, swap) | SDA  1.0 TB (/home) |
+| CEIABD    | NVMe 0.5 TB (/, EFI, swap, /home) | SDA  1.0 TB (/datos) |
 
 ---
 
