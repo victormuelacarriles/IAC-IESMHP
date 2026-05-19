@@ -23,12 +23,13 @@
      - basicos       #cosas que debieras estar desde el livecd pero que recomprobamos #[python, pip, pipx, ansible] 
      # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml
      - certificados
-     - nvidia
+     
      - obs
      - rdp           # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
      - vscode
      - clienteNAS    #Configura el cliente NFS para el NAS del instituto (y lo monta en /mnt/nas)
      - vmware        #sigue fallando la compilación. error raro de: "[Apploader] Use shipped Linux kernel AIO access library" 
+     - nvidia
      #- comparteaula  # Rol unificado: detecta aula por IP (72/32) y configura servidor/cliente NFS según corresponda
      #TODO: virtualbox falla. A raiz de poner el servidor de caches apt, no instala la versión concreta que le digo
     #             #TODO: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
