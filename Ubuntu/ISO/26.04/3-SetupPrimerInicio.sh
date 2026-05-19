@@ -351,13 +351,14 @@ if [ "$_RC_ANSIBLE" -ne 0 ]; then
     echorojo "Error en la autoconfiguración ansible (ansible-playbook rc=$_RC_ANSIBLE)"
 else
     echoverde "ansible-playbook finalizó correctamente (rc=0)"
+
+    echoverde "Desactivando y borrando el servicio de actualización en primer arranque..."
+    systemctl disable 3-SetupPrimerInicio.service
+    rm /etc/systemd/system/3-SetupPrimerInicio.service
+    mv "$0" "$0.borrado" # Renombrar el script para evitar que se ejecute de nuevo
 fi
 sync   # asegura en disco el resultado (ok o error) de ansible antes de seguir
 
-echoverde "Desactivando y borrando el servicio de actualización en primer arranque..."
-systemctl disable 3-SetupPrimerInicio.service
-rm /etc/systemd/system/3-SetupPrimerInicio.service
-mv "$0" "$0.borrado" # Renombrar el script para evitar que se ejecute de nuevo
 
 
 #Reinciando en 30 segundos y avisando a los usuarios
