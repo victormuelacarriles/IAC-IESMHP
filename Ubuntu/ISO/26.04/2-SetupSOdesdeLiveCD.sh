@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="23.0-20260520-zfs"
+VERSIONSCRIPT="23.1-20260520-zfs"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -403,6 +403,26 @@ paso "Instalar ZFS en el sistema instalado y habilitar servicios"
 # Aquí instalamos los binarios y el módulo DKMS dentro del sistema instalado
 # para que el primer arranque pueda importar y montar los pools sin depender
 # del entorno live.
+
+# Deshabilitar os-prober ANTES del primer apt-get install que pueda disparar
+# update-grub vía postinst de kernel. Justificación: la instalación de
+# linux-headers-generic arrastra un kernel nuevo (linux-image-7.0.0-15-generic
+# + linux-main-modules-zfs-...); su postinst llama a /etc/kernel/postinst.d/
+# en cadena (initramfs-tools, kdump-tools, ..., zz-update-grub). El último
+# ejecuta update-grub → os-prober, que en chroot ve TODO el /dev del live
+# (loops snap + zpool rpool/tank importados con altroot=/mnt) e intenta
+# montar cada bloque en RO. Con ZFS importado se cuelga indefinidamente
+# (síntoma observado 2026-05-20: install bloqueado tras
+# "W: kdump-tools: Executing in a chroot, skipping initramfs generation").
+# Además es el ajuste correcto en el sistema instalado: solo Ubuntu, sin
+# dual-boot — os-prober no aporta nada y añade ruido al arrancar.
+if grep -q '^GRUB_DISABLE_OS_PROBER=' /etc/default/grub; then
+    sed -i 's/^GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=true/' /etc/default/grub
+else
+    echo 'GRUB_DISABLE_OS_PROBER=true' >> /etc/default/grub
+fi
+info "GRUB_DISABLE_OS_PROBER=true en /etc/default/grub (evita cuelgue de os-prober durante update-grub en chroot)"
+
 apt-get update -y -o Dpkg::Options::="--force-confold" >/dev/null
 
 # linux-headers-generic es necesario para que zfs-dkms pueda compilar el
