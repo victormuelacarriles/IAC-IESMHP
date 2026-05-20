@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="23.3-20260520-zfs"
+VERSIONSCRIPT="23.4-20260520-zfs"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -566,21 +566,30 @@ if [ "$PERFIL" = "CEIABD" ] && zpool list rpool >/dev/null 2>&1; then
     # distinta por parámetro.
     zfs create -o canmount=on rpool/home/usuario
     zfs set quota=40G rpool/home/usuario
-    ok "Dataset rpool/home/usuario creado (quota=40G, montado en /home/usuario)"
+
+    # CRÍTICO: en chroot con altroot=/mnt el auto-mount de 'zfs create' no es
+    # fiable. Si el dataset NO está montado en /home/usuario, todo lo que
+    # escribamos después (useradd, skel, chown) va al ext4 subyacente y queda
+    # oculto cuando zfs-mount.service monte el dataset tras el reboot.
+    zfs mount rpool/home/usuario 2>/dev/null || true
+    if ! mountpoint -q /home/usuario; then
+        err "rpool/home/usuario NO está montado en /home/usuario tras zfs create+mount — abortando antes de escribir al fs subyacente"
+        exit 1
+    fi
+    ok "Dataset rpool/home/usuario creado y montado en /home/usuario (verificado)"
 fi
 
 if id usuario &>/dev/null; then
     info "Usuario 'usuario' ya existe"
 else
     if [ "$PERFIL" = "CEIABD" ]; then
-        # /home/usuario ya existe (dataset ZFS recién montado vacío).
-        # useradd -m respeta el dir si existe y solo copia skel encima.
-        useradd -m -k /etc/skel -d /home/usuario -s /bin/bash -p '*' usuario
-        # Por si la versión de useradd no copiara skel al ver el dir existente:
-        if [ -z "$(ls -A /home/usuario 2>/dev/null)" ] && [ -d /etc/skel ]; then
-            cp -aT /etc/skel /home/usuario/. 2>/dev/null || true
-        fi
+        # /home/usuario es el dataset ZFS recién creado y verificado como
+        # montado (vacío). Sin -m: el dir ya existe y queremos comportamiento
+        # determinista (cp skel + chown explícitos a continuación).
+        useradd -k /etc/skel -d /home/usuario -s /bin/bash -p '*' usuario
+        cp -aT /etc/skel /home/usuario/.
         chown -R usuario:usuario /home/usuario
+        chmod 750 /home/usuario
         ok "Usuario 'usuario' creado con home en dataset ZFS rpool/home/usuario"
     else
         useradd -m -s /bin/bash -p '*' usuario
@@ -715,16 +724,23 @@ echo "[+] Creando dataset $DATASET ..."
 zfs create -o canmount=on "$DATASET"
 zfs set quota="$QUOTA" "$DATASET"
 
+# CRÍTICO: forzar y verificar que el dataset queda montado en $HOME_DIR antes
+# de escribir nada. Si zfs create no auto-montó (raro en sistema arrancado,
+# pero defensivo), useradd + cp skel + chown irían al fs subyacente y
+# quedarían ocultos al desmontar/remontar el dataset.
+zfs mount "$DATASET" 2>/dev/null || true
+if ! mountpoint -q "$HOME_DIR"; then
+    echo "[ERR] $DATASET no está montado en $HOME_DIR — abortando" >&2
+    exit 1
+fi
+
 echo "[+] Creando usuario $U (grupos: $GROUPS_EXTRA, home: $HOME_DIR) ..."
 useradd -k /etc/skel -d "$HOME_DIR" -s /bin/bash -G "$GROUPS_EXTRA" "$U"
 
-# Si /home/$U quedó vacío (zfs create lo monta vacío), copiar skel manualmente.
-# useradd sin -m no toca el home; con -m sí, pero -m + dir existente no siempre
-# copia skel. Mejor copiar a mano de forma idempotente.
-if [ -z "$(ls -A "$HOME_DIR" 2>/dev/null)" ] && [ -d /etc/skel ]; then
-    cp -aT /etc/skel "$HOME_DIR/."
-fi
+# Sin -m: el dataset ya está montado vacío. Copia de skel + chown explícitos.
+cp -aT /etc/skel "$HOME_DIR/."
 chown -R "$U:$U" "$HOME_DIR"
+chmod 750 "$HOME_DIR"
 
 # ── Snapshot inicial ───────────────────────────────────────────────────────
 zfs snapshot "${DATASET}@inicial"

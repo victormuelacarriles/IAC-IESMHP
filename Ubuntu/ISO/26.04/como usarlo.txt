@@ -24,16 +24,14 @@ git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh && sudo ./0
 
 
 #Haciendo: 
-#   En máquina fisica (equipo de CIABD08, en dep informática):
+# -> formateo ZFS y deduplicación:   SE HA QUEDADO COLGADO CLAUDE PENSANDO (límite de sesión. continuar 20:35 20/5/2026)
+# -> falla nvidia en equipo físico real (se bloquea por reinicio: se supone arreglado. comprobar.)
+# -> vmware instala pero pide compilar (no hace bien post-instalación, ver abajo)
 # -> intentar quitar la espera de "Please remove ..."
-# -> formateo ZFS y deduplicación
-# -> mapeo NFS de cabina
-# -> falla nvidia en equipo físico real (se bloquea )
-
 
 #vmware
 #Instala: 
 #   cd /mnt/nasDepInfo/PruebaRapidosX3/_SoftwareComun
 #   ./VMware-Workstation-Full-25H2-24995812.x86_64.bundle
-#Post:
+#Post:   (no está fucionando bien)
 #   /usr/lib/vmware/bin/vmware-setup-helper -e -o -u no -c no
