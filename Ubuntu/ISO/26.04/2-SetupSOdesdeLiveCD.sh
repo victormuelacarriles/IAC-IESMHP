@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="23.1-20260520-zfs"
+VERSIONSCRIPT="23.2-20260520-zfs"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -425,11 +425,42 @@ info "GRUB_DISABLE_OS_PROBER=true en /etc/default/grub (evita cuelgue de os-prob
 
 apt-get update -y -o Dpkg::Options::="--force-confold" >/dev/null
 
+# Deshabilitar TEMPORALMENTE kernel-postinst hooks que cuelgan dentro del chroot.
+# Síntoma observado 2026-05-20: tras "W: kdump-tools: Executing in a chroot,
+# skipping initramfs generation" el install se bloquea indefinidamente. El fix
+# previo (GRUB_DISABLE_OS_PROBER=true) NO lo resuelve, así que el cuelgue NO es
+# os-prober. El siguiente sospechoso es alguno de los hooks que vienen después
+# de kdump-tools en /etc/kernel/postinst.d/ ejecutados en cadena por el postinst
+# de linux-image-7.0.0-15-generic:
+#   - unattended-upgrades : intenta hablar con D-Bus / apt daemon (no disponibles)
+#   - update-notifier     : ídem
+#   - zz-flash-kernel     : pensado para ARM/embedded con DTB; en chroot x86 a
+#                           veces escanea dispositivos hasta colgarse
+#   - zz-update-grub      : llama a update-grub (ya lo hacemos explícito en el
+#                           paso "GRUB" más abajo — redundante aquí)
+# Todos son seguros de saltar durante este install:
+#   * update-grub se ejecuta manualmente en el paso "GRUB"
+#   * unattended-upgrades/update-notifier solo afectan a notificaciones cosméticas
+#   * flash-kernel es no-op en x86_64 PC
+# chmod -x neutraliza el hook (run-parts no lo ejecuta) sin desinstalarlo; al
+# salir del bloque ZFS restauramos chmod +x para que el sistema instalado tenga
+# los hooks operativos en futuros apt upgrade.
+_KHOOKS_DIR=/etc/kernel/postinst.d
+_KHOOKS_DISABLED=()
+for _h in unattended-upgrades update-notifier zz-flash-kernel zz-update-grub; do
+    if [ -x "$_KHOOKS_DIR/$_h" ]; then
+        chmod -x "$_KHOOKS_DIR/$_h"
+        _KHOOKS_DISABLED+=("$_h")
+    fi
+done
+info "Kernel-postinst hooks deshabilitados durante el install: ${_KHOOKS_DISABLED[*]:-<ninguno>}"
+
 # linux-headers-generic es necesario para que zfs-dkms pueda compilar el
 # módulo contra el kernel del sistema instalado.
 info "Instalando linux-headers-generic (requerido por zfs-dkms)..."
 DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" \
-    linux-headers-generic
+    linux-headers-generic \
+    || err "Instalación de linux-headers-generic falló"
 
 # Paquetes ZFS:
 #   zfsutils-linux : binarios (zpool, zfs, ...)
@@ -442,6 +473,15 @@ info "Instalando paquetes ZFS..."
 DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" \
     zfsutils-linux zfs-zed zfs-dkms zfs-initramfs \
     || err "Instalación ZFS falló — el primer arranque tendrá que reinstalar (3-SetupPrimerInicio.sh)"
+
+# Restaurar kernel-postinst hooks. Se hace SIEMPRE (incluso si los apt fallaron
+# arriba con `|| err`, el script continúa porque err no aborta).
+for _h in "${_KHOOKS_DISABLED[@]}"; do
+    if [ -e "$_KHOOKS_DIR/$_h" ]; then
+        chmod +x "$_KHOOKS_DIR/$_h"
+    fi
+done
+info "Kernel-postinst hooks restaurados: ${_KHOOKS_DISABLED[*]:-<ninguno>}"
 
 # Habilitar servicios systemd. apt los activa por defecto al instalar; lo
 # hacemos explícito por robustez (si en el futuro un postinst los deshabilita
