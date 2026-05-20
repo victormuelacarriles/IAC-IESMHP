@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="23.5-20260520-zfs"
+VERSIONSCRIPT="23.6-20260520-zfs"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -605,9 +605,11 @@ if id usuario &>/dev/null; then
 else
     if [ "$PERFIL" = "CEIABD" ]; then
         # /home/usuario es el dataset ZFS recién creado y verificado como
-        # montado (vacío). Sin -m: el dir ya existe y queremos comportamiento
-        # determinista (cp skel + chown explícitos a continuación).
-        useradd -k /etc/skel -d /home/usuario -s /bin/bash -p '*' usuario
+        # montado (vacío). Sin -m (el dir ya existe como mountpoint ZFS) y
+        # sin -k (Ubuntu 26.04: '-k requiere -m'; además la copia de skel
+        # la hacemos explícita en la siguiente línea para no depender del
+        # comportamiento de useradd con dir existente).
+        useradd -d /home/usuario -s /bin/bash -p '*' usuario
         cp -aT /etc/skel /home/usuario/.
         chown -R usuario:usuario /home/usuario
         chmod 750 /home/usuario
@@ -756,9 +758,11 @@ if ! mountpoint -q "$HOME_DIR"; then
 fi
 
 echo "[+] Creando usuario $U (grupos: $GROUPS_EXTRA, home: $HOME_DIR) ..."
-useradd -k /etc/skel -d "$HOME_DIR" -s /bin/bash -G "$GROUPS_EXTRA" "$U"
+# Sin -m (el dir ya existe como mountpoint ZFS) y sin -k (Ubuntu 26.04:
+# '-k requiere -m'; la copia de skel se hace explícita debajo).
+useradd -d "$HOME_DIR" -s /bin/bash -G "$GROUPS_EXTRA" "$U"
 
-# Sin -m: el dataset ya está montado vacío. Copia de skel + chown explícitos.
+# Dataset ya está montado vacío. Copia de skel + chown explícitos.
 cp -aT /etc/skel "$HOME_DIR/."
 chown -R "$U:$U" "$HOME_DIR"
 chmod 750 "$HOME_DIR"

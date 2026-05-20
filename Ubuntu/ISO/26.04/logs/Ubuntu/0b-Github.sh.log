@@ -1,0 +1,453 @@
+[0;32m[perso][+][0m === 0b-Github.sh iniciado: mié 20 may 2026 21:54:21 CEST ===
+[0;32m[perso][+][0m REPO=IAC-IESMHP  GITREPO=https://github.com/victormuelacarriles/IAC-IESMHP.git  DESTDIR=/opt/IAC-IESMHP
+[0;32m[perso][+][0m SCRIPT_INSTALL=/opt/IAC-IESMHP/Ubuntu/ISO/26.04/1-SetupLiveCD.sh
+[0;32m[perso][+][0m Kernel: 7.0.0-14-generic  CPU: 2 cores  RAM: 7,7Gi
+[0;32m[perso][+][0m Comprobando conectividad...
+[0;32m[perso][+][0m Red disponible.
+[0;32m[perso][+][0m update-initramfs enmascarado (no-op en entorno live).
+[0;32m[perso][+][0m Desactivamos actualización de man-db
+[0;32m[perso][+][0m Actualizando lista de paquetes...
+Ign:1 file:/cdrom resolute InRelease
+Des:2 file:/cdrom resolute Release [664 B]
+Des:2 file:/cdrom resolute Release [664 B]
+Obj:4 http://archive.ubuntu.com/ubuntu resolute InRelease
+Obj:5 http://security.ubuntu.com/ubuntu resolute-security InRelease
+Obj:6 http://archive.ubuntu.com/ubuntu resolute-updates InRelease
+Obj:7 http://archive.ubuntu.com/ubuntu resolute-backports InRelease
+Leyendo lista de paquetes...
+[0;32m[perso][+][0m Asegurando que git está instalado...
+Leyendo lista de paquetes...
+Creando árbol de dependencias...
+Leyendo la información del estado...
+git ya está en su versión más reciente (1:2.53.0-1ubuntu1).
+Resolviendo dependencias...
+0 actualizados, 0 nuevos se instalarán, 0 para eliminar y 58 no actualizados.
+[0;32m[perso][+][0m git instalado: git version 2.53.0
+[0;32m[perso][+][0m Clonando https://github.com/victormuelacarriles/IAC-IESMHP.git → /opt/IAC-IESMHP ...
+Clonando en '/opt/IAC-IESMHP'...
+[0;32m[perso][+][0m Repo clonado: e4af135 modified:  Ubuntu/CLAUDE.md  Ubuntu/ISO/26.04/2-SetupSOdesdeLiveCD.sh  Ubuntu/RegistroDeCambios/20260520-Cambios.md
+[0;32m[perso][+][0m === 0b-Github.sh finalizado: mié 20 may 2026 21:54:25 CEST — lanzando /opt/IAC-IESMHP/Ubuntu/ISO/26.04/1-SetupLiveCD.sh ===
+WARNING: Running setxkbmap against an Xwayland server
+[32m1-SetupLiveCD (vs23.0-20260520-Ubuntu-zfs)[0m
+   Script personalizado de instalación de 
+   sistema operativo Ubuntu 26.04 para equipos distancia / CEIABD
+[33m   (victor.muelacarriles@educantabria.es)[0m
+[32m--------------------------------------------------------------------[0m
+[32m       Distancia     ->Disco pequeño: NVMe 0,5TB (EFI, swap, / ext4)[0m
+[32m                     ->Disco grande:  NVMe 2,0TB (/home ext4) [SIN ZFS][0m
+[32m--------------------------------------------------------------------[0m
+[32m       CEIABD        ->Disco pequeño: NVMe 0,5TB (EFI 1G, swap 16G,[0m
+[32m                                       / 100G ext4, p4 ZFS rpool→/home)[0m
+[32m                     ->Disco grande:  SDa  1,0TB (ZFS tank→/datos)[0m
+[32m--------------------------------------------------------------------[0m
+[32mCarpetas de trabajo: /opt/IAC-IESMHP, /opt/IAC-IESMHP, /var/log/IAC-IESMHP/Ubuntu[0m
+[33m--- Inventario completo de discos ---[0m
+sda      1000G sata   1 VMware Virtual SATA Hard Drive
+sr0       6,1G sata   1 VMware Virtual SATA CDRW Drive
+nvme0n1   512G nvme   0 VMware Virtual NVMe Disk
+DISCOS_M2[0]: nvme0n1
+DISCOS_M2[1]: <vacío>
+DISCOS_SD[0]: sda
+[32mEquipo NVME+SD (perfil CEIABD, ZFS):[0m
+[32m    EFI/swap/ / ext4  -> NVMe pequeño (/dev/nvme0n1)[0m
+[32m    /home (rpool ZFS) -> p4 del mismo NVMe[0m
+[32m    /datos (tank ZFS) -> SD (/dev/sda)[0m
+
+[33mBorrando y particionando: /dev/nvme0n1 y /dev/sda (perfil=CEIABD)[0m
+NAME      SIZE TYPE
+loop0     3,2G loop
+loop1   565,3M loop
+loop2   782,9M loop
+loop3       4K loop
+loop4    66,8M loop
+loop5   273,7M loop
+loop6    19,6M loop
+loop7   606,1M loop
+loop8    16,5M loop
+loop9    91,7M loop
+loop10    395M loop
+loop11  115,3M loop
+loop12   15,7M loop
+loop13   18,8M loop
+loop14  227,6M loop
+loop15   49,3M loop
+loop16    580K loop
+sda      1000G disk
+sr0       6,1G rom
+nvme0n1   512G disk
+Creating new GPT entries in memory.
+GPT data structures destroyed! You may now partition the disk using fdisk or
+other utilities.
+Creating new GPT entries in memory.
+GPT data structures destroyed! You may now partition the disk using fdisk or
+other utilities.
+Creating new GPT entries in memory.
+The operation has completed successfully.
+Creating new GPT entries in memory.
+The operation has completed successfully.
+[32mDiscos particionados: /dev/nvme0n1 y /dev/sda[0m
+[33mEsperando detección de particiones por el kernel...[0m
+[33m--- Layout de particiones ---[0m
+Disk /dev/nvme0n1: 1073741824 sectors, 512.0 GiB
+Model: VMware Virtual NVMe Disk
+Sector size (logical/physical): 512/512 bytes
+Disk identifier (GUID): 3D3B375A-29F9-4D51-9CB2-C40C40D86F91
+Partition table holds up to 128 entries
+Main partition table begins at sector 2 and ends at sector 33
+First usable sector is 34, last usable sector is 1073741790
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 2014 sectors (1007.0 KiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048         2099199   1024.0 MiB  EF00  EFI
+   2         2099200        35653631   16.0 GiB    8200  swap
+   3        35653632       245368831   100.0 GiB   8300  root
+   4       245368832      1073741790   395.0 GiB   BF00  rpool
+Disk /dev/sda: 2097152000 sectors, 1000.0 GiB
+Model: VMware Virtual S
+Sector size (logical/physical): 512/512 bytes
+Disk identifier (GUID): BAC5DFF0-B0EC-4AEE-A2F7-4F9AA5E96AED
+Partition table holds up to 128 entries
+Main partition table begins at sector 2 and ends at sector 33
+First usable sector is 34, last usable sector is 2097151966
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 2014 sectors (1007.0 KiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048      2097151966   1000.0 GiB  BF00  tank
+[32m  ZFS rpool by-id: /dev/disk/by-id/nvme-eui.d2f9a38e03e96f64000c2967a14f4737-part4[0m
+[32m  ZFS tank  by-id: /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_00000000000000000001-part1[0m
+[33mFormateando ext4/FAT/swap (EFI=/dev/nvme0n1p1, SWAP=/dev/nvme0n1p2, ROOT=/dev/nvme0n1p3); ZFS se crea aparte[0m
+mkfs.fat 4.2 (2021-01-31)
+Configurando espacio de intercambio versión 1, tamaño = 16 GiB (17179865088 bytes)
+sin etiqueta, UUID=20563bdf-3e79-4182-a9b1-0dfed4f77908
+mke2fs 1.47.2 (1-Jan-2025)
+Se está creando un sistema de ficheros con 26214400 bloques de 4k y 6553600 nodos-i
+UUID del sistema de ficheros: d26550ab-c886-4df1-9e75-7f1a26b8346b
+Respaldos del superbloque guardados en los bloques: 
+	32768, 98304, 163840, 229376, 294912, 819200, 884736, 1605632, 2654208, 
+	4096000, 7962624, 11239424, 20480000, 23887872
+
+Reservando las tablas de grupo:   0/800       hecho                            
+Escribiendo las tablas de nodos-i:   0/800       hecho                            
+Creando el fichero de transacciones (131072 bloques): hecho
+Escribiendo superbloques y la información contable del sistema de archivos:   0/800       hecho
+
+[33m--- UUIDs asignados ---[0m
+/dev/nvme0n1p1: UUID="176E-D098" BLOCK_SIZE="512" TYPE="vfat" PARTLABEL="EFI" PARTUUID="49118719-84b4-4a76-b9ae-9417bfa3c22b"
+/dev/nvme0n1p2: UUID="20563bdf-3e79-4182-a9b1-0dfed4f77908" TYPE="swap" PARTLABEL="swap" PARTUUID="1a39302f-2203-4230-8f24-5dc703b9cc84"
+/dev/nvme0n1p3: UUID="d26550ab-c886-4df1-9e75-7f1a26b8346b" BLOCK_SIZE="4096" TYPE="ext4" PARTLABEL="root" PARTUUID="d7d06dcf-ffc5-4786-b6d6-0d5eccd573bb"
+[32mParticiones formateadas correctamente[0m
+[33mMontando sistemas de ficheros...[0m
+NAME          SIZE TYPE MOUNTPOINT                          UUID
+loop0         3,2G loop /rofs                               
+loop1       565,3M loop                                     
+loop2       782,9M loop                                     
+loop3           4K loop /snap/bare/5                        
+loop4        66,8M loop /snap/core24/1587                   
+loop5       273,7M loop /snap/firefox/8107                  
+loop6        19,6M loop /snap/desktop-security-center/150   
+loop7       606,1M loop /snap/gnome-46-2404/153             
+loop8        16,5M loop /snap/firmware-updater/226          
+loop9        91,7M loop /snap/gtk-common-themes/1535        
+loop10        395M loop /snap/mesa-2404/1165                
+loop11      115,3M loop /snap/ubuntu-desktop-bootstrap/589  
+loop12       15,7M loop /snap/snap-store/1367               
+loop13       18,8M loop /snap/prompting-client/204          
+loop14      227,6M loop /snap/thunderbird/1057              
+loop15       49,3M loop /snap/snapd/26865                   
+loop16        580K loop /snap/snapd-desktop-integration/361 
+sda          1000G disk                                     
+└─sda1       1000G part                                     
+sr0           6,1G rom  /cdrom                              2026-05-20-19-52-58-00
+nvme0n1       512G disk                                     
+├─nvme0n1p1     1G part /mnt/boot/efi                       176E-D098
+├─nvme0n1p2    16G part [SWAP]                              20563bdf-3e79-4182-a9b1-0dfed4f77908
+├─nvme0n1p3   100G part /mnt                                d26550ab-c886-4df1-9e75-7f1a26b8346b
+└─nvme0n1p4   395G part                                     
+[33m--- Espacio disponible en puntos de montaje ---[0m
+S.ficheros     Tamaño Usados  Disp Uso% Montado en
+/dev/nvme0n1p3    98G   2,1M   93G   1% /mnt
+/dev/nvme0n1p1  1022M   4,0K 1022M   1% /mnt/boot/efi
+[32mSistemas de ficheros montados[0m
+[33mInstalando zfsutils-linux en el entorno live...[0m
+Leyendo lista de paquetes...
+Creando árbol de dependencias...
+Leyendo la información del estado...
+zfsutils-linux ya está en su versión más reciente (2.4.1-1ubuntu5).
+Resolviendo dependencias...
+0 actualizados, 0 nuevos se instalarán, 0 para eliminar y 58 no actualizados.
+[32m  ZFS versión: 2.4.1[0m
+[33m  Fast Dedup NO disponible (ZFS < 2.3) → dedup clásico[0m
+[33mCreando zpool rpool (dedup=on + zstd, recordsize=64K) en /dev/disk/by-id/nvme-eui.d2f9a38e03e96f64000c2967a14f4737-part4...[0m
+[32m  rpool creado, dataset rpool/home montado en /mnt/home[0m
+[33mCreando zpool tank (zstd, sin dedup, recordsize=1M) en /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_00000000000000000001-part1...[0m
+[32m  tank creado, dataset tank/datos montado en /mnt/datos (1777)[0m
+[33m--- zpool status ---[0m
+  pool: rpool
+ state: ONLINE
+config:
+
+	NAME                                               STATE     READ WRITE CKSUM
+	rpool                                              ONLINE       0     0     0
+	  nvme-eui.d2f9a38e03e96f64000c2967a14f4737-part4  ONLINE       0     0     0
+
+errors: No known data errors
+
+  pool: tank
+ state: ONLINE
+config:
+
+	NAME                                                             STATE     READ WRITE CKSUM
+	tank                                                             ONLINE       0     0     0
+	  ata-VMware_Virtual_SATA_Hard_Drive_00000000000000000001-part1  ONLINE       0     0     0
+
+errors: No known data errors
+[33m--- zfs list ---[0m
+NAME         USED  AVAIL  REFER  MOUNTPOINT
+rpool        504K   382G    96K  none
+rpool/home    96K   382G    96K  /mnt/home
+tank         504K   961G    96K  none
+tank/datos    96K   961G    96K  /mnt/datos
+[32mZFS listo para el rsync (datasets visibles bajo /mnt)[0m
+[33mUbuntu 26.04+: combinando capas squashfs con overlayfs...[0m
+[32m  + capa 0: minimal.squashfs[0m
+[32m  + capa 1: minimal.standard.squashfs[0m
+[32m  + capa 2: minimal.standard.live.squashfs[0m
+[33mCopiando sistema de archivos a /mnt ...[0m
+[32mSistema de archivos copiado desde /tmp/merged[0m
+[32m  Fondo de escritorio copiado: /usr/share/backgrounds/iac-iesmhp.png (OK)[0m
+[32mzpool.cache copiado a /mnt/etc/zfs/ (3312 bytes)[0m
+[32m/etc/hostid copiado al sistema instalado (29b81127)[0m
+
+[33mCopiando /opt/IAC-IESMHP/*.* → /mnt/opt/IAC-IESMHP/[0m
+[33mCopiando /opt/IAC-IESMHP/Ubuntu/ → /mnt/opt/IAC-IESMHP/Ubuntu/[0m
+[33mVerificando entorno chroot...[0m
+[32m  OK: /mnt/usr/bin/bash existe 1540520 /mnt/usr/bin/bash[0m
+[32m  OK: /mnt/lib64 → usr/lib64[0m
+[32m  OK: chroot funcional — GNU bash, versión 5.3.9(1)-release (x86_64-pc-linux-gnu)[0m
+[33mCopiando logs a /mnt/var/log/IAC-IESMHP/Ubuntu/[0m
+[32m  0b-Github.sh.log copiado[0m
+[32mParticiones escritas para el chroot (perfil=CEIABD):[0m
+  PERFIL=CEIABD
+  PART_EFI=/dev/nvme0n1p1
+  PART_SWAP=/dev/nvme0n1p2
+  PART_ROOT=/dev/nvme0n1p3
+  PART_DATA=
+  ZFS_POOL_HOME=rpool
+  ZFS_HOME_DATASET=rpool/home
+  ZFS_HOME_PARTID=/dev/disk/by-id/nvme-eui.d2f9a38e03e96f64000c2967a14f4737-part4
+  ZFS_POOL_DATA=tank
+  ZFS_DATA_DATASET=tank/datos
+  ZFS_DATA_PARTID=/dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_00000000000000000001-part1
+[33mEjecutando 2-SetupSOdesdeLiveCD.sh en chroot... (/opt/IAC-IESMHP/Ubuntu/ISO/26.04/2-SetupSOdesdeLiveCD.sh)[0m
+chroot /mnt /opt/IAC-IESMHP/Ubuntu/ISO/26.04/2-SetupSOdesdeLiveCD.sh 2>&1 | tee /mnt/var/log/IAC-IESMHP/Ubuntu/2-SetupSOdesdeLiveCD.sh.log
+
+════════════════════════════════════════════════════════════
+  PASO 1: Inicio — /opt/IAC-IESMHP/Ubuntu/ISO/26.04/2-SetupSOdesdeLiveCD.sh (vs23.5-20260520-zfs) — chroot ubuntu
+  2026-05-20 21:58:47
+════════════════════════════════════════════════════════════
+  [36m[INF][0m  21:58:47 RAIZLOG=/var/log/IAC-IESMHP/Ubuntu  RAIZDISTRO=/opt/IAC-IESMHP/Ubuntu/ISO/26.04
+  [36m[INF][0m  21:58:47 Log completo : /var/log/IAC-IESMHP/Ubuntu/2-SetupSOdesdeLiveCD.sh.log
+  [36m[INF][0m  21:58:47 Fichero pasos: /var/log/IAC-IESMHP/Ubuntu/2-SetupSOdesdeLiveCD.steps
+  [36m[INF][0m  21:58:47 Perfil cargado: PERFIL=CEIABD
+  [36m[INF][0m  21:58:47   ZFS_POOL_HOME=rpool HOME=rpool/home → /dev/disk/by-id/nvme-eui.d2f9a38e03e96f64000c2967a14f4737-part4
+  [36m[INF][0m  21:58:47   ZFS_POOL_DATA=tank DATA=tank/datos → /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_00000000000000000001-part1
+
+════════════════════════════════════════════════════════════
+  PASO 2: Idioma, teclado y zona horaria
+  2026-05-20 21:58:47
+════════════════════════════════════════════════════════════
+Generating locales (this might take a while)...
+  es_ES.UTF-8... done
+Generation complete.
+  [32m[OK ][0m  21:58:48 Idioma y teclado configurados
+  [32m[OK ][0m  21:58:48 Zona horaria configurada: Europe/Madrid (CEST +0200)
+
+════════════════════════════════════════════════════════════
+  PASO 3: Fondo de escritorio (todos los usuarios)
+  2026-05-20 21:58:48
+════════════════════════════════════════════════════════════
+  [32m[OK ][0m  21:58:48 GSettings schema de fondo compilado (fondo predeterminado para todos los usuarios)
+  [32m[OK ][0m  21:58:48 Logo GDM configurado: /usr/share/backgrounds/iac-iesmhp-watermark.png
+  [32m[OK ][0m  21:58:48 dconf actualizado (system-db compilado)
+
+════════════════════════════════════════════════════════════
+  PASO 4: Eliminar autostart del Live CD del sistema instalado
+  2026-05-20 21:58:48
+════════════════════════════════════════════════════════════
+  [32m[OK ][0m  21:58:48 Eliminado: /etc/skel/.config/autostart/iac-iesmhp-setup.desktop
+  [32m[OK ][0m  21:58:48 Eliminado: /home/ubuntu/.config/autostart/iac-iesmhp-setup.desktop
+
+════════════════════════════════════════════════════════════
+  PASO 5: Rehabilitar snapd y eliminar el instalador de Ubuntu (sistema instalado)
+  2026-05-20 21:58:48
+════════════════════════════════════════════════════════════
+  [36m[INF][0m  21:58:48   Desenmascarado (symlink → /dev/null eliminado): /etc/systemd/system/snapd.service
+  [36m[INF][0m  21:58:48   Desenmascarado (symlink → /dev/null eliminado): /etc/systemd/system/snapd.socket
+  [36m[INF][0m  21:58:48   Desenmascarado (symlink → /dev/null eliminado): /etc/systemd/system/snapd.seeded.service
+  [32m[OK ][0m  21:58:48 snapd desenmascarado y snapd.socket habilitado en el sistema instalado
+  [36m[INF][0m  21:58:48   Eliminado .desktop de snapd: /var/lib/snapd/desktop/applications/ubuntu-desktop-bootstrap_ubuntu-desktop-bootstrap.desktop
+  [32m[OK ][0m  21:58:48 Instalador de Ubuntu desactivado vía autostart override (purga real en 3-Setup)
+
+════════════════════════════════════════════════════════════
+  PASO 6: Configurar /etc/fstab
+  2026-05-20 21:58:48
+════════════════════════════════════════════════════════════
+  [32m[OK ][0m  21:58:48 Particiones leídas: EFI=nvme0n1p1  SWAP=nvme0n1p2  ROOT=nvme0n1p3  (ZFS gestiona /home y /datos)
+  [36m[INF][0m  21:58:48 EFI=/dev/nvme0n1p1  SWAP=/dev/nvme0n1p2  ROOT=/dev/nvme0n1p3
+  [36m[INF][0m  21:58:48 UUID ROOT=d26550ab-c886-4df1-9e75-7f1a26b8346b  EFI=176E-D098  SWAP=20563bdf-3e79-4182-a9b1-0dfed4f77908
+  [32m[OK ][0m  21:58:48 fstab generado con UUIDs (/home y /datos los monta ZFS)
+# /etc/fstab — generado por /opt/IAC-IESMHP/Ubuntu/ISO/26.04/2-SetupSOdesdeLiveCD.sh el mié 20 may 2026 21:58:48 CEST (perfil CEIABD, ZFS para /home y /datos)
+# /home  ← rpool/home  (zfs-mount.service, ver /etc/zfs/zpool.cache)
+# /datos ← tank/datos  (zfs-mount.service)
+UUID=d26550ab-c886-4df1-9e75-7f1a26b8346b  /          ext4  defaults,noatime  0 1
+UUID=176E-D098   /boot/efi  vfat  umask=0077        0 1
+UUID=20563bdf-3e79-4182-a9b1-0dfed4f77908  none       swap  sw                0 0
+
+════════════════════════════════════════════════════════════
+  PASO 7: Limpiar fuentes APT del Live CD (cdrom:)
+  2026-05-20 21:58:48
+════════════════════════════════════════════════════════════
+  [36m[INF][0m  21:58:48 Fichero DEB822 con cdrom: /etc/apt/sources.list.d/cdrom.sources — contenido:
+    Types: deb
+    URIs: file:///cdrom
+    Suites: resolute
+    Components: restricted main
+    Check-Date: no
+    Signed-By:
+     -----BEGIN PGP PUBLIC KEY BLOCK-----
+     .
+     mDMEael6XRYJKwYBBAHaRw8BAQdABSYIMIQr7xglnfq9Ibdd0xt+NK/jAu8PXAh0
+     uX8aUMy0N1VidW50dSBJU08gT25lLVRpbWUgU2lnbmluZyBLZXkgPG5vb25lQG5v
+     d2hlcmUuaW52YWxpZD6IkAQTFgoAOBYhBGUBvBc18x9fvZpmMxvE2wpHWVXIBQJp
+     6XpdAhsDBQsJCAcCBhUKCQgLAgQWAgMBAh4BAheAAAoJEBvE2wpHWVXI05sA/jPd
+     yCC7l/9prswb4y9jeNZsUPAz+zm2kwCKumBTgdbxAP4mdZK47fhw9sWOYcMHzck1
+     95ipNwGdbIq/ad71mtIFAw==
+     =vOpd
+     -----END PGP PUBLIC KEY BLOCK-----
+  [32m[OK ][0m  21:58:48 Eliminado: /etc/apt/sources.list.d/cdrom.sources
+  [32m[OK ][0m  21:58:48 Total de fuentes APT con cdrom limpiadas: 1
+
+════════════════════════════════════════════════════════════
+  PASO 8: Verificar conectividad a Internet
+  2026-05-20 21:58:48
+════════════════════════════════════════════════════════════
+  [32m[OK ][0m  21:58:48 Internet disponible
+
+════════════════════════════════════════════════════════════
+  PASO 9: Instalar ZFS en el sistema instalado y habilitar servicios
+  2026-05-20 21:58:48
+════════════════════════════════════════════════════════════
+  [36m[INF][0m  21:58:48 GRUB_DISABLE_OS_PROBER=true en /etc/default/grub (evita cuelgue de os-prober durante update-grub en chroot)
+  [36m[INF][0m  21:58:54 Instalando solo binarios y daemon ZFS (sin upgrade de kernel)...
+Leyendo lista de paquetes...
+Creando árbol de dependencias...
+Leyendo la información del estado...
+zfsutils-linux ya está en su versión más reciente (2.4.1-1ubuntu5).
+zfs-zed ya está en su versión más reciente (2.4.1-1ubuntu5).
+Resolviendo dependencias...
+0 actualizados, 0 nuevos se instalarán, 0 para eliminar y 59 no actualizados.
+  [32m[OK ][0m  21:58:55   systemctl enable zfs.target
+  [32m[OK ][0m  21:58:55   systemctl enable zfs-import-cache.service
+  [32m[OK ][0m  21:58:55   systemctl enable zfs-mount.service
+  [32m[OK ][0m  21:58:55   systemctl enable zfs-zed.service
+  [32m[OK ][0m  21:58:55   cachefile refrescado para rpool
+  [32m[OK ][0m  21:58:55   cachefile refrescado para tank
+  [32m[OK ][0m  21:58:55 ZFS instalado y configurado en el chroot
+  [36m[INF][0m  21:58:55 zpool status:
+    pool: rpool
+   state: ONLINE
+  config:
+  
+  	NAME                                               STATE     READ WRITE CKSUM
+  	rpool                                              ONLINE       0     0     0
+  	  nvme-eui.d2f9a38e03e96f64000c2967a14f4737-part4  ONLINE       0     0     0
+  
+  errors: No known data errors
+  
+    pool: tank
+   state: ONLINE
+  config:
+  
+  	NAME                                                             STATE     READ WRITE CKSUM
+  	tank                                                             ONLINE       0     0     0
+  	  ata-VMware_Virtual_SATA_Hard_Drive_00000000000000000001-part1  ONLINE       0     0     0
+  
+  errors: No known data errors
+  [36m[INF][0m  21:58:55 zfs list:
+  NAME         USED  AVAIL  REFER  MOUNTPOINT
+  rpool        552K   382G    96K  none
+  rpool/home    96K   382G    96K  /mnt/home
+  tank         504K   961G    96K  none
+  tank/datos    96K   961G    96K  /mnt/datos
+
+════════════════════════════════════════════════════════════
+  PASO 10: MAC, hostname y claves SSH autorizadas
+  2026-05-20 21:58:55
+════════════════════════════════════════════════════════════
+  [36m[INF][0m  21:58:55 MAC detectada: 00:0c:29:0e:32:d7
+  [32m[OK ][0m  21:58:55 authorized_keys copiado
+  [31m[ERR][0m  21:58:55 MAC 00:0c:29:0e:32:d7 no encontrada en macs.csv — nombre por defecto 'Ubuntu'
+  [32m[OK ][0m  21:58:55 Hostname cambiado: ubuntu → Ubuntu
+
+════════════════════════════════════════════════════════════
+  PASO 11: Usuarios (root y usuario)
+  2026-05-20 21:58:55
+════════════════════════════════════════════════════════════
+  [36m[INF][0m  21:58:55 Reestructurando rpool/home (contenedor + dataset por usuario)...
+  [36m[INF][0m  21:58:55 Re-importando rpool sin altroot para que el auto-mount funcione en chroot...
+  [36m[INF][0m  21:58:55   altroot actual: /mnt
+  [32m[OK ][0m  21:58:55   rpool re-importado (altroot=-)
+  [32m[OK ][0m  21:58:55 rpool/home recreado como contenedor (canmount=off, mountpoint=/home)
+  [32m[OK ][0m  21:58:55 Dataset rpool/home/usuario creado y montado en /home/usuario (verificado)
+useradd: la opción -k sólo está permitida junto a la opción -m
+Modo de uso: useradd [opciones] USUARIO
+             useradd -D
+             useradd -D [opciones]
+
+Opciones:
+      --badname                 do not check for bad names (DEPRECATED)
+  -b, --base-dir DIR_BASE       directorio base para el directorio personal
+                                de la nueva cuenta
+      --btrfs-subvolume-home    use BTRFS subvolume for home directory
+  -c, --comment COMENTARIO      campo GECOS de la nueva cuenta
+  -d, --home-dir DIR_PERSONAL   directorio personal de la nueva cuenta
+  -D, --defaults                imprime o cambia la configuración
+                                predeterminada de useradd
+  -e, --expiredate FECHA_CADUCIDAD  fecha de caducidad de la nueva cuenta
+  -f, --inactive INACTIVO       periodo de inactividad de la contraseña
+                                de la nueva cuenta
+  -F, --add-subids-for-system   add entries to sub[ud]id even when adding a system user
+  -g, --gid GRUPO               nombre o identificador del grupo primario de
+                                la nueva cuenta
+  -G, --groups GRUPOS           lista de grupos suplementarios de la nueva
+                                cuenta
+  -h, --help                    muestra este mensaje de ayuda y termina
+  -k, --skel DIR_SKEL           utiliza este directorio «skeleton» alternativo
+  -K, --key CLAVE=VALOR         sobrescribe los valores predeterminados de
+                                «/etc/login.defs»
+  -m, --create-home             crea el directorio personal del usuario
+  -M, --no-create-home          no crea el directorio personal del usuario
+  -N, --no-user-group           no crea un grupo con el mismo nombre que el
+                                usuario
+  -o, --non-unique              permite crear usuarios con identificadores
+                                (UID) duplicados (no únicos)
+  -p, --password CONTRASEÑA     contraseña cifrada de la nueva cuenta
+  -r, --system                  crea una cuenta del sistema
+  -R, --root DIR_CHROOT         establece DIR_CHROOT como el directorio
+                                al cual hacer chroot
+  -P, --prefix PREFIX_DIR       prefix directory where are located the /etc/* files
+  -s, --shell CONSOLA           consola de acceso de la nueva cuenta
+  -u, --uid UID                 identificador del usuario de la nueva cuenta
+  -U, --user-group              crea un grupo con el mismo nombre que el
+                                usuario
+  -Z, --selinux-user USUARIO_SE  utiliza el usuario indicado para el usuario
+                                 de SELinux
+      --selinux-range SERANGE   use a specific MLS range for the SELinux user mapping
+      --extrausers              Use the extra users database
+
+
+
+WARNING: Running setxkbmap against an Xwayland server
+[31mInstalación fallida. Revisa logs: /mnt/var/log/IAC-IESMHP/Ubuntu[0m
