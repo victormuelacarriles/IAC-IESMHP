@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="23.4-20260520-zfs"
+VERSIONSCRIPT="23.5-20260520-zfs"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -557,6 +557,29 @@ if [ "$PERFIL" = "CEIABD" ] && zpool list rpool >/dev/null 2>&1; then
         zfs umount rpool/home 2>/dev/null || true
         zfs destroy -r rpool/home || err "No se pudo destruir rpool/home (revisar procesos con /home abierto)"
     fi
+
+    # CRÍTICO: re-importar rpool sin altroot dentro del chroot.
+    # En 1-SetupLiveCD.sh se importó con -R /mnt para que los datasets se
+    # montaran bajo /mnt/* durante el rsync. Esa altroot PERSISTE en el pool
+    # (es runtime-only, no se puede cambiar con 'zpool set', solo via
+    # export+import). Dentro del chroot rompe el auto-mount: zfs calcula
+    # path = altroot + mountpoint = /mnt/home/usuario, que el syscall mount
+    # resuelve desde la raíz del chroot (= host:/mnt) → host:/mnt/mnt/home/usuario,
+    # fuera del árbol → mkdir+mount fallan silenciosamente y todo lo que
+    # escribimos después cae al ext4 subyacente, oculto al rebotar.
+    # Síntoma observado v23.4: 'rpool/home/usuario NO está montado tras zfs
+    # create+mount' (mi propio check defensivo aborta correctamente).
+    info "Re-importando rpool sin altroot para que el auto-mount funcione en chroot..."
+    _ALTROOT_PRE=$(zpool get -H -o value altroot rpool 2>/dev/null)
+    info "  altroot actual: $_ALTROOT_PRE"
+    zpool export rpool 2>&1 || zpool export -f rpool 2>&1 \
+        || { err "No se pudo exportar rpool antes del re-import"; exit 1; }
+    zpool import -d /dev/disk/by-id rpool 2>&1 \
+        || { err "No se pudo re-importar rpool sin altroot"; exit 1; }
+    # Refrescar cachefile con la nueva config (sin altroot).
+    zpool set cachefile=/etc/zfs/zpool.cache rpool
+    ok "  rpool re-importado (altroot=$(zpool get -H -o value altroot rpool))"
+
     zfs create -o canmount=off -o mountpoint=/home rpool/home
     ok "rpool/home recreado como contenedor (canmount=off, mountpoint=/home)"
 
@@ -567,13 +590,11 @@ if [ "$PERFIL" = "CEIABD" ] && zpool list rpool >/dev/null 2>&1; then
     zfs create -o canmount=on rpool/home/usuario
     zfs set quota=40G rpool/home/usuario
 
-    # CRÍTICO: en chroot con altroot=/mnt el auto-mount de 'zfs create' no es
-    # fiable. Si el dataset NO está montado en /home/usuario, todo lo que
-    # escribamos después (useradd, skel, chown) va al ext4 subyacente y queda
-    # oculto cuando zfs-mount.service monte el dataset tras el reboot.
+    # Red de seguridad: con altroot eliminado el auto-mount debería ir bien,
+    # pero verificamos por si acaso (mejor abortar que escribir al ext4).
     zfs mount rpool/home/usuario 2>/dev/null || true
     if ! mountpoint -q /home/usuario; then
-        err "rpool/home/usuario NO está montado en /home/usuario tras zfs create+mount — abortando antes de escribir al fs subyacente"
+        err "rpool/home/usuario NO está montado en /home/usuario tras re-import sin altroot — abortando antes de escribir al fs subyacente"
         exit 1
     fi
     ok "Dataset rpool/home/usuario creado y montado en /home/usuario (verificado)"
