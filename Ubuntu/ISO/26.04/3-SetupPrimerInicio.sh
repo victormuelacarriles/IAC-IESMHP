@@ -3,7 +3,7 @@
 #"set -e" significa que el script se detendrá si ocurre un error
 set -e # lo desactivamos para que no se pare en errores de 
 
-VERSIONSCRIPT="22.23-20260518"       #Versión del script
+VERSIONSCRIPT="22.24-20260520"       #Versión del script
 SCRIPT3=$(basename "$0")
 echo "$SCRIPT3 (vs$VERSIONSCRIPT)"
 #Nos quedamos solo con el nombre del script sin ruta
@@ -341,20 +341,70 @@ export PYTHONUNBUFFERED=1
 export ANSIBLE_FORCE_COLOR=0
 
 
+# --- Contador de intentos para evitar bucle infinito de reinicios --------
+# Si ansible-playbook falla, el bloque de error de mas abajo reinicia SIN
+# borrar el servicio para que el siguiente arranque vuelva a intentarlo. Para
+# no quedar atrapados en un bucle, contamos los intentos en un fichero
+# persistente (sobrevive al reinicio) y rendimos tras el 3er fallo. En el
+# 3er fallo se borra el servicio y el equipo queda accesible para diagnostico
+# manual.
+_ATTEMPT_DIR="/var/lib/IAC-IESMHP"
+_ATTEMPT_FILE="$_ATTEMPT_DIR/ansible-attempts"
+_MAX_ATTEMPTS=3
+mkdir -p "$_ATTEMPT_DIR"
+_ATTEMPT_NUM=$(cat "$_ATTEMPT_FILE" 2>/dev/null || echo 0)
+_ATTEMPT_NUM=$((_ATTEMPT_NUM + 1))
+echo "$_ATTEMPT_NUM" > "$_ATTEMPT_FILE"
+sync   # contador a disco YA: si el reinicio matase el flush, no se perderia
+echoamarillo "=== Intento $_ATTEMPT_NUM de $_MAX_ATTEMPTS de configuracion Ansible ==="
+
 echoamarillo "=== Lanzando ansible-playbook roles.yaml: $(date) ==="
 sync   # marcador garantizado en disco ANTES del paso que suele colgar
 ansible-playbook -i localhost, --connection=local roles.yaml \
     -e "ansible_python_interpreter=$PYINT" \
     --ssh-extra-args="-o StrictHostKeyChecking=no"
 _RC_ANSIBLE=$?
+# Dejar el rc grabado en el log INMEDIATAMENTE. Sin esto, si abajo se llama
+# a systemctl reboot tras un fallo, el consumidor del log (la process-
+# substitution con `tee`) puede no llegar a vaciar las ultimas lineas
+# (incluida la causa del reinicio) antes de que el kernel apague el equipo.
+echoamarillo "=== ansible-playbook devolvio rc=$_RC_ANSIBLE (intento $_ATTEMPT_NUM/$_MAX_ATTEMPTS) ==="
+sync
 if [ "$_RC_ANSIBLE" -ne 0 ]; then
-    echorojo "Error en la autoconfiguración ansible (ansible-playbook rc=$_RC_ANSIBLE)"
-    mostrar_mensaje "Sistema configurado con errores. Reiniciando en 10 segundos para intentarlo otra vez..."
-    sleep 10 && systemctl reboot -i
+    echorojo "Error en la autoconfiguracion ansible (rc=$_RC_ANSIBLE) - intento $_ATTEMPT_NUM/$_MAX_ATTEMPTS"
+    sync
+    if [ "$_ATTEMPT_NUM" -ge "$_MAX_ATTEMPTS" ]; then
+        # 3er fallo consecutivo: ya no reintentamos. Borramos el servicio
+        # para que el equipo arranque normal y se pueda diagnosticar a mano.
+        echorojo "Alcanzado el maximo de $_MAX_ATTEMPTS intentos sin exito - desactivando el servicio para diagnostico manual"
+        mostrar_mensaje "Configuracion Ansible fallida tras $_MAX_ATTEMPTS intentos. Servicio detenido. Revisar $FLOG"
+        rm -f "$_ATTEMPT_FILE"
+        systemctl disable 3-SetupPrimerInicio.service || true
+        rm -f /etc/systemd/system/3-SetupPrimerInicio.service
+        mv "$0" "$0.borrado" || true
+        sync
+        sleep 2   # dar tiempo al consumidor del log a drenar lo pendiente
+        exit 1
+    else
+        # Intento < MAX: reiniciar para que el servicio vuelva a lanzarse.
+        # ANTES del reboot drenamos sync + pequena espera para que las
+        # lineas de error de ansible queden en disco (en versiones previas,
+        # el reinicio rapido perdia esas lineas y el log no registraba el
+        # motivo del bucle).
+        mostrar_mensaje "Configuracion con errores (intento $_ATTEMPT_NUM/$_MAX_ATTEMPTS). Reiniciando en 10 s para reintentar..."
+        echoamarillo "Reintentando: se reiniciara para repetir el proceso (servicio NO borrado)"
+        sync
+        sleep 2   # consumidor (tee) drena lineas pendientes
+        sync
+        sleep 10 && systemctl reboot -i
+    fi
 
 else
-    echoverde "ansible-playbook finalizó correctamente (rc=0)"
+    echoverde "ansible-playbook finalizo correctamente (rc=0) en el intento $_ATTEMPT_NUM"
     sync   # asegura en disco el resultado (ok o error) de ansible antes de seguir
+    # Exito: reseteamos el contador para no acarrearlo si en el futuro este
+    # script (o uno equivalente) volviera a ejecutarse.
+    rm -f "$_ATTEMPT_FILE"
     echoverde "Desactivando y borrando el servicio de actualización en primer arranque..."
     systemctl disable 3-SetupPrimerInicio.service
     rm /etc/systemd/system/3-SetupPrimerInicio.service

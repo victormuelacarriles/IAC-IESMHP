@@ -157,6 +157,33 @@
     #     (ubuntu_drivers_install is defined and ubuntu_drivers_install is changed)
     #     or (nvidia_driver_pin is defined and nvidia_driver_pin is changed)
 
+    # Sustituto del reboot comentado: con --connection=local (lanzado por
+    # 3-SetupPrimerInicio.sh en el primer arranque) el modulo `reboot` falla
+    # porque intenta reconectarse via SSH a si mismo. Como 3-SetupPrimerInicio.sh
+    # YA reinicia el equipo al final del primer arranque tras el ansible, el
+    # reboot dentro del rol es redundante. En vez de reiniciar aqui, comprobamos
+    # que las tareas siguientes (nvidia-smi, ubuntu-drivers devices) no van a
+    # fallar y dejamos traza explicita en el log si el modulo aun no esta
+    # cargado (caso tipico: instalacion fresca sin reboot, el modulo se
+    # activara tras el reinicio final de 3-SetupPrimerInicio.sh).
+    - name: Comprobar si el módulo NVIDIA está cargado tras la instalación
+      shell: lsmod | awk '$1 ~ /^nvidia/ {print $1}'
+      register: nvidia_modules_loaded
+      changed_when: false
+      failed_when: false
+
+    - name: Avisar si el módulo NVIDIA aún no está cargado (se requiere reinicio)
+      debug:
+        msg: >
+          Driver NVIDIA instalado pero módulo aún no cargado en el kernel
+          actual. Los pasos siguientes (nvidia-smi) pueden no reflejar la
+          versión final; el reinicio que hace 3-SetupPrimerInicio.sh al
+          terminar el primer arranque activará el driver.
+      when:
+        - nvidia_modules_loaded is defined
+        - nvidia_modules_loaded.stdout is defined
+        - nvidia_modules_loaded.stdout | trim | length == 0
+
     - name: Comprobar versión instalada del driver NVIDIA
       command: nvidia-smi --query-gpu=driver_version --format=csv,noheader
       register: nvidia_version
