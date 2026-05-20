@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="22.23-20260519"
+VERSIONSCRIPT="23.0-20260520-zfs"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
@@ -42,6 +42,28 @@ paso "Inicio — $0 (vs$VERSIONSCRIPT) — chroot $(hostname)"
 info "RAIZLOG=$RAIZLOG  RAIZDISTRO=$RAIZDISTRO"
 info "Log completo : $LOG2"
 info "Fichero pasos: $STEPS"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cargar perfil y variables de partición pasadas por 1-SetupLiveCD.sh.
+# Se hace AQUÍ (antes del primer bloque) porque varios bloques posteriores
+# se ramifican según PERFIL (CEIABD = ZFS, DISTANCIA = ext4) y según existencia
+# de variables ZFS_*. Si el fichero no existe (re-ejecución manual del script
+# desde un sistema ya instalado), se asume DISTANCIA por compatibilidad.
+# ─────────────────────────────────────────────────────────────────────────────
+PARTS_FILE_GLOBAL=/tmp/.iac-partitions.env
+if [ -f "$PARTS_FILE_GLOBAL" ]; then
+    # shellcheck disable=SC1090
+    source "$PARTS_FILE_GLOBAL"
+    info "Perfil cargado: PERFIL=${PERFIL:-<no fijado>}"
+    if [ "$PERFIL" = "CEIABD" ]; then
+        info "  ZFS_POOL_HOME=${ZFS_POOL_HOME:-} HOME=${ZFS_HOME_DATASET:-} → ${ZFS_HOME_PARTID:-}"
+        info "  ZFS_POOL_DATA=${ZFS_POOL_DATA:-} DATA=${ZFS_DATA_DATASET:-} → ${ZFS_DATA_PARTID:-}"
+    fi
+else
+    info "No se encontró $PARTS_FILE_GLOBAL — asumiendo PERFIL=DISTANCIA (compatibilidad)"
+    PERFIL="${PERFIL:-DISTANCIA}"
+fi
+: "${PERFIL:=DISTANCIA}"   # default por si .env existe pero no la define
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Idioma, teclado y zona horaria"
@@ -211,67 +233,96 @@ paso "Configurar /etc/fstab"
 # ─────────────────────────────────────────────────────────────────────────────
 # lsblk dentro del chroot ve los mount points del HOST (/mnt, /mnt/boot/efi…),
 # no los del sistema instalado. Las particiones vienen del fichero creado por 1-SetupLiveCD.sh.
-PARTS_FILE=/tmp/.iac-partitions.env
-# El "disco grande" se monta como:
-#   - /home   en equipos 2×NVMe (Distancia): el disco grande NVMe es /home.
-#   - /datos  en equipos NVMe+SD (CEIABD): /home vive dentro de la raíz (NVMe,
-#             rápido) y el disco lento SD se monta como /datos.
-# 1-SetupLiveCD.sh decide esto por el tipo de disco grande y lo refleja en
-# PART_DATA (sd* → /datos, nvme* → /home). Mantenemos el mismo criterio aquí.
-if [ -f "$PARTS_FILE" ]; then
-    # shellcheck disable=SC1090
-    source "$PARTS_FILE"
-    EFI="${PART_EFI##*/}"
-    SWAP="${PART_SWAP##*/}"
-    ROOT="${PART_ROOT##*/}"
+# En CEIABD el "disco grande" (SDA) y la p4 del NVMe pequeño viven en ZFS:
+#   - rpool/home    montado en /home  (dedup + zstd, recordsize=64K)
+#   - tank/datos    montado en /datos (zstd sin dedup, recordsize=1M)
+# zfs-mount.service del sistema instalado los monta al arrancar leyendo
+# /etc/zfs/zpool.cache (copiado al sistema en 1-SetupLiveCD.sh). Por eso
+# /etc/fstab NO lleva entradas para /home ni /datos en CEIABD.
+#
+# En DISTANCIA el flujo es el clásico ext4: /home en el NVMe grande;
+# se mantiene la lógica histórica intacta.
+EFI="${PART_EFI##*/}"
+SWAP="${PART_SWAP##*/}"
+ROOT="${PART_ROOT##*/}"
+DATA_DEV=""
+DATA_MNT=""
+if [ "$PERFIL" = "DISTANCIA" ] && [ -n "${PART_DATA:-}" ]; then
     DATA_DEV="${PART_DATA##*/}"
     if [[ "$PART_DATA" == *nvme* ]]; then
         DATA_MNT="/home"
     else
         DATA_MNT="/datos"
     fi
-    ok "Particiones leídas: EFI=$EFI  SWAP=$SWAP  ROOT=$ROOT  DATA=$DATA_DEV → $DATA_MNT"
-else
-    err "AVISO: $PARTS_FILE no encontrado — detección automática (puede fallar en chroot)"
+fi
+
+if [ -z "$ROOT" ]; then
+    # Fallback con lsblk si no había .iac-partitions.env (caso de re-ejecución).
+    err "AVISO: variables PART_* no presentes — detección automática"
     EFI=$(lsblk  -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/boot/efi" {print $1}')
     SWAP=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "[SWAP]"        {print $1}')
     ROOT=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt"          {print $1}')
-    DATA_DEV=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/home" {print $1}')
-    if [ -n "$DATA_DEV" ]; then
-        DATA_MNT="/home"
-    else
-        DATA_DEV=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/datos" {print $1}')
-        DATA_MNT="/datos"
+    if [ "$PERFIL" = "DISTANCIA" ]; then
+        DATA_DEV=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/home" {print $1}')
+        if [ -n "$DATA_DEV" ]; then
+            DATA_MNT="/home"
+        else
+            DATA_DEV=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/datos" {print $1}')
+            DATA_MNT="/datos"
+        fi
     fi
 fi
 
-info "EFI=/dev/$EFI  SWAP=/dev/$SWAP  ROOT=/dev/$ROOT  DATA=/dev/$DATA_DEV → $DATA_MNT"
+if [ "$PERFIL" = "DISTANCIA" ]; then
+    ok "Particiones leídas: EFI=$EFI  SWAP=$SWAP  ROOT=$ROOT  DATA=$DATA_DEV → $DATA_MNT"
+else
+    ok "Particiones leídas: EFI=$EFI  SWAP=$SWAP  ROOT=$ROOT  (ZFS gestiona /home y /datos)"
+fi
+
+info "EFI=/dev/$EFI  SWAP=/dev/$SWAP  ROOT=/dev/$ROOT"
 [ -n "$ROOT" ] || { err "ERROR: no se pudo determinar la partición root"; exit 1; }
 
 UUID_ROOT=$(blkid -s UUID -o value "/dev/$ROOT")
 UUID_EFI=$(blkid  -s UUID -o value "/dev/$EFI")
-UUID_DATA=$(blkid -s UUID -o value "/dev/$DATA_DEV")
 UUID_SWAP=$(blkid -s UUID -o value "/dev/$SWAP")
-info "UUID ROOT=$UUID_ROOT  EFI=$UUID_EFI  DATA=$UUID_DATA ($DATA_MNT)  SWAP=$UUID_SWAP"
+UUID_DATA=""
+if [ -n "$DATA_DEV" ]; then
+    UUID_DATA=$(blkid -s UUID -o value "/dev/$DATA_DEV")
+fi
+info "UUID ROOT=$UUID_ROOT  EFI=$UUID_EFI  SWAP=$UUID_SWAP$( [ -n "$UUID_DATA" ] && echo "  DATA=$UUID_DATA ($DATA_MNT)")"
 
-# El punto de montaje del disco grande debe existir en el sistema instalado.
-# /home ya existe; /datos hay que crearlo. Lo dejamos accesible a todos los
-# usuarios (sticky bit, como /tmp) por ser un área de datos compartida.
+# Punto de montaje del disco grande (solo Distancia con /datos ext4).
+# En CEIABD, /datos lo gestiona ZFS (tank/datos) y no hay que crearlo aquí
+# — el chroot ve /datos como dataset montado vía el altroot del live CD.
 if [ "$DATA_MNT" = "/datos" ]; then
     mkdir -p /datos
     chmod 1777 /datos
     ok "Punto de montaje /datos creado (1777, área de datos compartida)"
 fi
 
-cat > /etc/fstab << EOF
-# /etc/fstab — generado por $0 el $(date)
+if [ "$PERFIL" = "DISTANCIA" ]; then
+    cat > /etc/fstab << EOF
+# /etc/fstab — generado por $0 el $(date) (perfil DISTANCIA, ext4)
 UUID=$UUID_ROOT  /          ext4  defaults  0 1
 UUID=$UUID_EFI   /boot/efi  vfat  umask=0077  0 1
 UUID=$UUID_DATA  $DATA_MNT      ext4  defaults  0 2
 UUID=$UUID_SWAP  none       swap  sw          0 0
 EOF
+    ok "fstab generado con UUIDs (disco grande → $DATA_MNT)"
+else
+    # CEIABD: ZFS monta /home y /datos vía zfs-mount.service en cada arranque.
+    # En fstab quedan solo /, /boot/efi y swap.
+    cat > /etc/fstab << EOF
+# /etc/fstab — generado por $0 el $(date) (perfil CEIABD, ZFS para /home y /datos)
+# /home  ← rpool/home  (zfs-mount.service, ver /etc/zfs/zpool.cache)
+# /datos ← tank/datos  (zfs-mount.service)
+UUID=$UUID_ROOT  /          ext4  defaults,noatime  0 1
+UUID=$UUID_EFI   /boot/efi  vfat  umask=0077        0 1
+UUID=$UUID_SWAP  none       swap  sw                0 0
+EOF
+    ok "fstab generado con UUIDs (/home y /datos los monta ZFS)"
+fi
 cat /etc/fstab
-ok "fstab generado con UUIDs (disco grande → $DATA_MNT)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Limpiar fuentes APT del Live CD (cdrom:)"
@@ -344,6 +395,68 @@ done
 ok "Internet disponible"
 
 # ─────────────────────────────────────────────────────────────────────────────
+if [ "$PERFIL" = "CEIABD" ]; then
+paso "Instalar ZFS en el sistema instalado y habilitar servicios"
+# ─────────────────────────────────────────────────────────────────────────────
+# Los pools rpool y tank YA existen y están importados (los creó 1-SetupLiveCD.sh
+# fuera del chroot con altroot=/mnt → dentro del chroot se ven en /home y /datos).
+# Aquí instalamos los binarios y el módulo DKMS dentro del sistema instalado
+# para que el primer arranque pueda importar y montar los pools sin depender
+# del entorno live.
+apt-get update -y -o Dpkg::Options::="--force-confold" >/dev/null
+
+# linux-headers-generic es necesario para que zfs-dkms pueda compilar el
+# módulo contra el kernel del sistema instalado.
+info "Instalando linux-headers-generic (requerido por zfs-dkms)..."
+DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" \
+    linux-headers-generic
+
+# Paquetes ZFS:
+#   zfsutils-linux : binarios (zpool, zfs, ...)
+#   zfs-zed        : daemon de eventos (scrub/errores → syslog/correo)
+#   zfs-dkms       : módulo DKMS — se recompila al actualizar el kernel
+#   zfs-initramfs  : hook que mete el módulo ZFS en el initramfs (necesario si
+#                    en algún momento se quisiera mover / a ZFS; por ahora /
+#                    sigue siendo ext4, pero su presencia no estorba).
+info "Instalando paquetes ZFS..."
+DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" \
+    zfsutils-linux zfs-zed zfs-dkms zfs-initramfs \
+    || err "Instalación ZFS falló — el primer arranque tendrá que reinstalar (3-SetupPrimerInicio.sh)"
+
+# Habilitar servicios systemd. apt los activa por defecto al instalar; lo
+# hacemos explícito por robustez (si en el futuro un postinst los deshabilita
+# por algún preset, esta línea los reactiva).
+for _svc in zfs.target zfs-import-cache.service zfs-mount.service zfs-zed.service; do
+    if systemctl enable "$_svc" 2>/dev/null; then
+        ok "  systemctl enable $_svc"
+    else
+        info "  $_svc no presente o ya habilitado"
+    fi
+done
+# Deshabilitar zfs-import-scan.service: con cachefile activo, escanear todos
+# los discos cada arranque es redundante y aumenta el tiempo de boot.
+systemctl disable zfs-import-scan.service 2>/dev/null || true
+
+# Refrescar cachefile desde el chroot. Los pools heredan el contexto del live;
+# regrabar el cachefile con los binarios del sistema instalado garantiza que
+# las propiedades y composición quedan consistentes con su hostid.
+# (El fichero /etc/hostid se copió a /mnt en 1-SetupLiveCD.sh tras el rsync.)
+zpool set cachefile=/etc/zfs/zpool.cache rpool 2>/dev/null \
+    && ok "  cachefile refrescado para rpool" \
+    || info "  zpool set rpool cachefile no fue posible (cachefile copiado del live sigue válido)"
+zpool set cachefile=/etc/zfs/zpool.cache tank 2>/dev/null \
+    && ok "  cachefile refrescado para tank" \
+    || info "  zpool set tank cachefile no fue posible"
+
+ok "ZFS instalado y configurado en el chroot"
+info "zpool status:"
+zpool status 2>/dev/null | sed 's/^/  /' || info "  (zpool status no disponible)"
+info "zfs list:"
+zfs list -o name,used,avail,refer,mountpoint 2>/dev/null | sed 's/^/  /' || info "  (zfs list no disponible)"
+
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 paso "MAC, hostname y claves SSH autorizadas"
 # ─────────────────────────────────────────────────────────────────────────────
 MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
@@ -381,11 +494,52 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Usuarios (root y usuario)"
 # ─────────────────────────────────────────────────────────────────────────────
+# CEIABD: reestructurar rpool/home antes de crear el usuario.
+# En FASE 1 (1-SetupLiveCD.sh) creamos un único dataset rpool/home canmount=on
+# para que el rsync volcara /home (incluido /home/ubuntu del live) al pool.
+# Ahora lo convertimos en la estructura definitiva:
+#   rpool/home                — contenedor (canmount=off, mountpoint=/home)
+#   rpool/home/<usuario>      — dataset por usuario (canmount=on, quota=40G)
+# Así cada usuario podrá tener su propia cuota y snapshots @inicial / @diario
+# vía /usr/local/sbin/nuevo-alumno.sh.
+if [ "$PERFIL" = "CEIABD" ] && zpool list rpool >/dev/null 2>&1; then
+    info "Reestructurando rpool/home (contenedor + dataset por usuario)..."
+    if zfs list -H -o name rpool/home >/dev/null 2>&1; then
+        # Destruir el dataset único de FASE 1 con todo su contenido.
+        # /home/ubuntu (del rsync del live) se va con esto — el usuario
+        # 'ubuntu' lo eliminamos completo en el paso siguiente.
+        zfs umount rpool/home 2>/dev/null || true
+        zfs destroy -r rpool/home || err "No se pudo destruir rpool/home (revisar procesos con /home abierto)"
+    fi
+    zfs create -o canmount=off -o mountpoint=/home rpool/home
+    ok "rpool/home recreado como contenedor (canmount=off, mountpoint=/home)"
+
+    # Dataset del usuario inicial.
+    # Cuota 40 G: razonable para el usuario de control del IES; los alumnos
+    # se crean con /usr/local/sbin/nuevo-alumno.sh que acepta una cuota
+    # distinta por parámetro.
+    zfs create -o canmount=on rpool/home/usuario
+    zfs set quota=40G rpool/home/usuario
+    ok "Dataset rpool/home/usuario creado (quota=40G, montado en /home/usuario)"
+fi
+
 if id usuario &>/dev/null; then
     info "Usuario 'usuario' ya existe"
 else
-    useradd -m -s /bin/bash -p '*' usuario
-    ok "Usuario 'usuario' creado"
+    if [ "$PERFIL" = "CEIABD" ]; then
+        # /home/usuario ya existe (dataset ZFS recién montado vacío).
+        # useradd -m respeta el dir si existe y solo copia skel encima.
+        useradd -m -k /etc/skel -d /home/usuario -s /bin/bash -p '*' usuario
+        # Por si la versión de useradd no copiara skel al ver el dir existente:
+        if [ -z "$(ls -A /home/usuario 2>/dev/null)" ] && [ -d /etc/skel ]; then
+            cp -aT /etc/skel /home/usuario/. 2>/dev/null || true
+        fi
+        chown -R usuario:usuario /home/usuario
+        ok "Usuario 'usuario' creado con home en dataset ZFS rpool/home/usuario"
+    else
+        useradd -m -s /bin/bash -p '*' usuario
+        ok "Usuario 'usuario' creado"
+    fi
 fi
 adduser usuario sudo 2>/dev/null || usermod -aG sudo usuario
 ok "Usuario 'usuario' en grupo sudo"
@@ -435,6 +589,117 @@ if [ -f /root/.ssh/authorized_keys ]; then
     chmod 600 /home/usuario/.ssh/authorized_keys
     ok "authorized_keys copiado a /home/usuario/.ssh/"
 fi
+
+# CEIABD: snapshot @inicial del usuario recién creado. Útil como ancla de
+# rollback ("vuelve a como estaba justo tras la instalación") y como muestra
+# del flujo que /usr/local/sbin/nuevo-alumno.sh aplicará a los alumnos.
+if [ "$PERFIL" = "CEIABD" ] && zfs list -H -o name rpool/home/usuario >/dev/null 2>&1; then
+    if zfs list -H -t snapshot rpool/home/usuario@inicial >/dev/null 2>&1; then
+        info "Snapshot rpool/home/usuario@inicial ya existe"
+    else
+        zfs snapshot rpool/home/usuario@inicial \
+            && ok "Snapshot rpool/home/usuario@inicial creado" \
+            || info "No se pudo crear el snapshot inicial (no crítico)"
+    fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+if [ "$PERFIL" = "CEIABD" ]; then
+paso "Helper /usr/local/sbin/nuevo-alumno.sh (alta de usuarios en CEIABD)"
+# ─────────────────────────────────────────────────────────────────────────────
+# Se instala SOLO en CEIABD porque necesita rpool/home como contenedor ZFS.
+# Lo invoca el admin del IES por SSH:  sudo nuevo-alumno.sh <usuario> [cuota]
+# Pasos: crea dataset rpool/home/<u> → useradd con home en el dataset → copia
+# skel → permisos → cuota → snapshot @inicial → passwd interactivo.
+cat > /usr/local/sbin/nuevo-alumno.sh << 'NUEVOALUMNOEOF'
+#!/bin/bash
+# Alta de un usuario nuevo en el equipo CEIABD (ZFS).
+# Crea su dataset propio dentro de rpool/home con cuota y snapshot inicial.
+#
+# Uso:
+#   sudo nuevo-alumno.sh <usuario> [cuota]
+# Ejemplos:
+#   sudo nuevo-alumno.sh alvaro
+#   sudo nuevo-alumno.sh maria 60G
+set -e
+
+U="${1:?Uso: $0 <usuario> [cuota=40G]}"
+QUOTA="${2:-40G}"
+POOL_HOME="rpool"
+DATASET="${POOL_HOME}/home/${U}"
+HOME_DIR="/home/${U}"
+
+# ── Validaciones ───────────────────────────────────────────────────────────
+if [ "$(id -u)" -ne 0 ]; then
+    echo "ERROR: este script debe ejecutarse como root (sudo)." >&2
+    exit 1
+fi
+if ! zpool list -H -o name "$POOL_HOME" >/dev/null 2>&1; then
+    echo "ERROR: el zpool '$POOL_HOME' no existe en este equipo." >&2
+    echo "       Este helper requiere ZFS (perfil CEIABD)." >&2
+    exit 1
+fi
+if id "$U" >/dev/null 2>&1; then
+    echo "ERROR: el usuario '$U' ya existe en /etc/passwd." >&2
+    exit 1
+fi
+if zfs list -H -o name "$DATASET" >/dev/null 2>&1; then
+    echo "ERROR: el dataset '$DATASET' ya existe." >&2
+    echo "       Borralo con: zfs destroy -r $DATASET   (perderás los datos)" >&2
+    exit 1
+fi
+case "$U" in
+    *[!a-z0-9_-]*|-*|[0-9]*)
+        echo "ERROR: nombre de usuario no válido: '$U'" >&2
+        echo "       Solo se permiten minúsculas, números, guion y _, sin empezar por número/guion." >&2
+        exit 1
+        ;;
+esac
+
+# ── Grupos opcionales según los que existen en este sistema ────────────────
+GROUPS_EXTRA="sudo"
+for g in vboxusers libvirt docker; do
+    if getent group "$g" >/dev/null 2>&1; then
+        GROUPS_EXTRA="${GROUPS_EXTRA},${g}"
+    fi
+done
+
+# ── Crear dataset + usuario ────────────────────────────────────────────────
+echo "[+] Creando dataset $DATASET ..."
+zfs create -o canmount=on "$DATASET"
+zfs set quota="$QUOTA" "$DATASET"
+
+echo "[+] Creando usuario $U (grupos: $GROUPS_EXTRA, home: $HOME_DIR) ..."
+useradd -k /etc/skel -d "$HOME_DIR" -s /bin/bash -G "$GROUPS_EXTRA" "$U"
+
+# Si /home/$U quedó vacío (zfs create lo monta vacío), copiar skel manualmente.
+# useradd sin -m no toca el home; con -m sí, pero -m + dir existente no siempre
+# copia skel. Mejor copiar a mano de forma idempotente.
+if [ -z "$(ls -A "$HOME_DIR" 2>/dev/null)" ] && [ -d /etc/skel ]; then
+    cp -aT /etc/skel "$HOME_DIR/."
+fi
+chown -R "$U:$U" "$HOME_DIR"
+
+# ── Snapshot inicial ───────────────────────────────────────────────────────
+zfs snapshot "${DATASET}@inicial"
+echo "[+] Snapshot ${DATASET}@inicial creado"
+
+# ── Contraseña interactiva ─────────────────────────────────────────────────
+echo "[+] Establece la contraseña para '$U':"
+passwd "$U"
+
+echo
+echo "Usuario '$U' creado:"
+echo "  - home    : $HOME_DIR"
+echo "  - dataset : $DATASET (quota=$QUOTA)"
+echo "  - grupos  : $GROUPS_EXTRA"
+echo "  - snapshot: ${DATASET}@inicial"
+NUEVOALUMNOEOF
+chmod +x /usr/local/sbin/nuevo-alumno.sh
+ok "Helper /usr/local/sbin/nuevo-alumno.sh instalado"
+info "Uso: sudo nuevo-alumno.sh <usuario> [cuota=40G]"
+
+fi  # end if PERFIL=CEIABD para el helper
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Eliminar usuario ubuntu (Live CD) y deshabilitar auto-login GDM"

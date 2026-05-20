@@ -5,7 +5,7 @@
 #  Funciona tanto dentro del chroot (llamado desde 2-SetupSOdesdeLiveCD.sh)
 #  como en el sistema ya arrancado (llamado desde 3-SetupPrimerInicio.sh).
 # =============================================================================
-VERSIONSCRIPT="1.2-20260502"
+VERSIONSCRIPT="1.3-20260520-zfs"
 REPO="IAC-IESMHP"
 DISTRO="Ubuntu"
 RAIZLOG="/var/log/$REPO/$DISTRO"
@@ -274,6 +274,92 @@ if systemctl is-system-running &>/dev/null 2>&1; then
         _avs "SSH: no activo"
     fi
 fi
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. ZFS — solo si hay zpool (perfil CEIABD). En Distancia no hay nada que ver.
+if command -v zpool >/dev/null 2>&1 && zpool list -H 2>/dev/null | grep -q .; then
+    _sep "9. ZFS (perfil con pools)"
+
+    _inf "Pools detectados:"
+    zpool list -o name,size,allocated,free,fragmentation,capacity,dedupratio,health 2>/dev/null | sed 's/^/  /' | tee -a "$LOGFILE"
+
+    # Estado de los vdevs
+    if zpool status -x 2>/dev/null | grep -q 'all pools are healthy'; then
+        _ok "  Todos los pools en estado healthy"
+    else
+        _err "  Algún pool no está healthy — revisar 'zpool status' a mano"
+        zpool status 2>/dev/null | sed 's/^/    /' | tee -a "$LOGFILE"
+    fi
+
+    # Datasets clave esperados en CEIABD
+    for _ds in rpool/home rpool/home/usuario tank/datos; do
+        if zfs list -H -o name "$_ds" >/dev/null 2>&1; then
+            _MP=$(zfs get -H -o value mountpoint "$_ds" 2>/dev/null)
+            _MOUNTED=$(zfs get -H -o value mounted "$_ds" 2>/dev/null)
+            _OK_MNT="?"
+            case "$_MOUNTED:$_MP" in
+                yes:/home/usuario) _OK_MNT="OK" ;;
+                yes:/datos)        _OK_MNT="OK" ;;
+                no:/home)          _OK_MNT="OK"  ;;   # contenedor, canmount=off
+                *)                 _OK_MNT="REVISAR ($_MOUNTED, $_MP)" ;;
+            esac
+            _ok "  $_ds → mountpoint=$_MP mounted=$_MOUNTED  [$_OK_MNT]"
+        else
+            _avs "  Dataset $_ds NO encontrado (esperado en CEIABD)"
+        fi
+    done
+
+    # Propiedades del pool rpool relevantes para dedup/compresión
+    if zfs list -H -o name rpool >/dev/null 2>&1; then
+        _COMP=$(zfs get -H -o value compression rpool 2>/dev/null)
+        _DEDUP=$(zfs get -H -o value dedup rpool 2>/dev/null)
+        _RECS=$(zfs get -H -o value recordsize rpool/home 2>/dev/null)
+        _DRATIO=$(zpool get -H -o value dedupratio rpool 2>/dev/null)
+        _inf "  rpool       : compression=$_COMP  dedup=$_DEDUP  dedupratio=$_DRATIO"
+        _inf "  rpool/home  : recordsize=$_RECS"
+        # Fast Dedup
+        if zpool get -H -o property,value all rpool 2>/dev/null | grep -q '^feature@fast_dedup.*\bactive\|^feature@fast_dedup.*\benabled'; then
+            _ok "  Fast Dedup activo (OpenZFS ≥ 2.3)"
+        else
+            _inf "  Fast Dedup NO activo (dedup clásica)"
+        fi
+    fi
+
+    # Servicios systemd ZFS (solo informativo si el sistema está arrancado)
+    if systemctl is-system-running &>/dev/null 2>&1; then
+        for _svc in zfs-import-cache.service zfs-mount.service zfs-zed.service; do
+            if systemctl is-enabled --quiet "$_svc" 2>/dev/null; then
+                if systemctl is-active --quiet "$_svc" 2>/dev/null; then
+                    _ok "  $_svc enabled+active"
+                else
+                    _avs "  $_svc enabled pero NO active"
+                fi
+            else
+                _avs "  $_svc no habilitado"
+            fi
+        done
+    fi
+
+    # Módulo ZFS en initramfs (informativo: con / en ext4 no es estrictamente
+    # necesario, pero zfs-initramfs lo añade por defecto y es señal de salud).
+    if [ -n "${KVER:-}" ] && [ -f "/boot/initrd.img-${KVER}" ]; then
+        if lsinitramfs "/boot/initrd.img-${KVER}" 2>/dev/null | grep -q 'zfs\.ko'; then
+            _ok "  Módulo zfs.ko presente en initramfs"
+        else
+            _inf "  Módulo zfs.ko no presente en initramfs (no crítico: / es ext4)"
+        fi
+    fi
+
+    # Helper de alta de usuarios
+    if [ -x /usr/local/sbin/nuevo-alumno.sh ]; then
+        _ok "  Helper /usr/local/sbin/nuevo-alumno.sh instalado"
+    else
+        _avs "  Helper /usr/local/sbin/nuevo-alumno.sh NO instalado"
+    fi
+else
+    _sep "9. ZFS"
+    _inf "  Sin zpools (perfil DISTANCIA o ZFS no instalado) — sección omitida"
+fi
+
 IP=$(hostname -I | awk '{print $1}')
 # ─────────────────────────────────────────────────────────────────────────────
 echo | tee -a "$LOGFILE"

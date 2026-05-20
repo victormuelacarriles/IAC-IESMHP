@@ -80,18 +80,95 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 - Espera red con 12 reintentos (5 s cada uno) antes de clonar el repo.
 - El repo se clona en `/opt/IAC-IESMHP`.
 
-### 1-SetupLiveCD.sh — Particionado e instalación del FS
+### 1-SetupLiveCD.sh — Particionado e instalación del FS (v23.x-zfs)
 - **Detección de discos**: ignora USB y loop; usa `lsblk -dno NAME,SIZE,TRAN`.
-  - 2×NVMe (Distancia) → pequeño=`/`, grande=`/home`
-  - NVMe+SD (CEIABD) → NVMe=`/` (con `/home` dentro de la raíz), SD=`/datos`
-- **Esquema de particiones** (disco pequeño, GPT): EFI 512 MiB | swap 8 GiB | root resto. El disco grande lleva una única partición ext4: en Distancia (NVMe) se monta en `/home`; en CEIABD (SD) se monta en `/datos` y `/home` queda dentro de la raíz NVMe (rápido). El criterio (`sd*`→`/datos`, `nvme*`→`/home`) lo fija `1-SetupLiveCD.sh` en la variable `PART_DATA` del `.iac-partitions.env`.
+  Fija una variable explícita `PERFIL` (`CEIABD` | `DISTANCIA`) que se usa en
+  todos los bloques que se ramifican según hardware.
+  - 2×NVMe → `PERFIL=DISTANCIA` (pequeño=`/`, grande=`/home`)
+  - NVMe+SD → `PERFIL=CEIABD` (NVMe lleva `/` ext4 + `rpool` ZFS; SD lleva `tank` ZFS)
+- **Esquema de particiones**:
+  - **DISTANCIA (sin ZFS, intacto respecto a v22.x)**: NVMe pequeño con EFI
+    512 MiB + swap 8 GiB + raíz ext4 resto; NVMe grande con una partición
+    ext4 íntegra para `/home`.
+  - **CEIABD (ZFS, v23.0+)**: NVMe pequeño con `sgdisk` y tipos GPT correctos:
+    `p1` 1 GiB EF00 (EFI) + `p2` 16 GiB 8200 (swap) + `p3` 100 GiB 8300
+    (`/` ext4) + `p4` resto BF00 (zpool `rpool` → `/home`); SDA grande con
+    una única BF00 íntegra (zpool `tank` → `/datos`).
+- **ZFS en CEIABD** (bloque añadido tras montar `/`+`/boot/efi`):
+  - Instala `zfsutils-linux` en el entorno live (`apt-get install -y`,
+    `update-initramfs` ya enmascarado por `0b-Github.sh`).
+  - Detecta **Fast Dedup** (OpenZFS ≥ 2.3) y lo activa con
+    `-o feature@fast_dedup=enabled` (~50% menos RAM en DDT que dedup
+    clásico).
+  - Limpia pools previos (`zpool list` + `zpool import -d /dev/disk/by-id`)
+    por si la VM se reinstala iterativamente.
+  - `zpool create rpool` con `ashift=12, autotrim=on,
+    cachefile=/etc/zfs/zpool.cache, compression=zstd, dedup=on,
+    recordsize=64K, acltype=posixacl, xattr=sa, atime=off, -R /mnt` sobre
+    `/dev/disk/by-id/...-part4`. Crea `rpool/home` con `canmount=on
+    mountpoint=/home` (un único dataset para que el rsync vuelque /home al
+    pool — `2-SetupSOdesdeLiveCD.sh` lo refina luego en estructura
+    contenedor + hijo por usuario).
+  - `zpool create tank` análogo pero **sin dedup**, `recordsize=1M`,
+    sobre el SDA entero. `zfs create tank/datos` con `mountpoint=/datos`,
+    `setuid=off`, `devices=off`; `chmod 1777`.
 - **Capas squashfs**: Ubuntu 26.04 combina `minimal.squashfs + minimal.standard.squashfs + minimal.standard.live.squashfs` con overlayfs en `/tmp/merged`; Ubuntu <24.04 usa `filesystem.squashfs` único.
 - Copia el FS con `rsync` (excluyendo `/etc/fstab` y `/etc/machine-id`).
-- Pasa las particiones al chroot mediante `/mnt/tmp/.iac-partitions.env` porque `lsblk` dentro del chroot ve los mount points del host, no del sistema instalado.
+- **Post-rsync (CEIABD)**: copia `/etc/zfs/zpool.cache` y `/etc/hostid` del
+  live a `/mnt/etc/zfs/` y `/mnt/etc/hostid` para que `zfs-import-cache`
+  del sistema instalado importe los pools sin escanear discos y sin `-f`.
+- Pasa las particiones al chroot mediante `/mnt/tmp/.iac-partitions.env`.
+  El formato del fichero ahora incluye `PERFIL=` y, solo en CEIABD,
+  variables `ZFS_POOL_HOME=rpool`, `ZFS_HOME_DATASET=rpool/home`,
+  `ZFS_HOME_PARTID=<by-id>`, `ZFS_POOL_DATA=tank`,
+  `ZFS_DATA_DATASET=tank/datos`, `ZFS_DATA_PARTID=<by-id>`. `PART_DATA`
+  queda vacío en CEIABD como marcador.
+- **Pre-reboot (CEIABD)**: tras `Correcto` del script 2 y antes del
+  `reboot`, desmonta bind-mounts virtuales del chroot, `zpool sync` y
+  `zpool export rpool tank`. Sin esto el sistema instalado vería los
+  pools "in use" por el hostid del live. En rama de fallo NO exporta:
+  los pools siguen accesibles desde `/mnt` para diagnóstico manual.
 - Si `2-SetupSOdesdeLiveCD.sh` termina con la línea literal `Correcto`, reinicia automáticamente; si no, espera 100000 s para diagnóstico.
 
-### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot (v22.23-20260519)
-- Genera `/etc/fstab` con UUIDs reales leídos de `blkid`. Lee `PART_DATA` del `.iac-partitions.env`: si es `nvme*` el disco grande va a `/home` (Distancia, 2×NVMe); si no, va a `/datos` (CEIABD, NVMe+SD) y se crea el punto de montaje `/datos` con permisos `1777` (sticky, área de datos compartida). El fallback sin fichero detecta `/mnt/home` o `/mnt/datos`.
+### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot (v23.0-20260520-zfs)
+- **Preámbulo**: carga `.iac-partitions.env` AL INICIO (antes del primer
+  `paso`) y deja la variable `PERFIL` disponible globalmente. Si el fichero
+  no existe (re-ejecución manual desde un sistema ya instalado), asume
+  `PERFIL=DISTANCIA`.
+- **Genera `/etc/fstab` bifurcado por perfil**:
+  - **DISTANCIA**: 4 líneas como antes (`/`, `/boot/efi`, `/home` o
+    `/datos` ext4, `swap`). El criterio `sd*`→`/datos`, `nvme*`→`/home`
+    lo decide `PART_DATA` del `.iac-partitions.env`.
+  - **CEIABD**: 3 líneas (`/`, `/boot/efi`, `swap`). `/home` lo monta
+    `rpool/home/<usuario>` y `/datos` lo monta `tank/datos` vía
+    `zfs-mount.service`; ambas entradas SE OMITEN del fstab. La raíz lleva
+    `defaults,noatime`.
+- **Bloque ZFS (solo CEIABD, tras "Verificar conectividad")**:
+  - Instala `linux-headers-generic` (prerequisito de `zfs-dkms`) y luego
+    `zfsutils-linux + zfs-zed + zfs-dkms + zfs-initramfs` con
+    `DEBIAN_FRONTEND=noninteractive` y `Dpkg::Options::="--force-confold"`.
+  - `systemctl enable zfs.target zfs-import-cache zfs-mount zfs-zed` y
+    `systemctl disable zfs-import-scan` (cachefile activo → no hace falta
+    escanear discos en cada boot).
+  - `zpool set cachefile=/etc/zfs/zpool.cache` para `rpool` y `tank`,
+    refrescando el cachefile con los binarios del sistema instalado.
+- **Reestructuración `rpool/home`** (en el bloque "Usuarios", solo CEIABD):
+  - En FASE 1 (`1-SetupLiveCD.sh`) era `rpool/home canmount=on`
+    (dataset único). Ahora se destruye y recrea como contenedor
+    `canmount=off mountpoint=/home`.
+  - Se crea `rpool/home/usuario` con `canmount=on`, `quota=40G`.
+    `mountpoint` heredado del padre → `/home/usuario`.
+  - `useradd -d /home/usuario` sin `-m` (el dir ya existe como dataset
+    montado), seguido de `cp -aT /etc/skel /home/usuario/.` + `chown -R`.
+  - Snapshot `rpool/home/usuario@inicial` tras configurar `authorized_keys`.
+- **Helper `/usr/local/sbin/nuevo-alumno.sh`** (solo CEIABD): generado
+  inline con heredoc. Acepta `<usuario> [cuota=40G]`. Crea
+  `rpool/home/<u>` con cuota, `useradd` con grupos (`sudo` + opcionales
+  `vboxusers/libvirt/docker` si existen), copia `/etc/skel` + permisos,
+  snapshot `@inicial`, y `passwd` interactivo al final. **Uso**: `sudo
+  nuevo-alumno.sh alvaro` o `sudo nuevo-alumno.sh maria 60G`.
+- Genera fstab con UUIDs reales leídos de `blkid` (PART_EFI/SWAP/ROOT del
+  `.iac-partitions.env`).
 - **Limpia fuentes APT del Live CD (`cdrom:`)**: el rsync arrastra al sistema instalado la entrada `deb cdrom:[Ubuntu ...]/ resolute main` (o el equivalente DEB822 en `/etc/apt/sources.list.d/*.sources`) que el Live CD añade automáticamente. Sin limpiarla, `apt update` falla con "El repositorio file:/cdrom ... no tiene un fichero de Publicación". El paso depura `sources.list` y `*.list` con `sed`, y elimina los `.sources` (DEB822) cuyo `URIs:` apunte a `cdrom:`.
 - **Fondo de escritorio** (dos capas): GSettings schema override (`99-iac-iesmhp-wallpaper.gschema.override`) como valor predeterminado compilado, más `dconf system-db:local` como override en runtime. Si `dconf update` falla en chroot, la capa GSettings garantiza el fondo igualmente.
 - **Plymouth logos**: copia `bgrt-fallback.png` y `watermark.png` desde `imagenesIES/` a los temas spinner/bgrt **antes** de `update-initramfs`, para que la imagen instalada use los logos del IES.
@@ -135,8 +212,8 @@ La fase Ansible (software, NFS de aula, drivers, claves SSH…) está **document
 - `Ubuntu/ansible/roles/<rol>/CLAUDE.md` — un fichero por rol (`basicos`, `certificados`, `comparteaula` + legacy `comparteaula32`/`comparteaula72`, `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `contenedores`) con tareas, variables e issues conocidos.
 - **Al diagnosticar/modificar la fase Ansible, leer primero esos CLAUDE.md** (sobre todo el de `Ubuntu/ansible/` para saber qué roles están activos en `roles.yaml`).
 
-### 4-Comprobaciones.sh — Diagnóstico (v1.2-20260502)
-Comprueba en 8 secciones: (1) kernel+initramfs+NVMe+casper, (2) grub.cfg con UUIDs+línea initrd, (3) fstab vs blkid, (4) lsblk particiones, (5) paquetes clave (casper por ficheros en disco, no dpkg; ubiquity; dpkg --audit), (6) initramfs-tools config (MODULES=most, RESUME=none), (7) GRUB EFI instalado (grubx64.efi, módulos), (8) servicios systemd fallidos + SSH (solo si sistema arrancado, no en chroot). Genera resumen ERRORES/AVISOS al final. **Cuando ERRORES=0, reinicia automáticamente tras cuenta atrás de 30 s.** Útil como primer análisis al pegar un log.
+### 4-Comprobaciones.sh — Diagnóstico (v1.3-20260520-zfs)
+Comprueba en 9 secciones: (1) kernel+initramfs+NVMe+casper, (2) grub.cfg con UUIDs+línea initrd, (3) fstab vs blkid, (4) lsblk particiones, (5) paquetes clave (casper por ficheros en disco, no dpkg; ubiquity; dpkg --audit), (6) initramfs-tools config (MODULES=most, RESUME=none), (7) GRUB EFI instalado (grubx64.efi, módulos), (8) servicios systemd fallidos + SSH (solo si sistema arrancado, no en chroot), **(9) ZFS — solo si hay zpool importado: salud de pools, datasets esperados, propiedades dedup/compresión/fast_dedup, servicios systemd zfs-*, módulo zfs.ko en initramfs, helper nuevo-alumno.sh**. Genera resumen ERRORES/AVISOS al final. **Cuando ERRORES=0, reinicia automáticamente tras cuenta atrás de 30 s.** Útil como primer análisis al pegar un log.
 
 **Falsos positivos conocidos en 4-Comprobaciones.sh** — verificar antes de asumir que el sistema está roto:
 
@@ -155,8 +232,91 @@ Comprueba en 8 secciones: (1) kernel+initramfs+NVMe+casper, (2) grub.cfg con UUI
 
 | Aula      | Disco pequeño       | Disco grande      |
 |-----------|---------------------|-------------------|
-| Distancia | NVMe 0.5 TB (/, EFI, swap) | NVMe 2.0 TB (/home) |
-| CEIABD    | NVMe 0.5 TB (/, EFI, swap, /home) | SDA  1.0 TB (/datos) |
+| Distancia | NVMe 0.5 TB (EFI 512M, swap 8G, `/` ext4 resto) | NVMe 2.0 TB (`/home` ext4) |
+| CEIABD    | NVMe 0.5 TB (EFI 1G, swap 16G, `/` 100G ext4, p4 ZFS → `rpool`) | SDA 1.0 TB (ZFS → `tank` → `/datos`) |
+
+**Distancia** mantiene ext4 íntegro (sin ZFS). **CEIABD** lleva ZFS en `/home`
+(zpool `rpool` con dedup + zstd) y `/datos` (zpool `tank` con zstd). Detalle
+operativo en la sección "ZFS — operación" más abajo.
+
+---
+
+## ZFS — operación (solo CEIABD)
+
+### Pools y datasets
+
+```
+rpool                         (ashift=12, autotrim=on, compression=zstd, dedup=on,
+                               recordsize=64K, feature@fast_dedup=enabled si ≥ 2.3)
+└── rpool/home                (canmount=off, mountpoint=/home — contenedor)
+    ├── rpool/home/usuario    (canmount=on, mountpoint=/home/usuario, quota=40G)
+    └── rpool/home/<alumno>   (creado por /usr/local/sbin/nuevo-alumno.sh)
+
+tank                          (ashift=12, autotrim=on, compression=zstd, recordsize=1M)
+└── tank/datos                (canmount=on, mountpoint=/datos, setuid=off,
+                               devices=off, permisos 1777)
+```
+
+- `/etc/zfs/zpool.cache` se copia desde el live al sistema instalado para que
+  `zfs-import-cache.service` importe los pools sin escanear discos al boot.
+- `/etc/hostid` se copia también para que `zfs-import-cache` no necesite `-f`
+  (los labels ZFS guardan el hostid del creador).
+- `/etc/fstab` NO contiene entradas para `/home` ni `/datos`: las monta
+  `zfs-mount.service`.
+
+### Alta de un usuario nuevo
+
+```bash
+sudo /usr/local/sbin/nuevo-alumno.sh <usuario> [cuota=40G]
+# Ejemplos:
+sudo nuevo-alumno.sh alvaro
+sudo nuevo-alumno.sh maria 60G
+```
+
+El helper crea `rpool/home/<u>` con cuota, hace `useradd` con grupos
+detectados dinámicamente (`sudo` + opcionales `vboxusers/libvirt/docker`),
+copia `/etc/skel`, snapshot `@inicial` y pide contraseña interactiva.
+
+### Operaciones habituales
+
+```bash
+# Estado y espacio
+zpool status            # salud de vdevs
+zpool list              # tamaño, dedupratio, capacidad
+zfs list                # datasets, used, avail, mountpoint
+zfs list -t snapshot    # snapshots existentes
+
+# Ratio de deduplicación (clave para decidir si compensa)
+zpool get dedupratio rpool
+
+# Rollback al snapshot @inicial de un usuario
+zfs rollback rpool/home/<u>@inicial
+
+# Snapshot diario manual (cron sugerido)
+zfs snapshot rpool/home/<u>@$(date +%Y%m%d)
+
+# Borrar snapshots antiguos
+zfs list -H -o name -t snapshot rpool/home/<u> | grep -v '@inicial' | xargs -r -n1 zfs destroy
+
+# Cambiar cuota
+zfs set quota=80G rpool/home/<u>
+
+# Backup vía zfs send (incremental, requiere snapshot común)
+zfs snapshot rpool/home/<u>@backup-20260601
+zfs send -i @inicial rpool/home/<u>@backup-20260601 | ssh backup-host "zfs recv tank-backup/<u>"
+
+# Scrub manual (programado por zfs-zed mensualmente por defecto)
+zpool scrub rpool
+zpool scrub tank
+```
+
+### Diagnóstico
+
+`4-Comprobaciones.sh` sección 9 cubre: salud de pools, datasets esperados
+(`rpool/home`, `rpool/home/usuario`, `tank/datos`), propiedades
+(`compression`, `dedup`, `recordsize`, `dedupratio`, feature `fast_dedup`),
+servicios systemd (`zfs-import-cache`, `zfs-mount`, `zfs-zed`), módulo
+`zfs.ko` en initramfs y presencia del helper `nuevo-alumno.sh`.
 
 ---
 
