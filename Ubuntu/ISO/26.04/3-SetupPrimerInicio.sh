@@ -349,34 +349,37 @@ ansible-playbook -i localhost, --connection=local roles.yaml \
 _RC_ANSIBLE=$?
 if [ "$_RC_ANSIBLE" -ne 0 ]; then
     echorojo "Error en la autoconfiguración ansible (ansible-playbook rc=$_RC_ANSIBLE)"
+    mostrar_mensaje "Sistema configurado con errores. Reiniciando en 10 segundos para intentarlo otra vez..."
+    sleep 10 && systemctl reboot -i
+
 else
     echoverde "ansible-playbook finalizó correctamente (rc=0)"
-
+    sync   # asegura en disco el resultado (ok o error) de ansible antes de seguir
     echoverde "Desactivando y borrando el servicio de actualización en primer arranque..."
     systemctl disable 3-SetupPrimerInicio.service
     rm /etc/systemd/system/3-SetupPrimerInicio.service
     mv "$0" "$0.borrado" # Renombrar el script para evitar que se ejecute de nuevo
+
+    # Comprobaciones finales del sistema
+    SCRIPT4="$RAIZDISTRO/4-Comprobaciones.sh"
+    if [ -f "$SCRIPT4" ]; then
+        echoverde "Ejecutando comprobaciones finales del sistema..."
+        chmod +x "$SCRIPT4"
+        # No re-redirigir a $FLOG: stdout/stderr ya pasan por el 'tee -a $FLOG'
+        # del exec inicial. Un 'tee -a $FLOG' aqui duplicaria esta seccion.
+        bash "$SCRIPT4" || true
+    fi
+
+    echoverde "=== $SCRIPT3 finalizado: $(date) ==="
+
+    mostrar_mensaje "Sistema actualizado y configurado. Reiniciando en 5 segundos..."
+    rm -f "$VERLOGSCRIPT"
+    sleep 5 && systemctl reboot -i
 fi
-sync   # asegura en disco el resultado (ok o error) de ansible antes de seguir
 
 
 
-#Reinciando en 30 segundos y avisando a los usuarios
 
 
-# Comprobaciones finales del sistema
-SCRIPT4="$RAIZDISTRO/4-Comprobaciones.sh"
-if [ -f "$SCRIPT4" ]; then
-    echoverde "Ejecutando comprobaciones finales del sistema..."
-    chmod +x "$SCRIPT4"
-    # No re-redirigir a $FLOG: stdout/stderr ya pasan por el 'tee -a $FLOG'
-    # del exec inicial. Un 'tee -a $FLOG' aqui duplicaria esta seccion.
-    bash "$SCRIPT4" || true
-fi
 
-echoverde "=== $SCRIPT3 finalizado: $(date) ==="
 
-mostrar_mensaje "Sistema actualizado y configurado. Reiniciando en 5 segundos..."
-#echorojo "(Salvo ansible! temporal")
-rm -f "$VERLOGSCRIPT"
-###sleep 5 && systemctl reboot -i

@@ -146,15 +146,16 @@
         - nvidia_smi_pre.rc != 0
         - required_nvidia_driver | length > 0
 
-    - name: Reiniciar si se acaba de instalar el driver NVIDIA
-      reboot:
-        msg: "Reiniciando para aplicar los cambios del driver NVIDIA"
-        connect_timeout: 5
-        reboot_timeout: 600
-        post_reboot_delay: 30
-      when: >
-        (ubuntu_drivers_install is defined and ubuntu_drivers_install is changed)
-        or (nvidia_driver_pin is defined and nvidia_driver_pin is changed)
+    #Lo comento para que no de error lanzado por localhost
+    # - name: Reiniciar si se acaba de instalar el driver NVIDIA
+    #   reboot:
+    #     msg: "Reiniciando para aplicar los cambios del driver NVIDIA"
+    #     connect_timeout: 5
+    #     reboot_timeout: 600
+    #     post_reboot_delay: 30
+    #   when: >
+    #     (ubuntu_drivers_install is defined and ubuntu_drivers_install is changed)
+    #     or (nvidia_driver_pin is defined and nvidia_driver_pin is changed)
 
     - name: Comprobar versión instalada del driver NVIDIA
       command: nvidia-smi --query-gpu=driver_version --format=csv,noheader
