@@ -545,7 +545,7 @@ paso "Usuarios (root y usuario)"
 # para que el rsync volcara /home (incluido /home/ubuntu del live) al pool.
 # Ahora lo convertimos en la estructura definitiva:
 #   rpool/home                — contenedor (canmount=off, mountpoint=/home)
-#   rpool/home/<usuario>      — dataset por usuario (canmount=on, quota=40G)
+#   rpool/home/<usuario>      — dataset por usuario (canmount=on, quota=200G)
 # Así cada usuario podrá tener su propia cuota y snapshots @inicial / @diario
 # vía /usr/local/sbin/nuevo-alumno.sh.
 if [ "$PERFIL" = "CEIABD" ] && zpool list rpool >/dev/null 2>&1; then
@@ -584,11 +584,11 @@ if [ "$PERFIL" = "CEIABD" ] && zpool list rpool >/dev/null 2>&1; then
     ok "rpool/home recreado como contenedor (canmount=off, mountpoint=/home)"
 
     # Dataset del usuario inicial.
-    # Cuota 40 G: razonable para el usuario de control del IES; los alumnos
+    # Cuota 200 G: razonable para el usuario de control del IES; los alumnos
     # se crean con /usr/local/sbin/nuevo-alumno.sh que acepta una cuota
     # distinta por parámetro.
     zfs create -o canmount=on rpool/home/usuario
-    zfs set quota=40G rpool/home/usuario
+    zfs set quota=200G rpool/home/usuario
 
     # Red de seguridad: con altroot eliminado el auto-mount debería ir bien,
     # pero verificamos por si acaso (mejor abortar que escribir al ext4).
@@ -701,8 +701,8 @@ cat > /usr/local/sbin/nuevo-alumno.sh << 'NUEVOALUMNOEOF'
 #   sudo nuevo-alumno.sh maria 60G
 set -e
 
-U="${1:?Uso: $0 <usuario> [cuota=40G]}"
-QUOTA="${2:-40G}"
+U="${1:?Uso: $0 <usuario> [cuota=200G]}"
+QUOTA="${2:-200G}"
 POOL_HOME="rpool"
 DATASET="${POOL_HOME}/home/${U}"
 HOME_DIR="/home/${U}"
@@ -784,7 +784,7 @@ echo "  - snapshot: ${DATASET}@inicial"
 NUEVOALUMNOEOF
 chmod +x /usr/local/sbin/nuevo-alumno.sh
 ok "Helper /usr/local/sbin/nuevo-alumno.sh instalado"
-info "Uso: sudo nuevo-alumno.sh <usuario> [cuota=40G]"
+info "Uso: sudo nuevo-alumno.sh <usuario> [cuota=200G]"
 
 fi  # end if PERFIL=CEIABD para el helper
 

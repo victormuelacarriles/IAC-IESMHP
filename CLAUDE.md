@@ -128,11 +128,11 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 - **Reestructuración `rpool/home` (CEIABD)**: el dataset único de FASE 1
   (canmount=on) se destruye y recrea como contenedor `canmount=off
   mountpoint=/home`. Se crea `rpool/home/usuario` con `canmount=on
-  quota=40G`. `useradd -d /home/usuario` sin `-m` (el dataset ya está
+  quota=200G`. `useradd -d /home/usuario` sin `-m` (el dataset ya está
   montado vacío); copia manual de `/etc/skel` + `chown -R`. Snapshot
   `rpool/home/usuario@inicial` tras configurar `authorized_keys`.
 - **Helper `/usr/local/sbin/nuevo-alumno.sh` (solo CEIABD)**: generado
-  inline. Acepta `<usuario> [cuota=40G]`. Crea `rpool/home/<u>` con cuota,
+  inline. Acepta `<usuario> [cuota=200G]`. Crea `rpool/home/<u>` con cuota,
   `useradd` con grupos (`sudo` + opcionales detectados), copia skel,
   snapshot `@inicial`, `passwd` interactivo. Uso típico por SSH:
   `sudo nuevo-alumno.sh alvaro` o `sudo nuevo-alumno.sh maria 60G`.

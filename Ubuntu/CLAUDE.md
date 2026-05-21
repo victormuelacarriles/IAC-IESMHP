@@ -156,13 +156,13 @@ ls /var/log/IAC-IESMHP/Ubuntu/
   - En FASE 1 (`1-SetupLiveCD.sh`) era `rpool/home canmount=on`
     (dataset único). Ahora se destruye y recrea como contenedor
     `canmount=off mountpoint=/home`.
-  - Se crea `rpool/home/usuario` con `canmount=on`, `quota=40G`.
+  - Se crea `rpool/home/usuario` con `canmount=on`, `quota=200G`.
     `mountpoint` heredado del padre → `/home/usuario`.
   - `useradd -d /home/usuario` sin `-m` (el dir ya existe como dataset
     montado), seguido de `cp -aT /etc/skel /home/usuario/.` + `chown -R`.
   - Snapshot `rpool/home/usuario@inicial` tras configurar `authorized_keys`.
 - **Helper `/usr/local/sbin/nuevo-alumno.sh`** (solo CEIABD): generado
-  inline con heredoc. Acepta `<usuario> [cuota=40G]`. Crea
+  inline con heredoc. Acepta `<usuario> [cuota=200G]`. Crea
   `rpool/home/<u>` con cuota, `useradd` con grupos (`sudo` + opcionales
   `vboxusers/libvirt/docker` si existen), copia `/etc/skel` + permisos,
   snapshot `@inicial`, y `passwd` interactivo al final. **Uso**: `sudo
@@ -249,7 +249,7 @@ operativo en la sección "ZFS — operación" más abajo.
 rpool                         (ashift=12, autotrim=on, compression=zstd, dedup=on,
                                recordsize=64K, feature@fast_dedup=enabled si ≥ 2.3)
 └── rpool/home                (canmount=off, mountpoint=/home — contenedor)
-    ├── rpool/home/usuario    (canmount=on, mountpoint=/home/usuario, quota=40G)
+    ├── rpool/home/usuario    (canmount=on, mountpoint=/home/usuario, quota=200G)
     └── rpool/home/<alumno>   (creado por /usr/local/sbin/nuevo-alumno.sh)
 
 tank                          (ashift=12, autotrim=on, compression=zstd, recordsize=1M)
@@ -267,7 +267,7 @@ tank                          (ashift=12, autotrim=on, compression=zstd, records
 ### Alta de un usuario nuevo
 
 ```bash
-sudo /usr/local/sbin/nuevo-alumno.sh <usuario> [cuota=40G]
+sudo /usr/local/sbin/nuevo-alumno.sh <usuario> [cuota=200G]
 # Ejemplos:
 sudo nuevo-alumno.sh alvaro
 sudo nuevo-alumno.sh maria 60G
