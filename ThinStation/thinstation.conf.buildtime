@@ -18,7 +18,7 @@ MIC_LEVEL=0
 SESSION_0_TYPE=freerdp
 SESSION_0_AUTOSTART=on
 # NO poner SESSION_0_FREERDP_SERVER -> dispara el dialogo de IP
-SESSION_0_FREERDP_OPTIONS="/multimon /dynamic-resolution +clipboard /network:auto"
+SESSION_0_FREERDP_OPTIONS="/multimon /dynamic-resolution +clipboard /network:auto /sound:sys:pulse /audio-mode:0"
 FREERDP_CERTIGNORE=on            # equivale a /cert:ignore
 RECONNECT_PROMPT=On              # al cerrar, vuelve al dialogo de IP
 

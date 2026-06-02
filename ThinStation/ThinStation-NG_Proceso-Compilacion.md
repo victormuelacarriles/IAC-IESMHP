@@ -194,7 +194,7 @@ Para sacar la ISO a otra máquina o a un USB, cópiala desde:
 `/root/thinstation-ng/ts/build/boot-images/grub/thinstation-efi.iso`. Si compilas en una VM, puedes
 traerla con `scp`.
 
-### Paso 8 — Arrancar el cliente (UEFI obligatorio · RAM · USB con Ventoy)
+### Paso 8 — Arrancar el cliente (UEFI obligatorio · RAM · USB por escritura directa)
 
 Dos requisitos **no negociables** verificados en la puesta en marcha real:
 
@@ -226,34 +226,36 @@ escribir su config** → cae a consola con errores `No space left on device` (al
   `param fastboot true` (no vuelca el squashfs a RAM; arranca algo más lento pero consume mucha menos
   memoria) y recompilar.
 
-#### USB multiarranque en UEFI con Ventoy
+#### Grabar el USB por escritura directa (NO Ventoy)
 
-Para llevar la ISO (y otras) en un USB que arranque **todo en UEFI**, la vía recomendada es
-[Ventoy](https://www.ventoy.net): copias las `.iso` tal cual y muestra un menú de arranque. **Clave:**
-una ISO lanzada por Ventoy **hereda el modo de arranque del propio Ventoy** — si arrancas el USB por la
-entrada `UEFI:` del firmware, todas las ISO se lanzan en UEFI; no hay que configurar nada por-ISO.
+**Graba la ISO directamente en el pendrive en modo imagen**, no como fichero copiado dentro de otro
+gestor. ThinStation-NG localiza su squashfs (~300 MB, que contiene `lightdm` y toda la pila gráfica)
+recorriendo los dispositivos como si fueran un CD (`boot_device=cd0` en el cmdline). Para que ese
+autodescubrimiento funcione, el USB tiene que llevar el ISO9660 **escrito tal cual**, igual que un
+CD-ROM real:
 
-1. Descarga Ventoy de la web oficial y ejecuta `Ventoy2Disk.exe` (Windows).
-2. Selecciona el USB y, en **Option**, pon **Partition Style → GPT** (recomendado para UEFI puro).
-   Activa **Secure Boot Support** solo si vas a dejar Secure Boot encendido. Pulsa **Install**
-   (⚠️ borra el USB).
-3. Copia las `.iso` (incluida `thinstation-efi.iso`) a la partición exFAT que crea Ventoy.
-4. Arranca el equipo por la entrada **`UEFI:`** del USB (CSM y Secure Boot desactivados, ver arriba).
-   Elige la ISO en el menú de Ventoy.
-5. **Usa `Boot in normal mode`** (pulsar Enter directamente sobre la ISO ya lo hace). Si Ventoy
-   muestra el submenú con `normal / grub2 / memdisk`, elige **normal**. Orden de preferencia para esta
-   ISO EFI/GRUB: **normal → grub2 → (NUNCA memdisk)**.
+- **Windows — Rufus (verificado):** en *Elección de arranque* selecciona `thinstation-efi.iso`,
+  **Esquema de partición = GPT**, **Sistema de destino = UEFI (no CSM)** y pulsa **EMPEZAR**. Si Rufus
+  pregunta tras pulsar EMPEZAR, elige **«Escribir en modo Imagen DD»** (no «modo ISO»). Verificado con
+  Rufus 4.14 → arranca el entorno gráfico en el MSI físico.
+- **Windows — balenaEtcher:** siempre escribe en modo imagen; alternativa simple si Rufus diera guerra.
+- **Linux — dd:**
+  ```bash
+  sudo dd if=thinstation-efi.iso of=/dev/sdX bs=4M status=progress oflag=direct conv=fsync
+  ```
+  (`/dev/sdX` = el USB **completo**, sin número de partición; ⚠️ borra el USB).
 
-> Como la ISO es solo-UEFI, **hay que arrancar Ventoy en modo UEFI**; si Ventoy arranca en Legacy, la
-> ThinStation no aparecerá como arrancable. Confirma que Ventoy va en UEFI: abajo a la izquierda pone
-> **`UEFI`** (no `BIOS`). Si alguna ISO concreta no arrancase con Ventoy (raro), prueba en su menú
-> `Ctrl+r` (modo grub2).
+Después arranca por la entrada **`UEFI:`** del USB (CSM y Secure Boot desactivados, ver arriba).
+
+> **⚠️ No uses Ventoy con esta ISO.** Ventoy no expone la `.iso` como un dispositivo real: la mapea con
+> su driver virtual, y ThinStation-NG **no encuentra su squashfs** → arranca solo con el initramfs
+> (kernel + red + consola mínima) pero **sin `lightdm` ni entorno gráfico**. Síntoma exacto: queda en
+> login de consola; `command -v lightdm` vacío; `df -h` sin ningún squashfs/overlay montado (solo
+> tmpfs). Se reprodujo en `normal mode` y `memdisk mode` (`grub2 mode` da «No bootfile found for
+> UEFI!»). La escritura directa de arriba lo resuelve. Verificado en MSI físico, junio 2026.
 >
-> **⚠️ NO uses `Boot in memdisk mode` con esta ISO.** Memdisk carga la ISO entera en RAM y la emula
-> como disco al estilo BIOS; **no encadena bien el GRUB EFI**, así que la ThinStation no llega a
-> gráfico ni levanta la red aunque hayas arrancado el USB en UEFI. Síntoma observado en despliegue
-> real (MSI, junio 2026): USB arrancado por `UEFI:` + Ventoy `UEFI`, pero elegido `memdisk` → fallo.
-> Solución: `normal mode`.
+> La contrapartida es que el USB queda dedicado a esta única ISO (Rufus DD / `dd` borran el
+> multiarranque). Para esta imagen compensa: es lo único que arranca de forma fiable.
 
 ---
 
@@ -353,8 +355,9 @@ El «pedir IP al arrancar y reconectar al cerrar» no requiere scripts propios; 
 | Síntoma | Causa / Solución |
 |---------|------------------|
 | Cae a consola con `No space left on device` (al copiar `/etc/skel`, `write lastlog failed`) | El FS en RAM se llenó: **poca RAM**. La imagen arranca en RAM (`fastboot lotsofmem`). Sube la VM/equipo a **≥4 GB** (sin recompilar) o usa `param fastboot true` y recompila. Ver Paso 8 |
-| En físico no arranca y/o `ip a` solo muestra `lo` (sin NIC) | (1) Arrancó en **BIOS/Legacy**: la ISO es **solo-UEFI**. Arranca por la entrada `UEFI:` del USB, **desactiva CSM** y **Secure Boot**. Comprueba con `[ -d /sys/firmware/efi ]`. (2) Con Ventoy en UEFI pero elegido **`memdisk mode`** → mismo síntoma; usa **`normal mode`**. Ver Paso 8 |
-| Equipo se queda en login de consola sin diálogo («not able to go graphical») | Primero descarta **RAM** (fila anterior). Si hay RAM de sobra: Xorg no levantó — el log **no** está en `/var/log/Xorg.0.log` sino en `/run/user/<uid>/` (ver §5). Revisa `journalctl -b \| grep -i xorg` (*no screens found*), `dmesg \| grep -i drm` y `ls /dev/dri/` (¿ligó un driver KMS?, ¿hay `card0`?) |
+| En físico no arranca y/o `ip a` solo muestra `lo` (sin NIC) | Arrancó en **BIOS/Legacy**: la ISO es **solo-UEFI**. Arranca por la entrada `UEFI:` del USB, **desactiva CSM** y **Secure Boot**. Comprueba con `[ -d /sys/firmware/efi ]`. Ver Paso 8 |
+| Queda en login de consola sin gráfico; `command -v lightdm` vacío y `df -h` **sin squashfs/overlay** (solo tmpfs) | El USB se grabó con **Ventoy**: no expone la ISO como dispositivo real y ThinStation no monta su squashfs → arranca solo con el initramfs. **Graba la ISO directa** (Rufus modo Imagen DD / balenaEtcher / `dd`), sin Ventoy. Ver Paso 8 |
+| Equipo se queda en login de consola sin diálogo, **pero el squashfs SÍ está montado** (`df -h` lo muestra) | Primero descarta **RAM** (fila del `No space`). Si hay RAM de sobra: Xorg no levantó — el log **no** está en `/var/log/Xorg.0.log` sino en `/run/user/<uid>/` (ver §5). Revisa `journalctl -b \| grep -i xorg` (*no screens found*), `dmesg \| grep -i drm` y `ls /dev/dri/` (¿ligó un driver KMS?, ¿hay `card0`/`card1`?) |
 | ISO no se genera / 0 bytes; `xorriso: 'Boot image file is empty'` | El paso EFI no pudo usar loop/mount: no estás en un entorno con root real. Compila en Fedora o VM Fedora, no en entornos restringidos |
 | `setup-chroot` falla al descargar la base | Casi siempre no estás en Fedora (no hay `dnf` ni repos compatibles) |
 | `Error: package X does not exist` | Nombres incorrectos en `build.conf`. Usa `xorg7` y `autonet`; `dialog`/`xterm` no son paquetes TS-NG |
@@ -364,31 +367,26 @@ El «pedir IP al arrancar y reconectar al cerrar» no requiere scripts propios; 
 
 ---
 
-## 8b. Despliegue real en curso — equipo MSI (junio 2026)
-
-> **Estado: diagnóstico en curso.** Esta sección registra el caso real para retomarlo.
+## 8b. Caso real resuelto — equipo MSI (junio 2026)
 
 **Punto de partida:** ISO `20260601-1030-thinstation-efi.iso` que **funciona en VMware** pero en el
-equipo físico **MSI** no llegaba a gráfico ni levantaba la red.
+equipo físico **MSI** se quedaba en login de consola, sin entorno gráfico.
 
-**Resuelto:**
-1. **Arranque UEFI confirmado.** En el boot menu del MSI se elige `UEFI: KingstonDataTraveler...`
-   (no la entrada del disco interno `ubuntu (WDC...)`). Ventoy 1.1.12 muestra `UEFI` abajo a la
-   izquierda. ✅
-2. **El fallo inicial era `memdisk mode` en Ventoy.** Se estaba lanzando la ISO con
-   `Boot in memdisk mode` → no encadena el GRUB EFI. Cambiado a **`Boot in normal mode`** → la ISO ya
-   arranca. ✅
+**Causa raíz:** se arrancaba desde un **USB con Ventoy**, que no expone la ISO como un dispositivo
+real. ThinStation-NG no encontraba su squashfs y arrancaba **solo con el initramfs** (kernel + red +
+consola), por lo que faltaban `lightdm` y toda la pila gráfica. El cambio de `memdisk` a `normal mode`
+en Ventoy no bastó: el problema es Ventoy en sí, no el sub-modo.
 
-**Pendiente de diagnosticar (siguiente paso):** ya arranca por UEFI en normal mode, pero la sesión
-gráfica no aparece. Buscado `/var/log/Xorg.0.log` → **no existe** (esperado: el log vive en
-`/run/user/<uid>/`, ver §5). Falta determinar si:
-- el driver **KMS** ligó a la GPU del MSI (`ls /dev/dri/` → ¿`card0`?, `dmesg | grep -i drm`),
-- qué **GPU** monta (`lspci | grep -i vga`),
-- si es cuestión de **RAM** (`free -h`, buscar `No space left on device`),
-- y la salida de `journalctl -b | grep -iE 'xorg|lightdm|drm|EE'`.
+**Diagnóstico que lo confirmó** (en la consola `root` del propio equipo):
+- `command -v lightdm` → vacío; `/usr/sbin/lightdm` *No such file* (pero `lightdm` SÍ está en
+  `build.conf` y en la ISO; en la VM sí aparece).
+- `df -h` → solo `tmpfs`; **ningún squashfs ni overlay montado** (la capa de paquetes nunca cargó).
+- `free -m` → 64 GB, 433 MB usados → descarta la pista de **RAM**.
+- `dmesg | grep -i drm` → `nouveau` ligó KMS y `/dev/dri/card1` presente → descarta la pista de
+  **GPU/driver** (el `modesetting` habría funcionado).
 
-Hipótesis principal: GPU demasiado nueva cuyo módulo/firmware no está en la imagen → `modesetting` de
-Xorg se queda sin pantalla. A confirmar con los comandos de arriba.
+**Solución:** grabar la ISO **directamente** en el USB con **Rufus en modo Imagen DD** (vale también
+balenaEtcher o `dd`), sin Ventoy, y arrancar por la entrada `UEFI:`. ✅ Entorno gráfico OK. Ver Paso 8.
 
 ---
 
