@@ -114,7 +114,10 @@ se incluyen los **tres drivers de vídeo abiertos** (Intel, AMD, Nvidia) además
 | `package autonet` | Red automática (DHCP) |
 | `package freerdp` | Cliente RDP + diálogo de IP + reconexión |
 | `package locale-es_ES` | Teclado y locale en español |
-| `package sshd` | Servidor SSH (dropbear) para acceso remoto |
+| `package sshd` | Servidor SSH (dropbear) para **acceso remoto al cliente** |
+| `package ssh` | Cliente SSH (para conectar **desde** el thin client a otros equipos) |
+| `package git` · `package nano` | Utilidades en consola: control de versiones y editor ligero |
+| `package alsa` · `package pipewire` · `package xfce4-pulseaudio-plugin` | Sonido (pila de audio + icono de volumen) — necesarios para redirigir audio/micrófono por RDP |
 
 > **Nombres que NO existen en 7.2-Stable (causan error):**
 > `xorg` → usar `xorg7` · `netbase` → usar `autonet` · `xorg-video-vesa` → no existe (KMS va en `xorg7`)
@@ -130,11 +133,15 @@ no hay servidor fijo. **Sin scripts propios.** Sustituye la línea por defecto `
 y deja:
 
 ```ini
+# Audio
+AUDIO_LEVEL=90
+MIC_LEVEL=0
+
 # Sesion RDP en modo kiosco
 SESSION_0_TYPE=freerdp
 SESSION_0_AUTOSTART=on
 # NO poner SESSION_0_FREERDP_SERVER -> dispara el dialogo de IP
-SESSION_0_FREERDP_OPTIONS="/multimon /dynamic-resolution +clipboard /network:auto"
+SESSION_0_FREERDP_OPTIONS="/multimon /dynamic-resolution +clipboard /network:auto /microphone:sys:pulse /audio-mode:0"
 FREERDP_CERTIGNORE=on      # equivale a /cert:ignore
 RECONNECT_PROMPT=On        # al cerrar, vuelve al dialogo de IP
 
@@ -147,6 +154,18 @@ LOCALE=es_ES
 
 > **Teclado:** `KEYMAP=es` **NO existe** en 7.2. El teclado español se activa con
 > `package locale-es_ES` + `LOCALE=es_ES`.
+
+#### Audio y micrófono en la sesión RDP
+
+Las opciones de audio en `SESSION_0_FREERDP_OPTIONS` (con la pila `alsa` + `pipewire` +
+`xfce4-pulseaudio-plugin` del `build.conf`) controlan la redirección de sonido por RDP:
+
+- `/microphone:sys:pulse` — redirige el **micrófono local** del thin client al servidor (para
+  videollamadas, dictado, etc.). Antes se usaba `/sound:sys:pulse` (audio de salida); se cambió a
+  `/microphone` para capturar la entrada de micrófono.
+- `/audio-mode:0` — el audio de la sesión se reproduce en el **cliente** (modo 0 = *redirect to local*),
+  que es lo normal para un puesto físico.
+- `AUDIO_LEVEL=90` / `MIC_LEVEL=0` — nivel inicial de volumen y de micrófono al arrancar.
 
 #### Multimonitor (puestos físicos de doble monitor)
 
@@ -290,9 +309,9 @@ solo lectura, así que SSH se incluye **al compilar**, no se instala sobre el cl
 paquete trae `systemctl enable dropbear` (arranca solo) y su `ExecStart` no lleva `-w`, por lo que
 **permite login de root**.
 
-> **Credenciales por defecto:** usuario `root`, contraseña `pleasechangeme` (de `param rootpasswd`);
-> el usuario normal es `tsuser` con la misma contraseña. **Cámbialas** en `build.conf`
-> (`param rootpasswd` / `tsuserpasswd`) antes de cualquier despliegue real.
+> **Credenciales por defecto** (definidas en `build.conf`): usuario `root` / contraseña `root`
+> (`param rootpasswd`); usuario normal `tsuser` / contraseña `tsuser` (`param tsuserpasswd`).
+> **Cámbialas** en `build.conf` antes de cualquier despliegue real.
 
 ```bash
 ssh root@IP_DEL_THINCLIENT
@@ -363,7 +382,7 @@ El «pedir IP al arrancar y reconectar al cerrar» no requiere scripts propios; 
 | `Error: package X does not exist` | Nombres incorrectos en `build.conf`. Usa `xorg7` y `autonet`; `dialog`/`xterm` no son paquetes TS-NG |
 | El build se para pidiendo confirmación | Usa siempre `./build --allmodules --license ACCEPT --autodl` |
 | No aparece el diálogo de IP (con X funcionando) | Probablemente quedó `SESSION_0_FREERDP_SERVER` en buildtime, o el tipo de sesión no es `freerdp` |
-| No entro por SSH al cliente | Confirma `package sshd`, que el cliente tiene IP (`ip a`) y usa `root` / `pleasechangeme` (o tu `rootpasswd`) |
+| No entro por SSH al cliente | Confirma `package sshd`, que el cliente tiene IP (`ip a`) y usa `root` / `root` (o tu `rootpasswd`) |
 
 ---
 
@@ -472,3 +491,10 @@ cd /build && ./build --allmodules --license ACCEPT --autodl
 *Documento generado a partir del tutorial verificado contra el repositorio oficial
 `thinstation/thinstation-ng` rama `7.2-Stable` (mayo 2026), incorporando las lecciones de la puesta en
 marcha real: host Fedora, imagen universal de máximo hardware, acceso SSH y logo personalizado.*
+
+
+
+### ####################################################### POR HACER
+### Problemas con algunas BIOS
+- Si no tiene arranque UEFI no funciona. Con legacy+UEFI también da problemas. 
+- En un equipo ha superado la capacidad de la ram (tiene 8GB: fallo de placa? Gigabyte H510M S2H V2)
