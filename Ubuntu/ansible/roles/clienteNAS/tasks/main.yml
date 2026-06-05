@@ -70,16 +70,32 @@
     var: nas_mounts
   when: nas_mounts | default([]) | length > 0
 
-- name: Crear los puntos de montaje locales
+# En una re-ejecución, el export ya está montado en su punto de destino en
+# solo lectura (ro). El módulo `file` con state=directory SIEMPRE intenta
+# aplicar owner/group/mode, lo que sobre el NFS montado ro falla con
+# "[Errno 30] Read-only file system". Por eso primero detectamos qué puntos
+# ya están montados y solo creamos (con permisos) los que aún no lo están —
+# un punto ya montado existe por definición, así que no hay nada que crear.
+- name: Detectar qué puntos de montaje ya están montados
+  command: "mountpoint -q {{ item.path }}"
+  register: nas_mp_check
+  changed_when: false
+  failed_when: false
+  loop: "{{ nas_mounts | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Crear los puntos de montaje locales que aún no están montados
   file:
-    path: "{{ item.path }}"
+    path: "{{ item.item.path }}"
     state: directory
     owner: root
     group: root
     mode: '0755'
-  loop: "{{ nas_mounts | default([]) }}"
+  loop: "{{ nas_mp_check.results }}"
   loop_control:
-    label: "{{ item.path }}"
+    label: "{{ item.item.path }}"
+  when: item.rc != 0
 
 - name: Montar cada export del NAS (entrada en /etc/fstab + montaje)
   mount:

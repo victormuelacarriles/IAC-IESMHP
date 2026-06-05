@@ -22,6 +22,7 @@ git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh && sudo ./0
 
 #Haciendo: 
 #
+# FALLO:  - Se crea una carpeta /opt/iesmhpMint  (reliquia!!!!)
 
 # -> vmware instala pero pide compilar (no hace bien post-instalación, ver abajo)
         #Post:   (no está fucionando bien)
