@@ -1,0 +1,9 @@
+Ya tengo una iso de thinstation, en un usb: 
+
+Funciona en: 
+- Aula ESO (profesor->hay que habilitar arranque por usb)
+- Aula Bachillerato (profesor y alummos)
+- Departamento: algunos equipos (en algún otro hay que entrar en BIOS, y de hacerlo, no arrancaría windos (ej: equipo ventana "victor"))
+
+POR HACER:
+- Agregar python y un servicio de toma de capturas automáticas
