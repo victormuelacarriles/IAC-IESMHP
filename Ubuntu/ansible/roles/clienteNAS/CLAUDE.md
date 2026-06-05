@@ -21,8 +21,10 @@ Ejemplo real: `showmount -e 10.0.1.100` → `/mnt/DiscosRapidos/PruebaRapidosX3 
 `/mnt/nasDepInfo/PruebaRapidosX3`.
 5. Construye el mapa export remoto → punto de montaje local
    `{{ nas_base_mount }}/<nombre>` según `nas_subdir_strategy`.
-6. Crea cada punto de montaje y lo monta con la `mount` module
-   (`state: mounted` → escribe `/etc/fstab` **y** monta ahora).
+6. Detecta con `mountpoint -q` qué puntos ya están montados y **crea solo los
+   que faltan** (ver *Idempotencia / re-ejecución* abajo).
+7. Monta cada export con el módulo `mount` (`state: mounted` → escribe
+   `/etc/fstab` **y** monta ahora).
 
 ## Estructura
 - `tasks/main.yml`
