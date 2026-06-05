@@ -66,3 +66,20 @@ Sobreescribir las variables (en `defaults/main.yml`, en el playbook o con
 - Si `showmount` no responde tras los reintentos, el rol **falla** (red/NAS
   caídos) — es deliberado para que se vea en el log del primer arranque.
 - Útil para depurar: `showmount -e 10.0.1.100`.
+
+### Idempotencia / re-ejecución
+
+La creación de los puntos de montaje va en **dos tareas**:
+
+1. *Detectar qué puntos ya están montados* (`mountpoint -q`, con
+   `changed_when: false` y `failed_when: false`).
+2. *Crear los puntos que aún no están montados* (`when: item.rc != 0`,
+   iterando sobre `nas_mp_check.results`).
+
+**Por qué**: el export se monta `ro`. En una re-ejecución, el punto destino
+ya tiene el NFS montado encima en solo lectura; si se usara una única tarea
+`file: state=directory` con `owner/group/mode`, el módulo intentaría aplicar
+`chmod`/`chown` sobre el montaje RO y fallaría con
+`[Errno 30] Read-only file system`. Un punto ya montado existe por
+definición, así que se omite. Corregido el **2026-06-05** (ver
+`Ubuntu/RegistroDeCambios/20260605-Cambios.md`).
