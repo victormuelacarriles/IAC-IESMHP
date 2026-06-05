@@ -24,12 +24,12 @@
      - nvidia
      # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml
      - certificados
-     
      - obs
      - rdp           # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
      - vscode
      - clienteNAS    #Configura el cliente NFS para el NAS del instituto (y lo monta en /mnt/nas)
-     - vmware        #sigue fallando la compilación. error raro de: "[Apploader] Use shipped Linux kernel AIO access library" 
+     - DirtyFrag     #Evalua y mitiga la vuln. "Dirty Frag" (CVE-2026-43284 ESP/IPsec + CVE-2026-43500 RxRPC): bloquea esp4/esp6/rxrpc
+     - vmware        #sigue fallando la compilación. error raro de: "[Apploader] Use shipped Linux kernel AIO access library"
 
      #- comparteaula  # Rol unificado: detecta aula por IP (72/32) y configura servidor/cliente NFS según corresponda
      #TODO: virtualbox falla. A raiz de poner el servidor de caches apt, no instala la versión concreta que le digo

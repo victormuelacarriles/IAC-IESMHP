@@ -1,0 +1,10 @@
+#Haciendo: 
+
+#Estoy arreglando los roles de autoconfigración
+
+# -> vmware instala pero pide compilar (no hace bien post-instalación, ver abajo)
+        #Post:   (no está fucionando bien)
+        #   /usr/lib/vmware/bin/vmware-setup-helper -e -o -u no -c no
+        #   /usr/bin/vmware-modconfig --console --install-all 
+
+#dirtyfrag

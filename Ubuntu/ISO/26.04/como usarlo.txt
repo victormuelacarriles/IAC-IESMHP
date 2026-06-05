@@ -20,11 +20,3 @@ git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh && sudo ./0
 (Get-Content -Path "C:\Users\vmuela\.ssh\known_hosts") -notmatch "10\.0\.72\.51" | Set-Content -Path "C:\Users\vmuela\.ssh\known_hosts"; scp -r -O -o StrictHostKeyChecking=accept-new usuario@10.0.72.51:/var/log/IAC-IESMHP/Ubuntu "E:\Usuarios\vmuela\OneDrive - Educantabria\_20FP25-26\Dep\IAC-IESMHP\Ubuntu\ISO\26.04\logs"
 
 
-#Haciendo: 
-#
-# FALLO:  - Se crea una carpeta /opt/iesmhpMint  (reliquia!!!!)
-
-# -> vmware instala pero pide compilar (no hace bien post-instalación, ver abajo)
-        #Post:   (no está fucionando bien)
-        #   /usr/lib/vmware/bin/vmware-setup-helper -e -o -u no -c no
-        #   /usr/bin/vmware-modconfig --console --install-all 
