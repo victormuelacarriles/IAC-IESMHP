@@ -1,0 +1,107 @@
+Retomo el arranque en Legacy BIOS de la ISO ThinStation-NG 7.2 (UEFI ya
+funciona). Lee primero:
+  ThinStation/ThinStation-NG_Arranque-BIOS-UEFI_Handoff.md
+y EN ESPECIAL la SECCIÓN 13 (sesión 2026-06-04 noche), que tiene el estado fino
+y corrige la conclusión de la sección 12.
+
+--- METODOLOGÍA (importante) ---
+- El código de ThinStation NO está en este repo: vive en el chroot Fedora
+  /root/thinstation-ng ; el build en /build (symlink -> /ts/build). Este repo
+  (IAC-IESMHP) es solo documentación.
+- Pruebo la ISO en una VM VMware "Fedora ThinStation" alternando firmware
+  UEFI/BIOS (la misma VM). RAM 7,8 GB, 16 cpu.
+- NO tengo consola remota a la VM: las salidas te las paso como IMÁGENES.
+  Dame bloques cortos con marcadores echo "=====" para que las fotos sean
+  legibles. En el chroot y en el host sí puedo pegar texto.
+- Recompilar:  cd /root/thinstation-ng && ./setup-chroot
+               cd /build && ./build --allmodules --license ACCEPT --autodl
+  ISO de salida: /build/boot-images/grub/thinstation-efi.iso
+  Tras compilar, copio la ISO a /home/vmuela/Descargas/thin2/thinstation-efi.iso
+  (la que monta VMware: CD/DVD SATA -> Use ISO image, Connect at power on ✓),
+  md5-match, POWER OFF completo y arranco BIOS.
+- OJO disco: el chroot / es de solo 15 GB y va justo. Si el build muere con
+  "No space left on device", liberar antes:  dnf clean packages dbcache  (suelta
+  ~2 GB de /var/cache/libdnf5) y borrar la ISO/initrd truncados de boot-images.
+
+--- DÓNDE ESTOY (resumen sesión 2026-06-04 noche) ---
+RESUELTO Y VERIFICADO esta sesión:
+  * El initrd se comprimía con xz multihilo (build:506 ponía
+    "xz --threads=0 --check=crc32" -> stream de 23 bloques). Lo cambié a
+    "xz --threads=1 --check=crc32" -> initrd SINGLE-BLOCK. Verificado en la ISO
+    nueva: xz --list = Streams 1 / Blocks 1 / CRC32, xz -t OK, 15117 ficheros,
+    isofs.ko.xz presente (44516 B). md5 ISO buena = 25a549919ee98af60cda03cb10936874.
+  * Resuelto "disco lleno" que truncaba el build (dnf clean liberó 2 GB).
+  * Confirmado que la VM arranca ESA ISO (md5 thin2 = 25a5499...), no una vieja.
+
+EL FALLO QUE QUEDA (la paradoja nueva): pese al initrd single-block íntegro,
+BIOS SIGUE fallando IGUAL:
+  dmesg -> "Initramfs unpacking failed: XZ-compressed data is corrupt" a ~2.75 s
+  find / -xdev | wc -l -> 8124 (de 15117). isofs ausente.
+La ISO multihilo vieja fallaba a 8173 ficheros; la single-block a 8124. CASI EL
+MISMO PUNTO -> NO es la estructura de bloques xz (eso era un RED HERRING; la
+sección 12 quedó corregida). El xz -t en userspace valida el initrd entero, así
+que el FICHERO está bien; lo que se corta es lo que GRUB-BIOS mete en RAM.
+
+HIPÓTESIS PRINCIPAL: GRUB en modo BIOS no carga los 454 MB del initrd enteros en
+memoria; el kernel descomprime lo cargado (~mitad) y al toparse con el final
+truncado dice "corrupt". UEFI usa otro cargador y no tiene ese límite (por eso
+arranca). El initrd de 454 MB está SOBREDIMENSIONADO (la cola del cpio son
+módulos de FS que un thin-client no necesita en el initramfs: gfs2, ceph, f2fs,
+erofs, dlm, ecryptfs, coda, afs, 9p, befs, affs, exfat, cachefiles...).
+
+--- LO PRIMERO A HACER (2 datos decisivos, NO teorizar antes) ---
+1) TAMAÑO del initrd que recibió el kernel en BIOS (en el tty BIOS, FOTO):
+     dmesg | grep -iE 'RAMDISK|initrd|Trying to unpack|unpacking'
+   En "RAMDISK: [mem 0x...-0x...]" calcular fin-inicio:
+     - ~220-260 MB (la mitad de 433 MB comprimidos) -> GRUB-BIOS TRUNCÓ ->
+       el problema es el CARGADOR.
+     - ~433 MB (entero) y aun así "corrupt" -> es el DESCOMPRESOR del kernel
+       ahogándose con un initrd gigante.
+2) ¿UEFI desempaqueta los 15117 o también ~8124? (linchpin). UEFI arranca
+   gráfico; intentar abrir un tty (Ctrl+Alt+F2) o un terminal en la sesión y:
+     dmesg | grep -i unpack ; find / -xdev | wc -l
+     - UEFI con 15117 y sin "failed" -> es el CARGADOR BIOS (confirma hipótesis).
+     - UEFI también ~8124 con "failed" pero arranca (vía vfat builtin +
+       lib.squash) -> es el DESCOMPRESOR del kernel, no el cargador.
+
+--- ÁRBOL DE DECISIÓN (según el resultado) ---
+(A) CARGADOR BIOS trunca (RAMDISK ~mitad y/o UEFI sí desempaqueta entero) ->
+    ADELGAZAR el initrd. Investigar boot-images/initrd/rebuild_initrd.sh y de
+    dónde sale la lista de módulos de initrd.devices; quitar el grueso de
+    módulos de FS para bajar el initrd de 454 MB a decenas de MB. Con un initrd
+    pequeño GRUB-BIOS lo carga entero y el kernel lo descomprime sin truncar ->
+    isofs (aunque siga al final) llega. (Alternativa a investigar: opción de
+    GRUB/kernel para cargar initrd grande en BIOS.)
+(B) DESCOMPRESOR del kernel se ahoga (RAMDISK entero pero "corrupt") -> adelgazar
+    igualmente el initrd; como plan B, cambiar param initrdcmd a gzip o zstd
+    (verificar antes CONFIG_RD_GZIP / CONFIG_RD_ZSTD en el kernel del chroot:
+    zcat /proc/config.gz | grep -E 'RD_GZIP|RD_ZSTD|RD_XZ', o /boot/config-*).
+(C) Parche rápido/frágil (si urge una demo): forzar que isofs.ko.xz quede en la
+    PRIMERA mitad del cpio para que se cargue aunque haya truncado. Preferible
+    adelgazar de verdad.
+
+--- DATOS CLAVE ---
+- Kernel: 6.19.14-108.fc42.x86_64
+- ISO buena (single-block) md5: 25a549919ee98af60cda03cb10936874
+- ISO en VMware: /home/vmuela/Descargas/thin2/thinstation-efi.iso (VM "Fedora ThinStation")
+- initrd: 453.742.260 B comprimido / 528 MB descomprimido / 1 bloque CRC32 / 15117 ficheros
+- BIOS desempaqueta 8124/15117 y aborta ("XZ corrupt") a ~2.75 s
+- Fix ya aplicado y verificado: build:506 = xz --threads=1 --check=crc32
+  (NECESARIO pero NO suficiente; no era la causa del fallo BIOS)
+- /build -> /ts/build (symlink). NO existe /root/thinstation-ng/ts/build/build,
+  así que setup-chroot no revierte ediciones en /build/build.
+- copy_module (hardlink) en build:~285 ; bucle cp-real en build:~1165 (sección 11,
+  ya no estorba) ; cpio del initrd en build:515 y otra ruta en build:~2041 (la
+  que ensambla la ISO grub; usa $ts_initrdcmd con el valor de build:506).
+- iso() de fastboot (packages/base/etc/init.d/fastboot) tiene cascada
+  modprobe/unxz+insmod para isofs (sección 10.2) — irrelevante hasta que el
+  initrd llegue entero.
+
+--- OBJETIVO FINAL ---
+Una sola ISO que arranque la sesión gráfica RDP kiosko en UEFI y BIOS. Cuando
+BIOS arranque gráfico:
+  - Cerrar la sección 13 del handoff como RESUELTA y documentar el fix real
+    (adelgazado del initrd / cargador).
+  - Actualizar ThinStation/ThinStation-NG_Proceso-Compilacion.md: corregir
+    "solo-UEFI" -> es HÍBRIDA; documentar parche grub.cfg cd0, fix --threads=1
+    en build:506, y el adelgazado del initrd.

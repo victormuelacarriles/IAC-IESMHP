@@ -16,7 +16,9 @@
       "Bash(py -c \"import yaml,sys; [print\\(f,'OK', type\\(yaml.safe_load\\(open\\(f,encoding='utf-8'\\)\\)\\)\\) for f in ['tasks/main.yml','defaults/main.yml']]\")",
       "Bash(bash -n \"Ubuntu/ISO/26.04/1-SetupLiveCD.sh\")",
       "Bash(bash -n \"Ubuntu/ISO/26.04/2-SetupSOdesdeLiveCD.sh\")",
-      "Bash(bash -n \"Ubuntu/ISO/26.04/4-Comprobaciones.sh\")"
+      "Bash(bash -n \"Ubuntu/ISO/26.04/4-Comprobaciones.sh\")",
+      "PowerShell($ProgressPreference='SilentlyContinue'; $c=\\(Invoke-WebRequest \"https://raw.githubusercontent.com/Thinstation/thinstation-ng/7.2-Stable/ts/build/packages/base/init\"\\).Content; $lines=$c -split \"`n\"; Write-Output \"TOTAL LINES: $\\($lines.Count\\)\"; \\($lines | Select-String -Pattern 'boot_device|lib.squash|cd0|find|search|mount|/dev/disk|image.md5|squash|blkid|by-label|isofs|losetup' -CaseSensitive:$false\\) | Select-Object -First 80)",
+      "PowerShell($ProgressPreference='SilentlyContinue'; \\(Invoke-WebRequest \"https://raw.githubusercontent.com/Thinstation/thinstation-ng/7.2-Stable/ts/build/packages/base/init\"\\).Content)"
     ]
   }
 }
