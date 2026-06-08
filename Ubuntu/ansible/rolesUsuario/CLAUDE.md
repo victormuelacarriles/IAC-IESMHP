@@ -13,18 +13,40 @@ escritorio, etc.).
 | `pruebas/`      | —               | Experimentación, no forma parte del despliegue |
 
 > **Estado**: carpeta nueva (2026-06-08), en construcción. Todavía no está
-> enganchada a `roles.yaml` ni a `3-SetupPrimerInicio.sh`; los scripts se lanzan
-> manualmente mientras se prueban.
+> enganchada a `roles.yaml` ni a `3-SetupPrimerInicio.sh`; los scripts y el
+> playbook se lanzan manualmente mientras se prueban.
 
 ---
 
 ## Contenido
 
+### `rolesUsuario.yaml` — playbook por usuario
+Playbook Ansible análogo a `../roles.yaml` pero **scoped al perfil del usuario**:
+`hosts: localhost`, `connection: local`, **`become: no` global**. Solo las tareas
+que necesitan root usan `become: yes` puntual (por eso se lanza con `-K`). Sus
+roles viven en `rolesUsuario/roles/`.
+
+```bash
+cd /opt/IAC-IESMHP/Ubuntu/ansible/rolesUsuario
+ansible-playbook -i localhost, --connection=local -K rolesUsuario.yaml
+```
+
+Roles actuales:
+
+| Rol | Estado | Qué hace |
+|-----|--------|----------|
+| [`DockerRootless`](roles/DockerRootless/CLAUDE.md) | ✅ activo (1º) | Instala Docker **rootless** para el usuario actual (socket en `/run/user/<uid>/docker.sock`) |
+
 ### `0-ConfiguracionInicial.sh`
 Configuración mínima de SSH del usuario. **Se ejecuta como el usuario, no como
 root** (aborta si detecta `uid 0`). Es idempotente.
 
-1. Asegura `~/.ssh` con permisos `0700`.
+1. Asegura `~/.ssh` con permisos `0700`. **Self-heal de propiedad**: si
+   `~/.ssh` o `authorized_keys` pertenecen a root (caso habitual en equipos ya
+   provisionados, donde el instalador escribió las claves como root sin
+   `chown`), el script lo detecta (`[ -O ... ]`) y reasigna la propiedad al
+   usuario con `sudo chown -R` (el contenido —claves de admin/profes— se
+   conserva). Si falta `sudo`, indica el comando exacto a ejecutar y aborta.
 2. Si el usuario **no tiene** par de claves, genera `~/.ssh/id_ed25519`
    (ed25519, sin passphrase, comentario `usuario@hostname`). Si ya existe, no
    lo regenera.

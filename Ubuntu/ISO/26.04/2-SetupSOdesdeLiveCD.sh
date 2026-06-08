@@ -663,9 +663,13 @@ fi
 if [ -f /root/.ssh/authorized_keys ]; then
     mkdir -p /home/usuario/.ssh
     cp /root/.ssh/authorized_keys /home/usuario/.ssh/
-    chown usuario:usuario /home/usuario/.ssh/authorized_keys
+    # IMPORTANTE: chown del DIRECTORIO .ssh, no solo del fichero. mkdir lo crea
+    # como root (este script corre como root en el chroot); si no se reasigna,
+    # el usuario no puede chmod ni escribir su propia clave en ~/.ssh.
+    chown -R usuario:usuario /home/usuario/.ssh
+    chmod 700 /home/usuario/.ssh
     chmod 600 /home/usuario/.ssh/authorized_keys
-    ok "authorized_keys copiado a /home/usuario/.ssh/"
+    ok "authorized_keys copiado a /home/usuario/.ssh/ (.ssh → usuario:usuario 700)"
 fi
 
 # CEIABD: snapshot @inicial del usuario recién creado. Útil como ancla de

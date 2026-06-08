@@ -43,10 +43,42 @@ err()  { echo "[ERR]  $*" >&2; }
 log "Configuración inicial para el usuario '$USUARIO' (home: $HOME_DIR)"
 
 # ---- 1. Directorio ~/.ssh ------------------------------------------
+GRUPO="$(id -gn)"
+
 if [ ! -d "$SSH_DIR" ]; then
-    mkdir -p "$SSH_DIR"
+    if ! mkdir -p "$SSH_DIR" 2>/dev/null; then
+        # El home puede pertenecer a root; intentamos crearlo con sudo.
+        warn "No se pudo crear $SSH_DIR como usuario; reintentando con sudo…"
+        sudo mkdir -p "$SSH_DIR" && sudo chown "$USUARIO:$GRUPO" "$SSH_DIR" \
+            || { err "No se pudo crear $SSH_DIR."; exit 1; }
+    fi
     log "Creado $SSH_DIR"
 fi
+
+# Asegurar que el USUARIO es propietario de ~/.ssh y de su contenido.
+# En equipos ya provisionados, authorized_keys/.ssh pueden haber quedado
+# como root:root (el instalador escribió las claves como root sin chown),
+# y entonces el usuario no puede ni hacer chmod ni escribir su clave.
+NEEDFIX=0
+[ -e "$SSH_DIR" ]   && [ ! -O "$SSH_DIR" ]   && NEEDFIX=1
+[ -e "$AUTH_KEYS" ] && [ ! -O "$AUTH_KEYS" ] && NEEDFIX=1
+if [ "$NEEDFIX" -eq 1 ]; then
+    warn "$SSH_DIR no pertenece a '$USUARIO' (seguramente root). Corrigiendo propiedad…"
+    if command -v sudo >/dev/null 2>&1; then
+        if sudo chown -R "$USUARIO:$GRUPO" "$SSH_DIR"; then
+            ok "Propiedad de $SSH_DIR reasignada a $USUARIO:$GRUPO (contenido intacto)."
+        else
+            err "No se pudo cambiar la propiedad de $SSH_DIR."
+            err "Hazlo manualmente:  sudo chown -R $USUARIO:$GRUPO $SSH_DIR"
+            exit 1
+        fi
+    else
+        err "Falta 'sudo' y $SSH_DIR no es tuyo. Pide a un administrador:"
+        err "  chown -R $USUARIO:$GRUPO $SSH_DIR"
+        exit 1
+    fi
+fi
+
 chmod 700 "$SSH_DIR"
 
 # ---- 2. Par de claves ed25519 --------------------------------------
