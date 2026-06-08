@@ -24,6 +24,12 @@ Instala el driver propietario de NVIDIA **solo si se detecta una GPU NVIDIA** en
    - Comprueba la versión instalada con `nvidia-smi`.
    - Informa del driver **recomendado** por `ubuntu-drivers devices` y lo
      compara con el instalado (solo informa, no actualiza).
+   - **Instala el NVIDIA Container Toolkit** (al final del bloque, solo si
+     hay GPU): si `nvidia-container-toolkit` no está ya instalado, añade el
+     repo APT oficial (clave GPG en `/usr/share/keyrings/`), lo instala y
+     genera la especificación CDI en `/etc/cdi/nvidia.yaml`
+     (`nvidia-ctk cdi generate`). Permite que Docker/Podman accedan a la
+     GPU. Idempotente: si el toolkit ya está, no reinstala.
 
 ## Estructura
 - `tasks/main.yml`

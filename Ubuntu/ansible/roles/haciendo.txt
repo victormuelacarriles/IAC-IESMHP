@@ -1,10 +1,12 @@
-#Haciendo: 
+#Haciendo:   trabajando en ssh root@10.0.72.134
+
 
 #Estoy arreglando los roles de autoconfigración
 
+
+# En nvidia, instlar lo necesario para 
 # -> vmware instala pero pide compilar (no hace bien post-instalación, ver abajo)
         #Post:   (no está fucionando bien)
         #   /usr/lib/vmware/bin/vmware-setup-helper -e -o -u no -c no
         #   /usr/bin/vmware-modconfig --console --install-all 
 
-#dirtyfrag

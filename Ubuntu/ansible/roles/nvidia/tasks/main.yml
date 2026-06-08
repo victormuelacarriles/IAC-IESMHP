@@ -215,3 +215,56 @@
           {% else %}
             Ubuntu no reporta un driver recomendado adicional; instalado: {{ nvidia_version.stdout | default('desconocido') }}.
           {% endif %}
+
+    # ------------------------------------------------------------------
+    # NVIDIA Container Toolkit — solo si hay GPU NVIDIA (bloque ya está
+    # bajo `when: has_nvidia`). Permite a Docker/Podman acceder a la GPU
+    # vía CDI (`/etc/cdi/nvidia.yaml`). Idempotente: si `nvidia-ctk` ya
+    # existe, no reinstala (solo regenera el CDI si hace falta).
+    # Fuente oficial: https://nvidia.github.io/libnvidia-container/
+    # ------------------------------------------------------------------
+    - name: Comprobar si nvidia-container-toolkit ya está instalado
+      command: dpkg-query -W -f='${Status}' nvidia-container-toolkit
+      register: nct_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Instalar el NVIDIA Container Toolkit
+      when: "'install ok installed' not in nct_installed.stdout"
+      block:
+        # `gpg --dearmor` sobreescribe el destino cada vez (no idempotente
+        # por sí mismo); `creates:` evita re-descargar la clave si ya está.
+        - name: Descargar la clave GPG del repo NVIDIA Container Toolkit
+          shell: >
+            curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey
+            | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+          args:
+            creates: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+        - name: Añadir el repositorio APT del NVIDIA Container Toolkit
+          shell: >
+            curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list
+            | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g'
+            > /etc/apt/sources.list.d/nvidia-container-toolkit.list
+          args:
+            creates: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+        - name: Instalar nvidia-container-toolkit (refresca caché por el repo nuevo)
+          apt:
+            name: nvidia-container-toolkit
+            state: present
+            update_cache: yes
+          register: nct_apt
+
+    # Genera la especificación CDI que consumen Docker/Podman. Se ejecuta
+    # si el toolkit acaba de instalarse o si aún no existe el fichero CDI.
+    - name: Generar la especificación CDI de NVIDIA (/etc/cdi/nvidia.yaml)
+      command: nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+      args:
+        creates: /etc/cdi/nvidia.yaml
+      register: nct_cdi
+      changed_when: nct_cdi.rc == 0
+      # En instalación fresca el módulo NVIDIA puede no estar cargado aún
+      # (el reinicio final de 3-SetupPrimerInicio.sh lo activará); no
+      # abortamos el playbook si la generación CDI falla por eso.
+      failed_when: false
