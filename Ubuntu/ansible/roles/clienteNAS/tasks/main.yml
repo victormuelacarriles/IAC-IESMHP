@@ -97,13 +97,29 @@
     label: "{{ item.item.path }}"
   when: item.rc != 0
 
-- name: Montar cada export del NAS (entrada en /etc/fstab + montaje)
-  mount:
-    path: "{{ item.path }}"
-    src: "{{ item.src }}"
-    fstype: "{{ nas_fstype }}"
-    opts: "{{ nas_mount_options }}"
-    state: mounted
+# El módulo `ansible.posix.mount` (state=mounted) emite varios
+# [DEPRECATION WARNING] en su propio código interno (imports antiguos de
+# `ansible.module_utils._text` y `warnings` en exit_json). Para NO tener que
+# silenciar los avisos de TODA la fase Ansible (deprecation_warnings=False en
+# ansible.cfg), gestionamos fstab + montaje a mano: así el cambio queda
+# acotado a este rol y el resto de avisos de deprecación siguen visibles.
+- name: Asegurar la entrada de cada export del NAS en /etc/fstab
+  lineinfile:
+    path: /etc/fstab
+    regexp: '^\S+\s+{{ item.path | regex_escape }}\s'
+    line: "{{ item.src }} {{ item.path }} {{ nas_fstype }} {{ nas_mount_options }} 0 0"
+    state: present
   loop: "{{ nas_mounts | default([]) }}"
   loop_control:
     label: "{{ item.src }} -> {{ item.path }}"
+
+# Solo monta los que aún no están montados (reutiliza nas_mp_check). `mount
+# <punto>` lee la línea recién escrita en fstab. Los ya montados se omiten.
+- name: Montar los exports que aún no están montados
+  command: "mount {{ item.item.path }}"
+  register: nas_mount_now
+  changed_when: nas_mount_now.rc == 0
+  loop: "{{ nas_mp_check.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when: item.rc != 0

@@ -23,8 +23,13 @@ Ejemplo real: `showmount -e 10.0.1.100` → `/mnt/DiscosRapidos/PruebaRapidosX3 
    `{{ nas_base_mount }}/<nombre>` según `nas_subdir_strategy`.
 6. Detecta con `mountpoint -q` qué puntos ya están montados y **crea solo los
    que faltan** (ver *Idempotencia / re-ejecución* abajo).
-7. Monta cada export con el módulo `mount` (`state: mounted` → escribe
-   `/etc/fstab` **y** monta ahora).
+7. Escribe la entrada de cada export en `/etc/fstab` con `lineinfile` y luego
+   monta con `command: mount <punto>` **solo** los puntos que aún no estaban
+   montados (reutiliza `nas_mp_check`). Se hace a mano —en vez del módulo
+   `ansible.posix.mount`— porque ese módulo emite varios
+   `[DEPRECATION WARNING]` en su código interno; gestionarlo manualmente
+   acota el silenciado a este rol sin desactivar `deprecation_warnings`
+   globalmente (ver `Ubuntu/RegistroDeCambios/20260608-Cambios.md`).
 
 ## Estructura
 - `tasks/main.yml`
@@ -60,8 +65,9 @@ Sobreescribir las variables (en `defaults/main.yml`, en el playbook o con
 
 ## Notas
 - Solo lectura por diseño: los equipos no escriben en el NAS.
-- Idempotente: `showmount` con `changed_when: false`; `mount` solo marca
-  cambio si toca `/etc/fstab` o el estado de montaje.
+- Idempotente: `showmount` con `changed_when: false`; `lineinfile` solo marca
+  cambio si modifica `/etc/fstab`; el `mount` final solo corre sobre puntos no
+  montados (`when: item.rc != 0`).
 - Si el NAS no exporta nada, el rol no falla: avisa con `debug` y no monta.
 - Si `showmount` no responde tras los reintentos, el rol **falla** (red/NAS
   caídos) — es deliberado para que se vea en el log del primer arranque.
