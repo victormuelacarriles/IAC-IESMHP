@@ -29,3 +29,9 @@
     name: git
     state: present
     update_cache: false
+
+- name: Instalar curl (necesario para algunos roles)
+  apt:
+    name: curl
+    state: present
+    update_cache: false

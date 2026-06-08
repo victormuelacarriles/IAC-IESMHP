@@ -232,8 +232,10 @@
     - name: Instalar el NVIDIA Container Toolkit
       when: "'install ok installed' not in nct_installed.stdout"
       block:
-        # `gpg --dearmor` sobreescribe el destino cada vez (no idempotente
-        # por sí mismo); `creates:` evita re-descargar la clave si ya está.
+        # `curl` lo instala el rol `basicos` (1º en roles.yaml), así que
+        # está disponible aquí. `gpg --dearmor` sobreescribe el destino cada
+        # vez (no idempotente por sí mismo); `creates:` evita re-descargar
+        # la clave si ya está.
         - name: Descargar la clave GPG del repo NVIDIA Container Toolkit
           shell: >
             curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey

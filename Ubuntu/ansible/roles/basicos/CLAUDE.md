@@ -8,9 +8,11 @@ Reinstala/asegura el software base que el equipo *debería* traer ya desde el Li
 - `pipx`
 - `ansible` (vía apt)
 - `git`
+- `curl` (lo usa, p. ej., el rol `nvidia` para descargar la clave/repo del
+  NVIDIA Container Toolkit)
 
 ## Estructura
-- `tasks/main.yml` — cuatro tareas `apt`, todas con `state: present` y `update_cache: false` (la caché ya se refresca una vez en `pre_tasks` de `roles.yaml`).
+- `tasks/main.yml` — seis tareas `apt`, todas con `state: present` y `update_cache: false` (la caché ya se refresca una vez en `pre_tasks` de `roles.yaml`).
 - Sin `defaults/`: no tiene variables.
 
 ## Notas
