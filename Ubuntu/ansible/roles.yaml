@@ -22,6 +22,7 @@
   roles:
      - basicos       #cosas que debieras estar desde el livecd pero que recomprobamos #[python, pip, pipx, ansible] 
      - nvidia
+     - flatpak       #Instala el soporte de flatpak y el repositorio de Flathub
      # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml
      - certificados
      - obs
@@ -31,10 +32,6 @@
      - DirtyFrag     #Evalua y mitiga la vuln. "Dirty Frag" (CVE-2026-43284 ESP/IPsec + CVE-2026-43500 RxRPC): bloquea esp4/esp6/rxrpc
      - vmware        #sigue fallando la compilación. error raro de: "[Apploader] Use shipped Linux kernel AIO access library"
 
-     #- comparteaula  # Rol unificado: detecta aula por IP (72/32) y configura servidor/cliente NFS según corresponda
-     #TODO: virtualbox falla. A raiz de poner el servidor de caches apt, no instala la versión concreta que le digo
-    #             #TODO: virtualbox no me instalar exactamente la versión que le digo, sino la última disponible 
-     #- contenedores  #[docker y podman  (+sus compose)]    #por hacer
 
 #POR HACER:
 #      - hashicorp     #[terraform, packer, vagrant]
@@ -46,7 +43,3 @@
 
 
 
-
-#   vars:
-#     obs_version: "30.0.2"  # versión deseada, personalizable desde el playbook o línea de comandos
-  

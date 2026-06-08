@@ -20,6 +20,7 @@ Esta carpeta contiene la **configuración automática del equipo ya instalado**,
 | [`comparteaula32`](roles/comparteaula32/CLAUDE.md) | legacy (no listado) | NFS cliente aula SMRD (NAS) |
 | [`comparteaula72`](roles/comparteaula72/CLAUDE.md) | legacy (no listado) | NFS servidor/cliente aula IABD |
 | [`nvidia`](roles/nvidia/CLAUDE.md) | ✅ activo | Driver NVIDIA si hay GPU |
+| [`flatpak`](roles/flatpak/CLAUDE.md) | ✅ activo | Soporte Flatpak + repo Flathub |
 | [`certificados`](roles/certificados/CLAUDE.md) | ✅ activo | Claves SSH de root + authorized_keys |
 | [`obs`](roles/obs/CLAUDE.md) | ✅ activo | OBS Studio |
 | [`rdp`](roles/rdp/CLAUDE.md) | ✅ activo | Servidor RDP **nativo de GNOME** (`grdctl --system`); sustituye a `xrdp` |
