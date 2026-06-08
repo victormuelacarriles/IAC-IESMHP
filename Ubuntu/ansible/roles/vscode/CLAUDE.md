@@ -18,4 +18,3 @@ Instala **Visual Studio Code** descargando el `.deb` oficial de Microsoft (no us
 ## Notas
 - El patrón backup/restore de `/etc/apt` es **deliberado**: evita que VS Code deje su repo y rompa el proxy apt del aula.
 - Idempotente por la comprobación de `/usr/bin/code`.
-- Existe una carpeta hermana `roles/vscode copy/` que es un **resto/basura** (contiene solo `contenedores/main.yml`); no es un rol válido, ignorar o limpiar.

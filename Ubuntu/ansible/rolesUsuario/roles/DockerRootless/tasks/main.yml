@@ -1,17 +1,17 @@
 # ===========================================================================
-# Rol DockerRootless — instala Docker en modo ROOTLESS para el usuario actual
+# Rol DockerRootless — configuración POR USUARIO del Docker rootless
 # ---------------------------------------------------------------------------
-# Sigue la guía oficial: https://docs.docker.com/engine/security/rootless/
+# Completa la instalación rootless COMO EL USUARIO, sin permisos root. La parte
+# de sistema (repo, paquetes, subuid/subgid, lingering, desactivar el daemon de
+# sistema) la hace el rol `roles/Docker`, que corre como root desde roles.yaml.
 #
-# El rol corre COMO EL USUARIO (el playbook usa become: no). Solo las tareas
-# que tocan el sistema (repos, paquetes, daemon de sistema, lingering) usan
-# become: yes puntualmente.
-#
+# Este rol NO usa become: todo lo que hace cabe en los permisos del usuario.
+# Guía oficial: https://docs.docker.com/engine/security/rootless/
 # tags: docker, rootless
 # ===========================================================================
 - name: Etiquetas del rol
   ansible.builtin.debug:
-    msg: "Instalando Docker rootless para el usuario '{{ dr_user }}' (uid {{ dr_user_uid }})"
+    msg: "Configurando Docker rootless para el usuario '{{ dr_user }}' (uid {{ dr_user_uid }})"
   tags: [docker, rootless]
 
 # ---------------------------------------------------------------------------
@@ -27,105 +27,44 @@
   tags: [docker, rootless]
 
 # ---------------------------------------------------------------------------
-# 1. Repositorio oficial de Docker  (requiere root)
+# 1. Prerrequisitos de sistema (los deja el rol roles/Docker)
 # ---------------------------------------------------------------------------
-- name: Paquetes para configurar el repositorio de Docker
-  become: yes
-  ansible.builtin.apt:
-    name:
-      - ca-certificates
-      - curl
-    state: present
-    update_cache: false
-  tags: [docker, rootless]
-
-- name: Crear directorio de keyrings de APT
-  become: yes
-  ansible.builtin.file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: "0755"
-  tags: [docker, rootless]
-
-- name: Descargar la clave GPG de Docker
-  become: yes
-  ansible.builtin.get_url:
-    url: https://download.docker.com/linux/ubuntu/gpg
-    dest: /etc/apt/keyrings/docker.asc
-    mode: "0644"
-  tags: [docker, rootless]
-
-- name: Añadir el repositorio APT de Docker
-  become: yes
-  ansible.builtin.apt_repository:
-    repo: >-
-      deb [arch={{ dr_arch }} signed-by=/etc/apt/keyrings/docker.asc]
-      https://download.docker.com/linux/ubuntu {{ dr_codename }} stable
-    filename: docker
-    state: present
-    update_cache: yes
-  tags: [docker, rootless]
-
-# ---------------------------------------------------------------------------
-# 2. Instalar el stack Docker + prerrequisitos de rootless  (requiere root)
-# ---------------------------------------------------------------------------
-- name: Instalar Docker y prerrequisitos de rootless
-  become: yes
-  ansible.builtin.apt:
-    name: "{{ dr_docker_packages + dr_prereqs }}"
-    state: present
-    update_cache: false
-  tags: [docker, rootless]
-
-# ---------------------------------------------------------------------------
-# 3. Desactivar el daemon de Docker de SISTEMA (recomendado)
-# ---------------------------------------------------------------------------
-- name: Desactivar el daemon de Docker de sistema
-  become: yes
-  ansible.builtin.systemd_service:
-    name: "{{ item }}"
-    enabled: no
-    state: stopped
-  loop:
-    - docker.service
-    - docker.socket
-  failed_when: false
-  when: dr_disable_system_docker | bool
-  tags: [docker, rootless]
-
-# ---------------------------------------------------------------------------
-# 4. subordinate UIDs/GIDs (los necesita el remapeo de rootless)
-# ---------------------------------------------------------------------------
-- name: Comprobar si el usuario ya tiene subuid asignados
-  become: yes
-  ansible.builtin.command: "grep -q '^{{ dr_user }}:' /etc/subuid"
-  register: dr_subuid
+- name: Comprobar que el stack rootless de sistema está instalado
+  ansible.builtin.command: which dockerd-rootless-setuptool.sh
+  register: dr_setuptool
   changed_when: false
   failed_when: false
   tags: [docker, rootless]
 
-- name: Asignar subuid/subgid al usuario si faltan
-  become: yes
-  ansible.builtin.command: >-
-    usermod
-    --add-subuids {{ dr_subid_range }}
-    --add-subgids {{ dr_subid_range }}
-    {{ dr_user }}
-  when: dr_subuid.rc != 0
+- name: Abortar si falta la parte de sistema
+  ansible.builtin.fail:
+    msg: >-
+      No se encuentra 'dockerd-rootless-setuptool.sh'. Falta la instalación de
+      sistema: aplica primero el rol `roles/Docker` como root
+      (cd ../.. && ansible-playbook ... roles.yaml --tags docker) y vuelve a
+      lanzar este playbook.
+  when: dr_setuptool.rc != 0
+  tags: [docker, rootless]
+
+- name: Comprobar que el usuario tiene subuid/subgid asignados
+  ansible.builtin.command: "grep -q '^{{ dr_user }}:' /etc/subuid"
+  register: dr_subuid_ok
+  changed_when: false
+  failed_when: false
+  tags: [docker, rootless]
+
+- name: Avisar si faltan subuid/subgid (el rootless fallará sin ellos)
+  ansible.builtin.debug:
+    msg: >-
+      AVISO: el usuario '{{ dr_user }}' no tiene rango en /etc/subuid; el daemon
+      rootless fallará. Añádelo como root: incluye '{{ dr_user }}' en
+      docker_rootless_users del rol roles/Docker, o ejecuta
+      'sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 {{ dr_user }}'.
+  when: dr_subuid_ok.rc != 0
   tags: [docker, rootless]
 
 # ---------------------------------------------------------------------------
-# 5. Lingering: que el daemon de usuario arranque en el boot (sin login)
-# ---------------------------------------------------------------------------
-- name: Habilitar lingering del usuario
-  become: yes
-  ansible.builtin.command: "loginctl enable-linger {{ dr_user }}"
-  args:
-    creates: "/var/lib/systemd/linger/{{ dr_user }}"
-  tags: [docker, rootless]
-
-# ---------------------------------------------------------------------------
-# 6. Instalar el daemon rootless (COMO EL USUARIO)
+# 2. Instalar el daemon rootless del usuario
 # ---------------------------------------------------------------------------
 - name: ¿Existe ya la unit docker.service del usuario?
   ansible.builtin.stat:
@@ -143,7 +82,7 @@
   tags: [docker, rootless]
 
 # ---------------------------------------------------------------------------
-# 7. Variables de entorno en ~/.bashrc  (COMO EL USUARIO)
+# 3. Variables de entorno en ~/.bashrc
 # ---------------------------------------------------------------------------
 - name: Exportar DOCKER_HOST y PATH en ~/.bashrc
   ansible.builtin.blockinfile:
@@ -157,7 +96,7 @@
   tags: [docker, rootless]
 
 # ---------------------------------------------------------------------------
-# 8. Habilitar y arrancar el servicio de usuario
+# 4. Habilitar y arrancar el servicio de usuario
 # ---------------------------------------------------------------------------
 - name: Habilitar y arrancar docker.service (usuario)
   ansible.builtin.systemd_service:
@@ -171,7 +110,7 @@
   tags: [docker, rootless]
 
 # ---------------------------------------------------------------------------
-# 9. Comprobación
+# 5. Comprobación
 # ---------------------------------------------------------------------------
 - name: Verificar el daemon rootless (docker info)
   ansible.builtin.command: docker info

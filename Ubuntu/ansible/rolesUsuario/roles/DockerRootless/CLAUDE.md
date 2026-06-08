@@ -1,60 +1,59 @@
 # Rol `DockerRootless`
 
 ## Qué hace
-Instala **Docker en modo rootless** para el **usuario que ejecuta el playbook**
-(no para root), siguiendo la guía oficial
-<https://docs.docker.com/engine/security/rootless/>. El daemon corre dentro del
-namespace de usuario: sin privilegios, con el socket en
-`/run/user/<uid>/docker.sock`.
+Completa **Docker en modo rootless** para el **usuario que ejecuta el playbook**
+(no para root), **sin permisos root**. El daemon corre dentro del namespace de
+usuario: sin privilegios, con el socket en `/run/user/<uid>/docker.sock`.
 
-Es el primer rol de `rolesUsuario/` y se invoca desde
-[`../../rolesUsuario.yaml`](../../rolesUsuario.yaml).
+Es la **contrapartida por usuario** del rol de sistema
+[`roles/Docker`](../../../../roles/Docker/CLAUDE.md): aquel hace toda la parte que
+requiere root (repo, paquetes, subuid/subgid, lingering, desactivar el daemon de
+sistema); **este solo hace lo que cabe en los permisos del usuario**.
+
+Sigue la guía oficial <https://docs.docker.com/engine/security/rootless/>. Es el
+primer rol de `rolesUsuario/` y se invoca desde
+[`../../rolesUsuario.yaml`](../../rolesUsuario.yaml) (`become: no`).
+
+## Reparto de responsabilidades (root vs usuario)
+
+| Parte | Rol | Se ejecuta como |
+|-------|-----|-----------------|
+| Repo + paquetes, daemon de sistema, subuid/subgid, lingering | `roles/Docker` | root |
+| `dockerd-rootless-setuptool.sh`, `DOCKER_HOST`, `systemctl --user` | **`DockerRootless`** (este) | el propio usuario |
 
 ## Pasos (tasks/main.yml)
 1. **Aborta si uid 0** — el rol es para un usuario normal, no root.
-2. **Repo oficial de Docker** (`become: yes`): keyring en
-   `/etc/apt/keyrings/docker.asc` + entrada APT `download.docker.com/linux/ubuntu`.
-3. **Instala el stack** (`become: yes`): `docker-ce`, `docker-ce-cli`,
-   `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`,
-   `docker-ce-rootless-extras` + prerrequisitos `uidmap`, `dbus-user-session`,
-   `slirp4netns`, `fuse-overlayfs`.
-4. **Desactiva el daemon de sistema** (`docker.service`/`docker.socket`) para
-   que no compita con el rootless (configurable, `dr_disable_system_docker`).
-5. **subuid/subgid**: si el usuario no tiene rango asignado en `/etc/subuid`,
-   lo añade con `usermod --add-subuids/--add-subgids` (65 536 ids).
-6. **Lingering** (`loginctl enable-linger`): el daemon de usuario arranca en el
-   boot sin necesidad de que el usuario inicie sesión gráfica.
-7. **`dockerd-rootless-setuptool.sh install`** (COMO el usuario): crea la unit
+2. **Verifica prerrequisitos de sistema**: que `dockerd-rootless-setuptool.sh`
+   exista (lo instala `roles/Docker`); si falta, aborta indicando que se aplique
+   antes ese rol. Avisa también si el usuario no tiene rango en `/etc/subuid`.
+3. **`dockerd-rootless-setuptool.sh install`** (COMO el usuario): crea la unit
    `~/.config/systemd/user/docker.service`. Idempotente (se salta si la unit ya
    existe).
-8. **`~/.bashrc`**: exporta `PATH=/usr/bin:$PATH` y
+4. **`~/.bashrc`**: exporta `PATH=/usr/bin:$PATH` y
    `DOCKER_HOST=unix:///run/user/<uid>/docker.sock` (bloque marcado, idempotente).
-9. **`systemctl --user enable --now docker`** + verificación final con
+5. **`systemctl --user enable --now docker`** + verificación final con
    `docker info`.
 
 ## Estructura
 - `tasks/main.yml`
-- `defaults/main.yml` — usuario/home/uid (de los facts), codename del repo,
-  listas de paquetes, rango de subids, flag para desactivar el daemon de sistema.
+- `defaults/main.yml` — solo usuario/home/uid (de los facts). Las listas de
+  paquetes, el rango de subids y el flag de desactivar el daemon de sistema
+  viven ahora en `roles/Docker`.
 
 ## Variables (`defaults/`)
 | Variable | Por defecto | Para qué |
 |----------|-------------|----------|
 | `dr_user` / `dr_user_uid` / `dr_user_home` | facts del usuario | Quién recibe el Docker rootless |
-| `dr_arch` | `amd64` | Arquitectura del repo APT |
-| `dr_codename` | `{{ ansible_distribution_release }}` | Codename del repo Docker (ver issue) |
-| `dr_docker_packages` / `dr_prereqs` | listas | Paquetes a instalar |
-| `dr_subid_range` | `100000-165535` | Rango subuid/subgid si falta |
-| `dr_disable_system_docker` | `true` | Parar el daemon de sistema |
 
 ## Uso
 ```bash
-# Como el USUARIO (no root). -K pide la contraseña de sudo para las tareas root.
-cd /opt/IAC-IESMHP/Ubuntu/ansible/rolesUsuario
-ansible-playbook -i localhost, --connection=local -K rolesUsuario.yaml
+# 1) Una vez, como root (parte de sistema):
+cd /opt/IAC-IESMHP/Ubuntu/ansible
+ansible-playbook -i localhost, --connection=local roles.yaml --tags docker
 
-# Solo este rol:
-ansible-playbook -i localhost, --connection=local -K rolesUsuario.yaml --tags docker
+# 2) Como el USUARIO (parte de perfil):
+cd /opt/IAC-IESMHP/Ubuntu/ansible/rolesUsuario
+ansible-playbook -i localhost, --connection=local rolesUsuario.yaml --tags docker
 ```
 Tras instalarlo, en una **sesión nueva** del usuario (para que `~/.bashrc`
 exporte `DOCKER_HOST`):
@@ -63,22 +62,19 @@ docker run --rm hello-world
 ```
 
 ## Issues conocidos
-- **Codename `resolute` (Ubuntu 26.04)**: si Docker aún no publica el repo para
-  `resolute`, la tarea "Añadir el repositorio APT de Docker" fallará en
-  `apt update`. Solución: pasar un codename LTS compatible, p. ej.
-  `-e dr_codename=noble`. Considerar fijarlo en `defaults/` cuando se confirme
-  cuál sirve en el aula.
 - **`docker info` falla justo tras la instalación**: el bus/manager systemd del
   usuario puede no estar listo en la misma ejecución (sobre todo si el lingering
   se acaba de habilitar y no hay sesión activa). El servicio queda `enabled`; se
   resuelve al reiniciar la sesión del usuario o el equipo. La tarea de
   verificación es `failed_when: false` para no abortar el playbook por esto.
+- **Falta la parte de sistema**: si no se aplicó `roles/Docker` antes, el rol
+  aborta en la comprobación de `dockerd-rootless-setuptool.sh` con un mensaje que
+  indica el comando a ejecutar.
 - **No enganchado al despliegue todavía**: `rolesUsuario.yaml` se lanza a mano.
   Pendiente decidir cómo integrarlo en el primer arranque (ver
   [`../../CLAUDE.md`](../../CLAUDE.md) → "Por hacer").
 
 ## Relación con otros roles
-- [`roles/contenedores`](../../../roles/contenedores/CLAUDE.md) instalaría Docker
-  **de sistema** (como root) vía sub-roles externos; está incompleto y comentado.
-  `DockerRootless` es el enfoque **por usuario**, autónomo e independiente de
-  aquel.
+- [`roles/Docker`](../../../../roles/Docker/CLAUDE.md) hace la instalación de
+  **sistema** (como root) que este rol da por hecha. Sustituye al antiguo rol
+  `contenedores` (borrado), que estaba incompleto y comentado.

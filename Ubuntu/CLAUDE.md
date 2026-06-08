@@ -209,7 +209,7 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 ### Configuración Ansible (post-instalación)
 La fase Ansible (software, NFS de aula, drivers, claves SSH…) está **documentada con sus propios CLAUDE.md** dentro de `Ubuntu/ansible/`:
 - `Ubuntu/ansible/CLAUDE.md` — describe `roles.yaml` (playbook maestro), inventarios `*.ini`, comandos de ejecución, estado de cada rol (activo/comentado/legacy) y convenciones (caché apt, detección de aula por IP, equipo `-00` = servidor NFS).
-- `Ubuntu/ansible/roles/<rol>/CLAUDE.md` — un fichero por rol (`basicos`, `certificados`, `comparteaula` + legacy `comparteaula32`/`comparteaula72`, `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `contenedores`) con tareas, variables e issues conocidos.
+- `Ubuntu/ansible/roles/<rol>/CLAUDE.md` — un fichero por rol (`basicos`, `certificados`, `comparteaula` + legacy `comparteaula32`/`comparteaula72`, `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `Docker` (instalación de sistema para uso rootless; sustituye al antiguo `contenedores`)) con tareas, variables e issues conocidos.
 - `Ubuntu/ansible/rolesUsuario/CLAUDE.md` — configuraciones por usuario (`~/.ssh`, dotfiles…), ejecutadas **como el usuario** (no root). Carpeta nueva, en construcción; aún no enganchada a `roles.yaml`.
 - **Al diagnosticar/modificar la fase Ansible, leer primero esos CLAUDE.md** (sobre todo el de `Ubuntu/ansible/` para saber qué roles están activos en `roles.yaml`).
 

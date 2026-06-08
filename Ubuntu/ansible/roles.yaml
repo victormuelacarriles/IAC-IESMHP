@@ -30,6 +30,7 @@
      - vscode
      - clienteNAS    #Configura el cliente NFS para el NAS del instituto (y lo monta en /mnt/nas)
      - DirtyFrag     #Evalua y mitiga la vuln. "Dirty Frag" (CVE-2026-43284 ESP/IPsec + CVE-2026-43500 RxRPC): bloquea esp4/esp6/rxrpc
+     - Docker        #Instalación de SISTEMA de Docker para uso ROOTLESS (la parte por usuario la hace rolesUsuario/DockerRootless)
      - vmware        #sigue fallando la compilación. error raro de: "[Apploader] Use shipped Linux kernel AIO access library"
 
 

@@ -33,7 +33,7 @@ Esta carpeta contiene la **configuración automática del equipo ya instalado**,
 | [`virtualbox`](roles/virtualbox/CLAUDE.md) | ⛔ comentado (TODO versión) | VirtualBox desde repo Oracle |
 | [`virtualboxFUERA`](roles/virtualboxFUERA/CLAUDE.md) | no listado | Desinstala VirtualBox y limpia repos |
 | [`vmware`](roles/vmware/CLAUDE.md) | ⛔ comentado (compila en 1er arranque) | VMware Workstation desde .bundle |
-| [`contenedores`](roles/contenedores/CLAUDE.md) | ⛔ comentado (por hacer) | Docker/Podman (depende de roles externos) |
+| [`Docker`](roles/Docker/CLAUDE.md) | ✅ activo | Instalación de **sistema** de Docker para uso **rootless** (repo, paquetes, subuid/subgid, lingering). La parte por usuario la hace [`rolesUsuario/DockerRootless`](rolesUsuario/roles/DockerRootless/CLAUDE.md). Sustituye al antiguo `contenedores` |
 
 > Cada carpeta de rol tiene su propio `CLAUDE.md` con el detalle de tareas, variables (`defaults/`) e issues conocidos.
 
@@ -80,5 +80,4 @@ Pasar versión concreta a un rol que lo soporte (p. ej. OBS):
 
 - `rolesUsuario/` — configuración por usuario (no root). Ver [`rolesUsuario/CLAUDE.md`](rolesUsuario/CLAUDE.md).
 - `pruebas/` — playbooks sueltos de experimentación (NombreIP, NFS de NAS, perfil de alumno, etc.). No forman parte de `roles.yaml`.
-- `roles/vscode copy/` — **resto/basura** (solo `contenedores/main.yml`), no es un rol válido; ignorar o eliminar.
 - `test_nvidia.yml` — playbook suelto de prueba del driver NVIDIA.

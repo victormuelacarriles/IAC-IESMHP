@@ -35,7 +35,7 @@ Roles actuales:
 
 | Rol | Estado | Qué hace |
 |-----|--------|----------|
-| [`DockerRootless`](roles/DockerRootless/CLAUDE.md) | ✅ activo (1º) | Instala Docker **rootless** para el usuario actual (socket en `/run/user/<uid>/docker.sock`) |
+| [`DockerRootless`](roles/DockerRootless/CLAUDE.md) | ✅ activo (1º) | Completa Docker **rootless** para el usuario actual (socket en `/run/user/<uid>/docker.sock`). La parte de sistema la hace [`../roles/Docker`](../roles/Docker/CLAUDE.md) como root |
 
 ### `0-ConfiguracionInicial.sh`
 Configuración mínima de SSH del usuario. **Se ejecuta como el usuario, no como
