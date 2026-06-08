@@ -185,6 +185,9 @@ parte vive en `Ubuntu/ansible/` y está **documentada con sus propios CLAUDE.md*
   `certificados`, `comparteaula` (+ legacy `comparteaula32`/`comparteaula72`),
   `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al
   antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `contenedores`.
+- **`Ubuntu/ansible/rolesUsuario/CLAUDE.md`** — configuraciones que **todo usuario**
+  debería tener en su perfil (`~/.ssh`, dotfiles…), ejecutadas **como el usuario**
+  (no root). Carpeta nueva, en construcción; aún no enganchada a `roles.yaml`.
 
 **Al diagnosticar o modificar la fase Ansible, leer primero esos CLAUDE.md** (en
 especial el de `Ubuntu/ansible/` para saber qué roles están activos en `roles.yaml`).

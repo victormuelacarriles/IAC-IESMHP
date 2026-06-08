@@ -2,6 +2,11 @@
 
 Esta carpeta contiene la **configuración automática del equipo ya instalado**, basada en roles de Ansible. La lanza `3-SetupPrimerInicio.sh` en el primer arranque (`ansible-playbook roles.yaml` desde `$RAIZANSIBLE`), normalmente en modo local (`-i localhost, --connection=local`).
 
+### Subcarpetas
+- **`roles/`** — roles de Ansible que se aplican **como root** sobre el equipo (lo que describe este documento).
+- **`rolesUsuario/`** — configuraciones que **todo usuario** debería tener en su propio perfil (`~/.ssh`, dotfiles, ajustes de escritorio…); se ejecutan **como el usuario**, no como root. Ver [`rolesUsuario/CLAUDE.md`](rolesUsuario/CLAUDE.md). Carpeta nueva (2026-06-08), todavía no enganchada a `roles.yaml`.
+- **`pruebas/`** — playbooks sueltos de experimentación; no forman parte del despliegue.
+
 ## `roles.yaml` — el playbook maestro
 
 Único play: `hosts: all`, `become: yes`.
@@ -73,6 +78,7 @@ Pasar versión concreta a un rol que lo soporte (p. ej. OBS):
 
 ## Carpetas auxiliares
 
+- `rolesUsuario/` — configuración por usuario (no root). Ver [`rolesUsuario/CLAUDE.md`](rolesUsuario/CLAUDE.md).
 - `pruebas/` — playbooks sueltos de experimentación (NombreIP, NFS de NAS, perfil de alumno, etc.). No forman parte de `roles.yaml`.
 - `roles/vscode copy/` — **resto/basura** (solo `contenedores/main.yml`), no es un rol válido; ignorar o eliminar.
 - `test_nvidia.yml` — playbook suelto de prueba del driver NVIDIA.
