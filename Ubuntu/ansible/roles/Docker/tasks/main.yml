@@ -87,7 +87,8 @@
 - name: Reducir docker_rootless_users a los que existen
   ansible.builtin.set_fact:
     docker_users_present: >-
-      {{ docker_rootless_users | select('in', getent_passwd.keys() | list) | list }}
+      {{ docker_rootless_users
+         | select('in', ansible_facts['getent_passwd'].keys() | list) | list }}
   tags: [docker, rootless]
 
 - name: Avisar de usuarios objetivo aún inexistentes
