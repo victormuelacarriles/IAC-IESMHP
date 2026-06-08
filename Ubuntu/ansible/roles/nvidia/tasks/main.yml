@@ -233,15 +233,30 @@
       when: "'install ok installed' not in nct_installed.stdout"
       block:
         # `curl` lo instala el rol `basicos` (1º en roles.yaml), así que
-        # está disponible aquí. `gpg --dearmor` sobreescribe el destino cada
-        # vez (no idempotente por sí mismo); `creates:` evita re-descargar
-        # la clave si ya está.
+        # está disponible aquí.
+        #
+        # OJO: NO usar `creates:` con el keyring. Una run anterior fallida
+        # (p. ej. sin `curl`) deja el fichero CREADO PERO VACÍO -> `creates:`
+        # lo daría por bueno y apt fallaría con NO_PUBKEY. En vez de eso,
+        # comprobamos que el keyring contiene una clave válida y solo lo
+        # (re)generamos si no es así.
+        - name: Comprobar si el keyring de NVIDIA ya es válido
+          command: gpg --show-keys /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+          register: nct_keyring_check
+          changed_when: false
+          failed_when: false
+
+        # `set -o pipefail` (bash) hace que el pipe falle si `curl` falla, en
+        # vez de dejar un keyring vacío como en la run anterior. `--yes`
+        # sobreescribe el fichero inválido sin preguntar.
         - name: Descargar la clave GPG del repo NVIDIA Container Toolkit
-          shell: >
-            curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey
-            | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+          shell: |
+            set -o pipefail
+            curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+              | gpg --dearmor --yes -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
           args:
-            creates: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+            executable: /bin/bash
+          when: nct_keyring_check.rc != 0
 
         - name: Añadir el repositorio APT del NVIDIA Container Toolkit
           shell: >
