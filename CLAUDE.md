@@ -127,15 +127,23 @@ ls /var/log/IAC-IESMHP/Ubuntu/
   `rpool` y `tank` para regenerar el cache desde el sistema instalado.
 - **Reestructuración `rpool/home` (CEIABD)**: el dataset único de FASE 1
   (canmount=on) se destruye y recrea como contenedor `canmount=off
-  mountpoint=/home`. Se crea `rpool/home/usuario` con `canmount=on
-  quota=200G`. `useradd -d /home/usuario` sin `-m` (el dataset ya está
-  montado vacío); copia manual de `/etc/skel` + `chown -R`. Snapshot
-  `rpool/home/usuario@inicial` tras configurar `authorized_keys`.
+  mountpoint=/home`. Se crea `rpool/home/usuario` con `canmount=on` y
+  **sin cuota** (la línea `zfs set quota=200G` está comentada desde
+  2026-06-09; ver nota abajo). `useradd -d /home/usuario` sin `-m` (el
+  dataset ya está montado vacío); copia manual de `/etc/skel` + `chown -R`.
+  Snapshot `rpool/home/usuario@inicial` tras configurar `authorized_keys`.
 - **Helper `/usr/local/sbin/nuevo-alumno.sh` (solo CEIABD)**: generado
-  inline. Acepta `<usuario> [cuota=200G]`. Crea `rpool/home/<u>` con cuota,
-  `useradd` con grupos (`sudo` + opcionales detectados), copia skel,
-  snapshot `@inicial`, `passwd` interactivo. Uso típico por SSH:
-  `sudo nuevo-alumno.sh alvaro` o `sudo nuevo-alumno.sh maria 60G`.
+  inline. Acepta `<usuario> [cuota=200G]` (el 2.º arg se sigue aceptando
+  pero **se ignora** mientras la cuota esté desactivada). Crea
+  `rpool/home/<u>` **sin cuota**, `useradd` con grupos (`sudo` + opcionales
+  detectados), copia skel, snapshot `@inicial`, `passwd` interactivo. Uso
+  típico por SSH: `sudo nuevo-alumno.sh alvaro`.
+- **Cuotas ZFS DESACTIVADAS (2026-06-09)**: las dos líneas `zfs set quota=…`
+  de `2-SetupSOdesdeLiveCD.sh` (usuario inicial y helper `nuevo-alumno.sh`)
+  quedan **comentadas, no borradas**. `/home` crece sin límite (solo lo
+  acota el pool). Para reactivar: descomentar la línea correspondiente.
+  Para quitar una cuota ya aplicada en un equipo existente:
+  `zfs set quota=none rpool/home/<u>`.
 - **Parche grub.cfg**: `update-grub` en chroot a veces escribe `root=/dev/nvme0n1p3` en lugar de `root=UUID=...`. El script lo detecta y parchea con `sed`.
 - **Casper hooks**: se eliminan directamente con `rm -rf` (sin `apt remove`) para evitar que los triggers dpkg se bloqueen en el chroot. Los hooks afectados: `/usr/share/initramfs-tools/hooks/casper` y variantes.
 - `update-initramfs -c -k all` tarda 2–4 min; es el paso más lento del chroot. Con `zfs-initramfs` instalado, el initramfs incluye el módulo ZFS (informativo: `/` sigue siendo ext4).

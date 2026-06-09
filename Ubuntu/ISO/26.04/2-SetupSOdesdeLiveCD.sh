@@ -545,9 +545,10 @@ paso "Usuarios (root y usuario)"
 # para que el rsync volcara /home (incluido /home/ubuntu del live) al pool.
 # Ahora lo convertimos en la estructura definitiva:
 #   rpool/home                — contenedor (canmount=off, mountpoint=/home)
-#   rpool/home/<usuario>      — dataset por usuario (canmount=on, quota=200G)
-# Así cada usuario podrá tener su propia cuota y snapshots @inicial / @diario
-# vía /usr/local/sbin/nuevo-alumno.sh.
+#   rpool/home/<usuario>      — dataset por usuario (canmount=on, SIN cuota)
+# Cada usuario tiene su propio dataset y snapshots @inicial / @diario vía
+# /usr/local/sbin/nuevo-alumno.sh. Las cuotas están DESACTIVADAS (2026-06-09):
+# la línea `zfs set quota=...` queda comentada más abajo.
 if [ "$PERFIL" = "CEIABD" ] && zpool list rpool >/dev/null 2>&1; then
     info "Reestructurando rpool/home (contenedor + dataset por usuario)..."
     if zfs list -H -o name rpool/home >/dev/null 2>&1; then
@@ -588,7 +589,10 @@ if [ "$PERFIL" = "CEIABD" ] && zpool list rpool >/dev/null 2>&1; then
     # se crean con /usr/local/sbin/nuevo-alumno.sh que acepta una cuota
     # distinta por parámetro.
     zfs create -o canmount=on rpool/home/usuario
-    zfs set quota=200G rpool/home/usuario
+    # CUOTAS DESACTIVADAS (2026-06-09): /home crece sin límite (solo lo limita el pool).
+    # Para reactivar el límite, descomenta la línea siguiente.
+    # Para quitar una cuota ya aplicada en un equipo existente: zfs set quota=none rpool/home/usuario
+    #zfs set quota=200G rpool/home/usuario
 
     # Red de seguridad: con altroot eliminado el auto-mount debería ir bien,
     # pero verificamos por si acaso (mejor abortar que escribir al ext4).
@@ -692,7 +696,9 @@ paso "Helper /usr/local/sbin/nuevo-alumno.sh (alta de usuarios en CEIABD)"
 # Se instala SOLO en CEIABD porque necesita rpool/home como contenedor ZFS.
 # Lo invoca el admin del IES por SSH:  sudo nuevo-alumno.sh <usuario> [cuota]
 # Pasos: crea dataset rpool/home/<u> → useradd con home en el dataset → copia
-# skel → permisos → cuota → snapshot @inicial → passwd interactivo.
+# skel → permisos → (cuota DESACTIVADA, línea comentada) → snapshot @inicial →
+# passwd interactivo. El arg [cuota] se acepta pero se ignora mientras la línea
+# `zfs set quota` siga comentada.
 cat > /usr/local/sbin/nuevo-alumno.sh << 'NUEVOALUMNOEOF'
 #!/bin/bash
 # Alta de un usuario nuevo en el equipo CEIABD (ZFS).
@@ -738,18 +744,19 @@ case "$U" in
         ;;
 esac
 
-# ── Grupos opcionales según los que existen en este sistema ────────────────
-GROUPS_EXTRA="sudo"
-for g in vboxusers libvirt docker; do
-    if getent group "$g" >/dev/null 2>&1; then
-        GROUPS_EXTRA="${GROUPS_EXTRA},${g}"
-    fi
-done
+# ── Grupos (2026-06-09): los alumnos NO van en 'sudo' ni 'docker' por ───────
+# defecto. useradd crea un grupo primario propio (= nombre de usuario) y el
+# usuario queda SOLO en ese grupo. Para dar privilegios puntuales a posteriori:
+#   sudo usermod -aG sudo <usuario>      # privilegios de administrador
+#   sudo usermod -aG docker <usuario>    # uso de Docker
 
 # ── Crear dataset + usuario ────────────────────────────────────────────────
 echo "[+] Creando dataset $DATASET ..."
 zfs create -o canmount=on "$DATASET"
-zfs set quota="$QUOTA" "$DATASET"
+# CUOTAS DESACTIVADAS (2026-06-09): el dataset del alumno crece sin límite.
+# Para reactivar el límite, descomenta la línea siguiente (usa $QUOTA, arg 2 o 200G).
+# Para quitar una cuota ya aplicada: zfs set quota=none "$DATASET"
+#zfs set quota="$QUOTA" "$DATASET"
 
 # CRÍTICO: forzar y verificar que el dataset queda montado en $HOME_DIR antes
 # de escribir nada. Si zfs create no auto-montó (raro en sistema arrancado,
@@ -761,10 +768,11 @@ if ! mountpoint -q "$HOME_DIR"; then
     exit 1
 fi
 
-echo "[+] Creando usuario $U (grupos: $GROUPS_EXTRA, home: $HOME_DIR) ..."
+echo "[+] Creando usuario $U (solo grupo propio, home: $HOME_DIR) ..."
 # Sin -m (el dir ya existe como mountpoint ZFS) y sin -k (Ubuntu 26.04:
-# '-k requiere -m'; la copia de skel se hace explícita debajo).
-useradd -d "$HOME_DIR" -s /bin/bash -G "$GROUPS_EXTRA" "$U"
+# '-k requiere -m'; la copia de skel se hace explícita debajo). Sin -G: el
+# usuario queda únicamente en su grupo primario (= nombre de usuario).
+useradd -d "$HOME_DIR" -s /bin/bash "$U"
 
 # Dataset ya está montado vacío. Copia de skel + chown explícitos.
 cp -aT /etc/skel "$HOME_DIR/."
@@ -782,8 +790,8 @@ passwd "$U"
 echo
 echo "Usuario '$U' creado:"
 echo "  - home    : $HOME_DIR"
-echo "  - dataset : $DATASET (quota=$QUOTA)"
-echo "  - grupos  : $GROUPS_EXTRA"
+echo "  - dataset : $DATASET (sin cuota — cuotas desactivadas)"
+echo "  - grupos  : solo grupo propio '$U' (sin sudo ni docker)"
 echo "  - snapshot: ${DATASET}@inicial"
 NUEVOALUMNOEOF
 chmod +x /usr/local/sbin/nuevo-alumno.sh

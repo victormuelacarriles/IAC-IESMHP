@@ -6,12 +6,24 @@
 # NO como root). Forma parte de la carpeta `rolesUsuario`.
 #
 # Qué hace:
-#   1. Asegura que el usuario tiene un par de claves SSH ed25519
-#      (~/.ssh/id_ed25519). Si no existe, lo crea sin passphrase.
-#   2. Asegura que el usuario puede conectarse a SÍ MISMO con esa
-#      clave: añade su clave pública a ~/.ssh/authorized_keys y
-#      registra el host en ~/.ssh/known_hosts.
-#   3. Verifica la conexión (ssh localhost "exit 0").
+#   PARTE 1 — SSH "auto" (login a sí mismo):
+#     1. Asegura que el usuario tiene un par de claves SSH ed25519
+#        (~/.ssh/id_ed25519). Si no existe, lo crea sin passphrase.
+#     2. Asegura que el usuario puede conectarse a SÍ MISMO con esa
+#        clave: añade su clave pública a ~/.ssh/authorized_keys y
+#        registra el host en ~/.ssh/known_hosts.
+#     3. Verifica la conexión (ssh localhost "exit 0").
+#   PARTE 2 — Docker rootless para ESTE usuario:
+#     4. Da por hecha la parte de sistema (rol roles/Docker como root:
+#        paquetes, repo, daemon de sistema desactivado). Completa lo que
+#        cabe en permisos del usuario (equivale al rol DockerRootless):
+#        subuid/subgid + lingering (con sudo si faltan), instala el daemon
+#        rootless del usuario (dockerd-rootless-setuptool.sh install),
+#        exporta DOCKER_HOST en ~/.bashrc y arranca docker.service --user.
+#        Corrige el síntoma típico de un usuario NUEVO:
+#          "failed to connect to the docker API at unix:///var/run/docker.sock"
+#        (el cliente apunta al daemon de SISTEMA, desactivado, en vez de al
+#        socket rootless /run/user/<uid>/docker.sock).
 #
 # Idempotente: relanzarlo no rompe nada ni duplica entradas.
 #
@@ -124,18 +136,166 @@ done
 
 # ---- 5. Verificar conexión a sí mismo ------------------------------
 log "Verificando conexión SSH a localhost…"
+SSH_OK=0
 if ssh -o BatchMode=yes \
        -o StrictHostKeyChecking=accept-new \
        -o ConnectTimeout=5 \
        -i "$CLAVE_PRIV" \
        localhost "exit 0" 2>/dev/null; then
     ok "Conexión a sí mismo correcta (ssh localhost)."
-    echo "Correcto"
-    exit 0
+    SSH_OK=1
 else
     warn "No se pudo conectar por SSH a localhost con la clave."
     warn "Causas habituales: el servicio 'ssh' (sshd) no está instalado o"
     warn "no está arrancado en este equipo. La clave y authorized_keys SÍ"
     warn "quedaron configurados; la conexión funcionará cuando sshd esté activo."
+fi
+
+# ====================================================================
+# PARTE 2 — Docker rootless para ESTE usuario
+# --------------------------------------------------------------------
+# Equivale al rol `rolesUsuario/roles/DockerRootless`, pero en bash y
+# autosuficiente: si faltan subuid/subgid o el lingering (cosas que
+# normalmente deja `roles/Docker` como root) los completa con sudo.
+#
+# Por qué un usuario NUEVO falla con
+#   "failed to connect to the docker API at unix:///var/run/docker.sock":
+# el daemon de SISTEMA está desactivado a propósito (modo rootless), así
+# que el cliente debe apuntar a /run/user/<uid>/docker.sock vía
+# DOCKER_HOST. Si el usuario nunca completó esta parte, no tiene daemon
+# de usuario ni DOCKER_HOST y el cliente cae al socket de sistema
+# inexistente. Esta sección lo corrige.
+# ====================================================================
+log "PARTE 2: configurando Docker rootless para '$USUARIO'…"
+
+UID_ACT="$(id -u)"
+DOCKER_SOCK="/run/user/$UID_ACT/docker.sock"
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$UID_ACT}"
+export XDG_RUNTIME_DIR
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+export PATH="/usr/bin:/sbin:/usr/sbin:$PATH"
+DOCKER_OK=0
+
+# ---- 2.1 Prerrequisito de sistema (lo deja el rol roles/Docker) ----
+if ! command -v dockerd-rootless-setuptool.sh >/dev/null 2>&1; then
+    err "Falta la instalación de SISTEMA de Docker (no existe"
+    err "'dockerd-rootless-setuptool.sh'). Aplícala primero como root:"
+    err "  cd /opt/IAC-IESMHP/Ubuntu/ansible && \\"
+    err "  sudo ansible-playbook -i localhost, --connection=local roles.yaml --tags docker"
+    err "y vuelve a lanzar este script."
+    # La PARTE 1 (SSH) sí quedó hecha; salimos con aviso (2), no error duro.
     exit 2
 fi
+
+# ---- 2.2 subuid/subgid del usuario ---------------------------------
+NEED_SUBID=0
+grep -q "^$USUARIO:" /etc/subuid 2>/dev/null || NEED_SUBID=1
+grep -q "^$USUARIO:" /etc/subgid 2>/dev/null || NEED_SUBID=1
+if [ "$NEED_SUBID" -eq 1 ]; then
+    warn "El usuario '$USUARIO' no tiene rango subuid/subgid (el daemon"
+    warn "rootless no arranca sin ellos). Asignándolo con sudo…"
+    if command -v sudo >/dev/null 2>&1 && \
+       sudo usermod --add-subuids 100000-165535 \
+                     --add-subgids 100000-165535 "$USUARIO"; then
+        ok "subuid/subgid 100000-165535 asignados a $USUARIO."
+    else
+        err "No se pudieron asignar subuid/subgid. Hazlo como admin:"
+        err "  sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USUARIO"
+        exit 3
+    fi
+else
+    ok "El usuario ya tiene rango subuid/subgid."
+fi
+
+# ---- 2.3 Lingering (daemon de usuario arranca en boot, crea /run/user)
+if [ ! -e "/var/lib/systemd/linger/$USUARIO" ]; then
+    log "Habilitando lingering del usuario (sudo loginctl enable-linger)…"
+    if command -v sudo >/dev/null 2>&1 && sudo loginctl enable-linger "$USUARIO"; then
+        ok "Lingering habilitado para $USUARIO."
+    else
+        warn "No se pudo habilitar lingering. El daemon rootless solo"
+        warn "estará activo mientras el usuario tenga sesión abierta."
+    fi
+else
+    ok "Lingering ya habilitado para $USUARIO."
+fi
+
+# Esperar a que el gestor systemd de usuario monte $XDG_RUNTIME_DIR.
+if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+    log "Esperando a que arranque el gestor systemd de usuario ($XDG_RUNTIME_DIR)…"
+    for _ in $(seq 1 10); do
+        [ -d "$XDG_RUNTIME_DIR" ] && break
+        sleep 1
+    done
+fi
+if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+    warn "No existe $XDG_RUNTIME_DIR; 'systemctl --user' puede fallar en"
+    warn "esta ejecución. Suele resolverse al abrir una sesión nueva."
+fi
+
+# ---- 2.4 Instalar el daemon rootless del usuario (idempotente) -----
+USER_UNIT="$HOME_DIR/.config/systemd/user/docker.service"
+if [ -f "$USER_UNIT" ]; then
+    ok "Ya existe la unit de usuario docker.service; no se reinstala."
+else
+    log "Instalando Docker rootless (dockerd-rootless-setuptool.sh install)…"
+    if dockerd-rootless-setuptool.sh install; then
+        ok "Docker rootless instalado para $USUARIO."
+    else
+        err "Falló 'dockerd-rootless-setuptool.sh install'. Revisa que el"
+        err "gestor systemd de usuario esté activo (sesión/lingering)."
+        exit 3
+    fi
+fi
+
+# ---- 2.5 DOCKER_HOST + PATH en ~/.bashrc (bloque idempotente) ------
+BASHRC="$HOME_DIR/.bashrc"
+MARK_INI="# >>> IAC-IESMHP DockerRootless >>>"
+MARK_FIN="# <<< IAC-IESMHP DockerRootless <<<"
+touch "$BASHRC"
+if grep -qF "$MARK_INI" "$BASHRC" 2>/dev/null; then
+    ok "El bloque DOCKER_HOST ya está en ~/.bashrc."
+else
+    {
+        printf '%s\n' "$MARK_INI"
+        printf '%s\n' "# Cliente docker apunta al daemon rootless del usuario"
+        printf '%s\n' 'export PATH=/usr/bin:$PATH'
+        printf '%s\n' "export DOCKER_HOST=unix://$DOCKER_SOCK"
+        printf '%s\n' "$MARK_FIN"
+    } >> "$BASHRC"
+    ok "Añadido DOCKER_HOST=$DOCKER_SOCK a ~/.bashrc."
+fi
+# Exportarlo también en ESTA ejecución para la verificación de abajo.
+export DOCKER_HOST="unix://$DOCKER_SOCK"
+
+# ---- 2.6 Habilitar y arrancar docker.service del usuario -----------
+log "Habilitando y arrancando docker.service (--user)…"
+systemctl --user enable docker.service >/dev/null 2>&1 \
+    || warn "No se pudo hacer 'enable' de docker.service (usuario)."
+if systemctl --user start docker.service 2>/dev/null; then
+    ok "docker.service (usuario) arrancado."
+else
+    warn "No se pudo arrancar docker.service del usuario en esta sesión."
+fi
+
+# ---- 2.7 Verificación final ----------------------------------------
+log "Verificando el daemon rootless (docker info)…"
+if docker info >/dev/null 2>&1; then
+    ok "Docker rootless OK (daemon respondiendo en $DOCKER_SOCK)."
+    DOCKER_OK=1
+else
+    warn "docker info aún falla. La instalación quedó hecha; abre un"
+    warn "terminal NUEVO (para que ~/.bashrc exporte DOCKER_HOST) o"
+    warn "reinicia la sesión y prueba:  docker run --rm hello-world"
+fi
+
+# ====================================================================
+# Resumen y código de salida
+# ====================================================================
+if [ "$SSH_OK" -eq 1 ] && [ "$DOCKER_OK" -eq 1 ]; then
+    echo "Correcto"
+    exit 0
+fi
+[ "$SSH_OK" -ne 1 ]    && warn "PARTE 1 (SSH): pendiente (sshd no disponible)."
+[ "$DOCKER_OK" -ne 1 ] && warn "PARTE 2 (Docker): instalado pero sin verificar; reabre sesión."
+exit 2

@@ -156,17 +156,23 @@ ls /var/log/IAC-IESMHP/Ubuntu/
   - En FASE 1 (`1-SetupLiveCD.sh`) era `rpool/home canmount=on`
     (dataset único). Ahora se destruye y recrea como contenedor
     `canmount=off mountpoint=/home`.
-  - Se crea `rpool/home/usuario` con `canmount=on`, `quota=200G`.
+  - Se crea `rpool/home/usuario` con `canmount=on` y **sin cuota** (la línea
+    `zfs set quota=200G` está comentada desde 2026-06-09).
     `mountpoint` heredado del padre → `/home/usuario`.
   - `useradd -d /home/usuario` sin `-m` (el dir ya existe como dataset
     montado), seguido de `cp -aT /etc/skel /home/usuario/.` + `chown -R`.
   - Snapshot `rpool/home/usuario@inicial` tras configurar `authorized_keys`.
 - **Helper `/usr/local/sbin/nuevo-alumno.sh`** (solo CEIABD): generado
-  inline con heredoc. Acepta `<usuario> [cuota=200G]`. Crea
-  `rpool/home/<u>` con cuota, `useradd` con grupos (`sudo` + opcionales
+  inline con heredoc. Acepta `<usuario> [cuota=200G]` (el 2.º arg se acepta
+  pero **se ignora** mientras la cuota esté desactivada). Crea
+  `rpool/home/<u>` **sin cuota**, `useradd` con grupos (`sudo` + opcionales
   `vboxusers/libvirt/docker` si existen), copia `/etc/skel` + permisos,
   snapshot `@inicial`, y `passwd` interactivo al final. **Uso**: `sudo
-  nuevo-alumno.sh alvaro` o `sudo nuevo-alumno.sh maria 60G`.
+  nuevo-alumno.sh alvaro`.
+- **Cuotas ZFS DESACTIVADAS (2026-06-09)**: ambas líneas `zfs set quota=…`
+  (usuario inicial y helper) quedan **comentadas, no borradas**; `/home`
+  crece sin límite (solo lo acota el pool). Reactivar = descomentar la línea.
+  Quitar una cuota ya aplicada en un equipo: `zfs set quota=none rpool/home/<u>`.
 - Genera fstab con UUIDs reales leídos de `blkid` (PART_EFI/SWAP/ROOT del
   `.iac-partitions.env`).
 - **Limpia fuentes APT del Live CD (`cdrom:`)**: el rsync arrastra al sistema instalado la entrada `deb cdrom:[Ubuntu ...]/ resolute main` (o el equivalente DEB822 en `/etc/apt/sources.list.d/*.sources`) que el Live CD añade automáticamente. Sin limpiarla, `apt update` falla con "El repositorio file:/cdrom ... no tiene un fichero de Publicación". El paso depura `sources.list` y `*.list` con `sed`, y elimina los `.sources` (DEB822) cuyo `URIs:` apunte a `cdrom:`.
@@ -250,8 +256,8 @@ operativo en la sección "ZFS — operación" más abajo.
 rpool                         (ashift=12, autotrim=on, compression=zstd, dedup=on,
                                recordsize=64K, feature@fast_dedup=enabled si ≥ 2.3)
 └── rpool/home                (canmount=off, mountpoint=/home — contenedor)
-    ├── rpool/home/usuario    (canmount=on, mountpoint=/home/usuario, quota=200G)
-    └── rpool/home/<alumno>   (creado por /usr/local/sbin/nuevo-alumno.sh)
+    ├── rpool/home/usuario    (canmount=on, mountpoint=/home/usuario, SIN cuota)
+    └── rpool/home/<alumno>   (creado por /usr/local/sbin/nuevo-alumno.sh, SIN cuota)
 
 tank                          (ashift=12, autotrim=on, compression=zstd, recordsize=1M)
 └── tank/datos                (canmount=on, mountpoint=/datos, setuid=off,
@@ -271,12 +277,15 @@ tank                          (ashift=12, autotrim=on, compression=zstd, records
 sudo /usr/local/sbin/nuevo-alumno.sh <usuario> [cuota=200G]
 # Ejemplos:
 sudo nuevo-alumno.sh alvaro
-sudo nuevo-alumno.sh maria 60G
+sudo nuevo-alumno.sh maria 60G   # el 2.º arg se ignora: cuotas desactivadas
 ```
 
-El helper crea `rpool/home/<u>` con cuota, hace `useradd` con grupos
-detectados dinámicamente (`sudo` + opcionales `vboxusers/libvirt/docker`),
-copia `/etc/skel`, snapshot `@inicial` y pide contraseña interactiva.
+El helper crea `rpool/home/<u>` **sin cuota** (cuotas desactivadas 2026-06-09;
+la línea `zfs set quota` está comentada en el script), hace `useradd` con
+grupos detectados dinámicamente (`sudo` + opcionales `vboxusers/libvirt/docker`),
+copia `/etc/skel`, snapshot `@inicial` y pide contraseña interactiva. El 2.º
+argumento `[cuota]` se sigue aceptando pero no tiene efecto hasta reactivar la
+línea comentada.
 
 ### Operaciones habituales
 
@@ -299,8 +308,10 @@ zfs snapshot rpool/home/<u>@$(date +%Y%m%d)
 # Borrar snapshots antiguos
 zfs list -H -o name -t snapshot rpool/home/<u> | grep -v '@inicial' | xargs -r -n1 zfs destroy
 
-# Cambiar cuota
-zfs set quota=80G rpool/home/<u>
+# Cuotas DESACTIVADAS por defecto (2026-06-09). Comandos manuales si se quieren usar:
+zfs set quota=80G rpool/home/<u>    # aplicar/cambiar una cuota
+zfs set quota=none rpool/home/<u>   # quitar la cuota (espacio ilimitado)
+zfs get quota -r rpool tank         # ver cuotas existentes (none = sin cuota)
 
 # Backup vía zfs send (incremental, requiere snapshot común)
 zfs snapshot rpool/home/<u>@backup-20260601

@@ -38,8 +38,10 @@ Roles actuales:
 | [`DockerRootless`](roles/DockerRootless/CLAUDE.md) | ✅ activo (1º) | Completa Docker **rootless** para el usuario actual (socket en `/run/user/<uid>/docker.sock`). La parte de sistema la hace [`../roles/Docker`](../roles/Docker/CLAUDE.md) como root |
 
 ### `0-ConfiguracionInicial.sh`
-Configuración mínima de SSH del usuario. **Se ejecuta como el usuario, no como
-root** (aborta si detecta `uid 0`). Es idempotente.
+Configuración por usuario en **dos partes**. **Se ejecuta como el usuario, no
+como root** (aborta si detecta `uid 0`). Es idempotente.
+
+**PARTE 1 — SSH "auto" (login a sí mismo):**
 
 1. Asegura `~/.ssh` con permisos `0700`. **Self-heal de propiedad**: si
    `~/.ssh` o `authorized_keys` pertenecen a root (caso habitual en equipos ya
@@ -54,22 +56,59 @@ root** (aborta si detecta `uid 0`). Es idempotente.
    **login a sí mismo**.
 4. Registra `localhost` / `127.0.0.1` / `$(hostname)` en `~/.ssh/known_hosts`
    con `ssh-keyscan`.
-5. Verifica la conexión con `ssh localhost "exit 0"`. Si funciona, imprime
-   `Correcto` y sale `0`.
+5. Verifica la conexión con `ssh localhost "exit 0"` (guarda el resultado en
+   `SSH_OK`, ya **no** sale aquí: continúa a la PARTE 2).
 
-**Códigos de salida**: `0` = todo OK (conexión verificada) · `1` = error
-(lanzado como root o fallo al generar la clave) · `2` = clave/authorized_keys
-configurados pero la conexión SSH falla (típicamente porque `sshd` no está
-instalado/arrancado todavía).
+**PARTE 2 — Docker rootless para ESTE usuario (añadida 2026-06-09):**
+
+Equivalente en bash al rol [`DockerRootless`](roles/DockerRootless/CLAUDE.md),
+pero **autosuficiente**: da por hecha la parte de sistema (rol
+[`../roles/Docker`](../roles/Docker/CLAUDE.md), como root) y completa lo que cabe
+en permisos del usuario, resolviendo lo que falta con `sudo`.
+
+6. **Comprueba la parte de sistema**: si no existe
+   `dockerd-rootless-setuptool.sh`, avisa (hay que aplicar `roles/Docker` como
+   root antes) y sale `2`.
+7. **subuid/subgid**: si el usuario no tiene rango en `/etc/subuid`+`/etc/subgid`
+   (sin ellos el daemon rootless no arranca), lo asigna con
+   `sudo usermod --add-subuids/--add-subgids 100000-165535`.
+8. **Lingering**: `sudo loginctl enable-linger <usuario>` para que el daemon de
+   usuario arranque en el boot sin sesión gráfica (y exista `/run/user/<uid>`).
+   Luego espera (hasta 10 s) a que el gestor systemd de usuario monte
+   `XDG_RUNTIME_DIR`.
+9. **Instala el daemon rootless del usuario**: `dockerd-rootless-setuptool.sh
+   install` (idempotente: se salta si ya existe
+   `~/.config/systemd/user/docker.service`).
+10. **`~/.bashrc`**: añade un bloque marcado
+    (`# >>> IAC-IESMHP DockerRootless >>>`) con `export PATH=/usr/bin:$PATH` y
+    `export DOCKER_HOST=unix:///run/user/<uid>/docker.sock`. Mismo formato que el
+    rol `DockerRootless` (que usa `blockinfile`), por lo que **no se duplica**.
+11. **Arranca el servicio**: `systemctl --user enable --now docker.service` y
+    verifica con `docker info`.
+
+> **Por qué un usuario NUEVO falla** con
+> `failed to connect to the docker API at unix:///var/run/docker.sock`: el daemon
+> de **sistema** está desactivado a propósito (modo rootless). Si el usuario
+> nunca completó la PARTE 2, no tiene `DOCKER_HOST` ni daemon de usuario, así que
+> el cliente cae al socket de sistema inexistente. La PARTE 2 lo corrige. Tras
+> ejecutarla hay que **abrir un terminal nuevo** (para que `~/.bashrc` exporte
+> `DOCKER_HOST`).
+
+**Códigos de salida**: `0` = todo OK (SSH verificado **y** `docker info`
+respondiendo) · `1` = error duro (lanzado como root o fallo al generar la clave)
+· `2` = parte(s) configurada(s) pero no verificada(s): SSH pendiente (sshd no
+disponible) o falta la parte de sistema de Docker · `3` = fallo en la PARTE 2
+(no se pudo asignar subuid/subgid o falló `dockerd-rootless-setuptool.sh`).
 
 **Uso**:
 ```bash
 bash 0-ConfiguracionInicial.sh        # como el usuario actual
 ```
 
-**Relación con el rol `certificados`**: aquel hace lo mismo pero **para root**
-(`/root/.ssh`), vía Ansible. Este script es el equivalente para el usuario
-normal. Ver [../roles/certificados/CLAUDE.md](../roles/certificados/CLAUDE.md).
+**Relación con el rol `certificados`**: aquel hace lo mismo que la PARTE 1 pero
+**para root** (`/root/.ssh`), vía Ansible. La PARTE 2 es la versión en bash del
+rol [`DockerRootless`](roles/DockerRootless/CLAUDE.md). Ver también
+[../roles/certificados/CLAUDE.md](../roles/certificados/CLAUDE.md).
 
 ---
 
