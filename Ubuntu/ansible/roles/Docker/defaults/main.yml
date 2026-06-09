@@ -47,3 +47,9 @@ docker_rootless_users:
 # preparar varios usuarios sin subids, créalos con useradd (auto-asigna) en vez
 # de depender de esta variable.
 docker_subid_range: "100000-165535"
+
+# Habilitar el reenvío IPv4 del kernel (net.ipv4.ip_forward=1). Sin esto, al
+# levantar un `docker compose` el daemon avisa "IPv4 forwarding is disabled.
+# Networking will not work." y la red de los contenedores no funciona. Se
+# escribe en /etc/sysctl.d/ (no en /etc/sysctl.conf) y se aplica en caliente.
+docker_enable_ip_forward: true

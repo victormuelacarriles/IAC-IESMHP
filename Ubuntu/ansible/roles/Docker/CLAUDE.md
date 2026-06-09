@@ -25,9 +25,13 @@ Se aplica desde [`../../roles.yaml`](../../roles.yaml) (play `hosts: all`,
    `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`,
    `docker-ce-rootless-extras` + `uidmap`, `dbus-user-session`, `slirp4netns`,
    `fuse-overlayfs`.
-3. **Desactiva el daemon de sistema** (`docker.service`/`docker.socket`) para
+3. **Habilita el reenvío IPv4** (`net.ipv4.ip_forward=1`) en
+   `/etc/sysctl.d/99-iac-docker.conf` y lo aplica en caliente. Sin esto,
+   `docker compose` falla con *"IPv4 forwarding is disabled. Networking will not
+   work."* (configurable, `docker_enable_ip_forward`).
+4. **Desactiva el daemon de sistema** (`docker.service`/`docker.socket`) para
    que no compita con el rootless (configurable, `docker_disable_system_daemon`).
-4. **subuid/subgid + lingering por usuario**: para cada usuario de
+5. **subuid/subgid + lingering por usuario**: para cada usuario de
    `docker_rootless_users` que exista en el sistema, comprueba `/etc/subuid` y
    asigna el rango si falta, y habilita `loginctl enable-linger` (el daemon de
    usuario arranca en el boot sin login gráfico). Los que no existan aún se
@@ -40,6 +44,7 @@ Se aplica desde [`../../roles.yaml`](../../roles.yaml) (play `hosts: all`,
 | `docker_codename` | `{{ ansible_distribution_release }}` | Codename del repo Docker (ver issue) |
 | `docker_packages` / `docker_rootless_prereqs` | listas | Paquetes a instalar |
 | `docker_disable_system_daemon` | `true` | Parar/deshabilitar el daemon de sistema |
+| `docker_enable_ip_forward` | `true` | Activar `net.ipv4.ip_forward` (fix del aviso de red de `docker compose`) |
 | `docker_rootless_users` | `[usuario]` | Usuarios a preparar (subuid/subgid + lingering) |
 | `docker_subid_range` | `100000-165535` | Rango subuid/subgid si falta (ver aviso) |
 
@@ -56,6 +61,12 @@ Después, **cada usuario** completa su Docker rootless con el rol
 `DockerRootless` (ver su CLAUDE.md).
 
 ## Issues conocidos
+- **"IPv4 forwarding is disabled. Networking will not work." (2026-06-09)**: al
+  levantar un `docker compose` la red de los contenedores no funcionaba porque
+  el kernel tenía `net.ipv4.ip_forward=0`. **Fix**: paso 3 del rol que fija
+  `net.ipv4.ip_forward=1` en `/etc/sysctl.d/99-iac-docker.conf` y lo aplica en
+  caliente (`docker_enable_ip_forward`, por defecto `true`). En equipos ya
+  instalados basta con reaplicar el rol (`--tags docker`).
 - **Codename `resolute` (Ubuntu 26.04)**: si Docker aún no publica el repo para
   `resolute`, "Añadir el repositorio APT de Docker" fallará en `apt update`.
   Solución: `-e docker_codename=noble` (u otro LTS). Considerar fijarlo en

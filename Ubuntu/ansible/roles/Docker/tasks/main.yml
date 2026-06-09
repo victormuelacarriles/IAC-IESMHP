@@ -62,7 +62,24 @@
   tags: [docker, rootless]
 
 # ---------------------------------------------------------------------------
-# 3. Desactivar el daemon de Docker de SISTEMA (recomendado para rootless)
+# 3. Reenvío IPv4 del kernel (net.ipv4.ip_forward)
+# ---------------------------------------------------------------------------
+# Sin esto, `docker compose` avisa "IPv4 forwarding is disabled. Networking will
+# not work." y la red de los contenedores no levanta. Se escribe en
+# /etc/sysctl.d/ (persiste en reinicios) y se aplica al instante (reload: yes).
+- name: Habilitar el reenvío IPv4 (net.ipv4.ip_forward)
+  ansible.builtin.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_file: /etc/sysctl.d/99-iac-docker.conf
+    sysctl_set: yes
+    state: present
+    reload: yes
+  when: docker_enable_ip_forward | bool
+  tags: [docker, rootless]
+
+# ---------------------------------------------------------------------------
+# 4. Desactivar el daemon de Docker de SISTEMA (recomendado para rootless)
 # ---------------------------------------------------------------------------
 - name: Desactivar el daemon de Docker de sistema
   ansible.builtin.systemd_service:
@@ -77,7 +94,7 @@
   tags: [docker, rootless]
 
 # ---------------------------------------------------------------------------
-# 4. subuid/subgid + lingering de los usuarios objetivo
+# 5. subuid/subgid + lingering de los usuarios objetivo
 # ---------------------------------------------------------------------------
 - name: Leer la base de usuarios del sistema
   ansible.builtin.getent:
