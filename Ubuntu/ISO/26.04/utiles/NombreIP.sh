@@ -1,16 +1,14 @@
 #!/bin/bash
 #"set -e" significa que el script se detendrá si ocurre un error
-#vs 25/6/2025
+#vs 11/6/2026
 set -e
 
-#por hacer: Obtenemos el tipo de distribución (mint o ubuntu) a partir de la info del sistema
+REPO="IAC-IESMHP"
+DISTRO="Ubuntu"
+RAIZSCRIPTS="/opt/$REPO"
+RAIZLOGS="/var/log/$REPO/$DISTRO"
 
-
-DISTRO="Mint"
-RAIZSCRIPTS="/opt/iesmhp$DISTRO"
-RAIZLOGS="/var/log/iesmhp$DISTRO"
-
-mkdir -p "$RAIZSCRIPTS" "$RAIZLOGS"
+mkdir -p "$RAIZLOGS"
 
 # Funciones de colores
 echoverde() {  
@@ -39,7 +37,10 @@ MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
 echo "0-MAC: $MAC"
 #DOING: descargar desde github usuarios autorizados y claves ssh
 URL_MACS="https://raw.githubusercontent.com/victormuelacarriles/IAC-IESMHP/refs/heads/main/macs.csv"
-LOCAL_MACS="$RAIZSCRIPTS/macs.csv"
+# Se descarga a RAIZLOGS (no al clon git de $RAIZSCRIPTS): más abajo este
+# fichero se sobreescribe dejando solo la línea de la MAC, y hacerlo sobre
+# /opt/IAC-IESMHP/macs.csv ensuciaría el repo clonado.
+LOCAL_MACS="$RAIZLOGS/macs.csv"
 echo "2-variales cargadas / descargando archivos desde GitHub"
 wget --header="Cache-Control: no-cache" -O $LOCAL_MACS $URL_MACS
 
