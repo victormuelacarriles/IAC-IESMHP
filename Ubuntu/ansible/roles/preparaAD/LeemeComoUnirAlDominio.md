@@ -83,12 +83,18 @@ termina sin tocar nada; (3) si no, comprueba el DNS (`realm discover`),
 **pregunta la contraseña de `svc-union-linux`** y une con `realm join` a la
 OU delegada; (4) verifica y relanza el rol para desplegar el snippet SSSD.
 
+Si dejas la contraseña **en blanco** (p. ej. la cuenta delegada aún no
+existe), el script pregunta **otro usuario del dominio** con permisos de
+unión (un administrador, por ejemplo) y su contraseña, e intenta la unión
+con él. La cuenta de equipo se crea igualmente en la OU `ComputersLinux`,
+que debe existir.
+
 <details><summary>Equivalente a mano (para entender qué hace)</summary>
 
 ```bash
 realm discover iesmhp.local                    # ¿se ve el dominio por DNS?
 sudo realm join --user=svc-union-linux \
-  --computer-ou='OU=EquiposLinuxAutomatizados,DC=iesmhp,DC=local' \
+  --computer-ou='OU=ComputersLinux,DC=iesmhp,DC=local' \
   iesmhp.local                                 # pide la contraseña
 realm list                                     # verificación
 # y reaplicar el rol para el snippet SSSD del IES:
@@ -113,12 +119,12 @@ Los pasos 1 y 2 están **scriptados en [`utilesAD/`](utilesAD/)**.
 ```
 
 Idempotente; con permisos de administrador del dominio: crea (si faltan) la
-OU `EquiposLinuxAutomatizados` y la cuenta `svc-union-linux` **sin privilegios
+OU `ComputersLinux` y la cuenta `svc-union-linux` **sin privilegios
 de administrador**, establece/resetea su contraseña y le delega sobre esa OU
 los permisos **mínimos** para unir equipos (crear objetos equipo + reset
 password/escrituras validadas sobre los equipos de la OU; sin borrado). Si la
 contraseña se filtrara, el daño se limita a dar de alta equipos en esa OU.
-Auditoría: `dsacls "OU=EquiposLinuxAutomatizados,DC=iesmhp,DC=local"`.
+Auditoría: `dsacls "OU=ComputersLinux,DC=iesmhp,DC=local"`.
 
 ### Paso 2 — En el equipo del profesor: `2-CreaVault.sh`
 
@@ -212,7 +218,7 @@ dig -t SRV _ldap._tcp.iesmhp.local @10.0.1.48     # ¿se llega al DC directament
 
 ## 6. Qué falta para activarlo de verdad
 
-El dominio (`iesmhp.local`) y la OU (`EquiposLinuxAutomatizados`) ya están
+El dominio (`iesmhp.local`) y la OU (`ComputersLinux`) ya están
 fijados en [`defaults/main.yml`](defaults/main.yml). Queda:
 
 1. **Crear la cuenta delegada**: ejecutar

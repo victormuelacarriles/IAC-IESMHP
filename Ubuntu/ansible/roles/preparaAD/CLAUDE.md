@@ -78,7 +78,7 @@ equipos ya unidos).
 | `preparaad_arregla_nsswitch` | `true` | En dominios `.local`: anteponer `dns` a `mdns4_minimal` en `/etc/nsswitch.conf` (sin esto, ping/kinit/adcli no resuelven `*.local` aunque el split-DNS funcione) |
 | `preparaad_paquetes` | lista | Stack a instalar |
 | `preparaad_ntp` | `""` | NTP del dominio (normalmente el DC). Vacío = default de Ubuntu |
-| `preparaad_ou` | `OU=EquiposLinuxAutomatizados,DC=iesmhp,DC=local` | OU de las cuentas de equipo (`--computer-ou`). La crea y delega `utilesAD/1-CreaUsuarioUnionAD.ps1` — si se cambia aquí, re-ejecutar ese script |
+| `preparaad_ou` | `OU=ComputersLinux,DC=iesmhp,DC=local` | OU de las cuentas de equipo (`--computer-ou`). La crea y delega `utilesAD/1-CreaUsuarioUnionAD.ps1` — si se cambia aquí, re-ejecutar ese script |
 | `preparaad_unir` | `false` | Intentar la unión en este pase |
 | `preparaad_usuario_union` | `svc-union-linux` | Cuenta delegada de unión (la crea `utilesAD/1-CreaUsuarioUnionAD.ps1`) |
 | `preparaad_password_union` | `""` | Su contraseña — **solo vía vault (`utilesAD/2-CreaVault.sh`) o `-e`** |
@@ -89,9 +89,9 @@ equipos ya unidos).
 ## Scripts de apoyo (`utilesAD/`)
 | Script | Dónde se ejecuta | Qué hace |
 |--------|------------------|----------|
-| `1-CreaUsuarioUnionAD.ps1` | Controlador de dominio (admin del dominio) | OU `EquiposLinuxAutomatizados` (si falta) + cuenta `svc-union-linux` (si falta; resetea contraseña si existe) + delegación mínima de unión sobre la OU (crear equipos, reset password, validated writes dNSHostName/SPN, property set Account Restrictions; **sin borrado**). Idempotente: comprueba ACE a ACE. Solo pregunta la contraseña. **Sin tildes a propósito** (PS 5.1 lee UTF-8 sin BOM como ANSI) |
+| `1-CreaUsuarioUnionAD.ps1` | Controlador de dominio (admin del dominio) | OU `ComputersLinux` (si falta) + cuenta `svc-union-linux` (si falta; resetea contraseña si existe) + delegación mínima de unión sobre la OU (crear equipos, reset password, validated writes dNSHostName/SPN, property set Account Restrictions; **sin borrado**). Idempotente: comprueba ACE a ACE. Solo pregunta la contraseña. **Sin tildes a propósito** (PS 5.1 lee UTF-8 sin BOM como ANSI) |
 | `2-CreaVault.sh` | Equipo del profesor | Crea `Ubuntu/ansible/vault/preparaAD-vault.yml` (AES256, committeable) con las credenciales de unión. Rechaza contraseñas con comilla simple (limitación del rol) |
-| `3-UneAlDominio.sh` | El equipo a unir (root) | Rol preparaAD (prerequisitos) → si no unido: `realm discover` + pregunta contraseña + `realm join` a la OU → verifica → re-pase del rol (despliega el snippet SSSD) |
+| `3-UneAlDominio.sh` | El equipo a unir (root) | Rol preparaAD (prerequisitos) → si no unido: `realm discover` + pregunta la contraseña de `svc-union-linux` (**en blanco** = pide OTRO usuario del dominio con permisos de unión y su contraseña) + `realm join` a la OU → verifica → re-pase del rol (despliega el snippet SSSD) |
 
 ## Cómo unir el equipo (cuando se decida)
 
@@ -99,7 +99,7 @@ equipos ya unidos).
 ```bash
 realm discover iesmhp.local                    # ¿se ve el dominio? (DNS)
 realm join --user=svc-union-linux \
-  --computer-ou='OU=EquiposLinuxAutomatizados,DC=iesmhp,DC=local' \
+  --computer-ou='OU=ComputersLinux,DC=iesmhp,DC=local' \
   iesmhp.local                                 # pide la contraseña
 realm list                                     # verificación
 getent passwd alguien@iesmhp.local && su - alguien   # prueba de login
@@ -114,7 +114,7 @@ abajo):
 
 1. **En un controlador de dominio** (administrador del dominio, una vez):
    `utilesAD/1-CreaUsuarioUnionAD.ps1`. Crea (si faltan) la OU
-   `EquiposLinuxAutomatizados` y la cuenta `svc-union-linux` sin privilegios,
+   `ComputersLinux` y la cuenta `svc-union-linux` sin privilegios,
    establece/resetea su contraseña (única pregunta del script) y delega sobre
    la OU los permisos **mínimos** de unión. Si la cuenta se filtrara, el daño
    se limita a dar de alta equipos en esa OU.

@@ -10,7 +10,9 @@
 #   3. Si no: comprueba que el dominio se ve por DNS (realm discover),
 #      pregunta la contraseña de 'svc-union-linux' (se SUPONE que la cuenta
 #      existe — la crea 1-CreaUsuarioUnionAD.ps1 en el DC) y une el equipo
-#      con realm join en la OU delegada.
+#      con realm join en la OU delegada. Si la contraseña se deja EN BLANCO,
+#      pregunta OTRO usuario del dominio con permisos de unión (y su
+#      contraseña) e intenta la unión con él.
 #   4. Verifica la unión y relanza el rol para que despliegue el snippet
 #      SSSD del IES (/etc/sssd/conf.d/10-iac-ad.conf) — solo se aplica con
 #      el equipo ya unido.
@@ -25,7 +27,7 @@ set -euo pipefail
 # sobreescribir por entorno:  DOMINIO=otro.local ./3-UneAlDominio.sh
 USUARIO_UNION="${USUARIO_UNION:-svc-union-linux}"
 DOMINIO="${DOMINIO:-iesmhp.local}"
-OU="${OU:-OU=EquiposLinuxAutomatizados,DC=iesmhp,DC=local}"
+OU="${OU:-OU=ComputersLinux,DC=iesmhp,DC=local}"
 
 [[ $EUID -eq 0 ]] || { echo "[ERR] Ejecutar como root (sudo $0)"; exit 1; }
 
@@ -62,8 +64,16 @@ if ! realm discover "$DOMINIO" >/dev/null 2>&1; then
 fi
 echo "[OK] Dominio visible por DNS."
 
-read -rs -p "Contraseña de '$USUARIO_UNION': " PASS; echo
-[[ -n "$PASS" ]] || { echo "[ERR] Contraseña vacía."; exit 1; }
+# Contraseña en blanco = la cuenta delegada no está disponible → se ofrece
+# unir con OTRO usuario del dominio con permisos de unión (p. ej. un admin).
+# OJO: la cuenta de equipo se crea igualmente en $OU (debe existir).
+read -rs -p "Contraseña de '$USUARIO_UNION' (en blanco = unir con otro usuario): " PASS; echo
+if [[ -z "$PASS" ]]; then
+    read -r  -p "Usuario del dominio con permisos de unión: " USUARIO_UNION
+    [[ -n "$USUARIO_UNION" ]] || { echo "[ERR] Usuario vacío."; exit 1; }
+    read -rs -p "Contraseña de '$USUARIO_UNION': " PASS; echo
+    [[ -n "$PASS" ]] || { echo "[ERR] Contraseña vacía."; exit 1; }
+fi
 
 # realm join lee la contraseña por stdin con --unattended (sin tty).
 # Crea la cuenta de equipo en la OU delegada, escribe /etc/sssd/sssd.conf,

@@ -54,7 +54,7 @@ preparaad_ntp: ""
 # permisos en ESTA OU, así que si se cambia aquí hay que re-ejecutar ese
 # script en el DC con el nuevo nombre. Vacío = contenedor Computers por
 # defecto del dominio (NO funcionará con la cuenta delegada).
-preparaad_ou: "OU=EquiposLinuxAutomatizados,DC=iesmhp,DC=local"
+preparaad_ou: "OU=ComputersLinux,DC=iesmhp,DC=local"
 
 # ---- Unión automática al dominio (APAGADA por defecto) --------------------
 # Activarla SOLO en pases lanzados a mano, con la contraseña en ansible-vault

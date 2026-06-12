@@ -8,7 +8,7 @@
     ActiveDirectory) con permisos de administrador del dominio.
 
     Es IDEMPOTENTE; hace tres cosas:
-      1. OU "EquiposLinuxAutomatizados": si no existe la crea en la raiz del
+      1. OU "ComputersLinux": si no existe la crea en la raiz del
          dominio, protegida contra borrado accidental.
       2. Usuario "svc-union-linux": si no existe lo crea (cuenta normal, SIN
          grupos privilegiados, PasswordNeverExpires). En ambos casos
@@ -38,7 +38,7 @@
 [CmdletBinding()]
 param(
     [string]$Usuario  = 'svc-union-linux',
-    [string]$NombreOU = 'EquiposLinuxAutomatizados'
+    [string]$NombreOU = 'ComputersLinux'
 )
 
 $ErrorActionPreference = 'Stop'
