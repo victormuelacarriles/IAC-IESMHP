@@ -30,9 +30,15 @@ Cumple el TODO `predominio` de `roles.yaml`. Sigue la doc oficial de Ubuntu:
    de equipo en AD). Los `IABD-NN`/`SMRD-NN` van sobrados.
 5. **`/etc/krb5.conf`** (solo si se conoce el dominio): realm por defecto en
    mayúsculas, KDC por DNS (SRV), `rdns = false`.
-6. **Comprobación de unión**: `realm list --name-only` (fuente de verdad de
-   realmd/SSSD); si no está unido y hay dominio, `realm discover` informa de
-   si el dominio se resuelve por DNS desde el aula (**no falla** el play).
+6. **Comprobación de unión y DNS con auto-arreglo**: `realm list --name-only`
+   (fuente de verdad de realmd/SSSD) y, si hay dominio, `realm discover`
+   comprueba que se resuelve por DNS (**no falla** el play). Si **NO** se
+   resuelve y hay `preparaad_dominio_dnss`, fuerza **split-DNS** con un
+   drop-in de systemd-resolved (`/etc/systemd/resolved.conf.d/50-iac-ad.conf`:
+   `DNS=<DCs>` + `Domains=~iesmhp.local`) — solo las consultas del dominio
+   van a los DC, el resto sigue por el DNS del aula; no se toca
+   NetworkManager ni el DHCP —, reinicia systemd-resolved y reintenta el
+   discover.
 7. **Unión opcional** (`preparaad_unir=true` + credenciales): `realm join
    --unattended` con la contraseña por stdin (`no_log`), `--computer-ou` si se
    define, y **post-condición ruidosa**: si `realm list` sigue vacío, el play
@@ -61,6 +67,7 @@ equipos ya unidos).
 | Variable | Por defecto | Para qué |
 |----------|-------------|----------|
 | `preparaad_dominio` | `iesmhp.local` | Dominio AD (DNS, minúsculas). Vacío = solo prerequisitos genéricos |
+| `preparaad_dominio_dnss` | `10.0.1.48,10.0.1.54` | IPs (separadas por comas) que resuelven el dominio (DNS de los DC). Solo se usan si el DNS del equipo NO resuelve el dominio → split-DNS vía systemd-resolved. Vacío = sin auto-arreglo |
 | `preparaad_paquetes` | lista | Stack a instalar |
 | `preparaad_ntp` | `""` | NTP del dominio (normalmente el DC). Vacío = default de Ubuntu |
 | `preparaad_ou` | `OU=EquiposLinuxAutomatizados,DC=iesmhp,DC=local` | OU de las cuentas de equipo (`--computer-ou`). La crea y delega `utilesAD/1-CreaUsuarioUnionAD.ps1` — si se cambia aquí, re-ejecutar ese script |
@@ -138,12 +145,15 @@ ninguna cuenta de usuario viaja a los clientes). Más segura pero más
 laboriosa: hay que generar/distribuir una OTP por hostname. Plan B si la
 cuenta delegada no convence.
 
-## Requisito externo: DNS
+## Requisito externo: DNS (con auto-arreglo)
 La unión y el discover exigen que el equipo **resuelva el dominio** (registros
-SRV `_ldap._tcp.dc._msdcs.iesmhp.local`): el DNS que reparte el DHCP del aula
-debe ser el del dominio (o reenviar a él). Si `realm discover` dice "No such
-realm" con el dominio bien escrito, el problema es el DNS del aula, no el rol.
-Comprobar con `resolvectl status` y `dig -t SRV _ldap._tcp.iesmhp.local`.
+SRV `_ldap._tcp.dc._msdcs.iesmhp.local`). Si el DNS que reparte el DHCP del
+aula no lo resuelve, el rol lo arregla solo: split-DNS hacia los DC de
+`preparaad_dominio_dnss` (drop-in `/etc/systemd/resolved.conf.d/50-iac-ad.conf`,
+solo afecta a las consultas del dominio). Si el resumen sigue diciendo
+"NO — ni con split-DNS", el problema es de **conectividad** con esas IPs
+(routing/firewall del aula hacia `10.0.1.48`/`10.0.1.54`), no de DNS.
+Diagnóstico: `resolvectl status`, `dig -t SRV _ldap._tcp.iesmhp.local @10.0.1.48`.
 
 ## Estado / Notas
 - **Activo** en `roles.yaml` (modo "solo prerequisitos": sin `preparaad_dominio`

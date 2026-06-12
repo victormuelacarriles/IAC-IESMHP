@@ -170,17 +170,26 @@ Más segura pero más laboriosa (una OTP por hostname).
 
 ---
 
-## 5. Requisito externo imprescindible: DNS
+## 5. Requisito externo: DNS (el rol lo auto-arregla)
 
 La unión y el `realm discover` exigen que el equipo **resuelva el dominio**
-(registros SRV `_ldap._tcp.dc._msdcs.iesmhp.local`): el DNS que reparte el
-DHCP del aula debe ser el del dominio o reenviar a él. Si `realm discover`
-dice *"No such realm"* con el dominio bien escrito, el problema es el DNS
-del aula, no el rol. Diagnóstico:
+(registros SRV `_ldap._tcp.dc._msdcs.iesmhp.local`). Como el DNS que reparte
+el DHCP del aula normalmente NO es el del dominio, el rol lo detecta y lo
+arregla solo: despliega un **split-DNS** con systemd-resolved
+(`/etc/systemd/resolved.conf.d/50-iac-ad.conf`) que enruta **solo** las
+consultas de `iesmhp.local` a los DNS del dominio
+(`preparaad_dominio_dnss: 10.0.1.48,10.0.1.54` en `defaults/main.yml`); el
+resto del tráfico DNS sigue saliendo por el DNS del aula. No toca
+NetworkManager ni el DHCP.
+
+Si aun así el resumen del rol dice *"NO — ni con split-DNS"*, el problema ya
+no es de DNS sino de **conectividad** hacia esas IPs (routing/firewall del
+aula). Diagnóstico:
 
 ```bash
-resolvectl status                       # ¿qué DNS está usando el equipo?
-dig -t SRV _ldap._tcp.iesmhp.local      # ¿se resuelven los SRV del dominio?
+resolvectl status                                 # ¿qué DNS usa el equipo? ¿hay ruta ~iesmhp.local?
+dig -t SRV _ldap._tcp.iesmhp.local                # ¿resuelven los SRV del dominio?
+dig -t SRV _ldap._tcp.iesmhp.local @10.0.1.48     # ¿se llega al DC directamente?
 ```
 
 ---
@@ -197,7 +206,9 @@ fijados en [`defaults/main.yml`](defaults/main.yml). Queda:
    en el equipo del profesor (sección 4, paso 2) — solo para pases de aula;
    para un equipo suelto basta `3-UneAlDominio.sh`, que pregunta la
    contraseña.
-3. **Verificar el DNS de las aulas** (sección 5).
+3. **Verificar la conectividad de las aulas con los DC** (`10.0.1.48` /
+   `10.0.1.54`): la resolución DNS la auto-arregla el rol (sección 5), pero
+   tiene que haber ruta hasta esas IPs.
 4. Opcional: `preparaad_ntp` apuntando al DC.
 
 Tras la primera unión real, revisar `ad_gpo_access_control` (el rol lo deja

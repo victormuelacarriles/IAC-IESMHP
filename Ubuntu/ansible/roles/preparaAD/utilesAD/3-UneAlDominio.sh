@@ -52,8 +52,12 @@ echo "No unido. Se intentará la unión a '$DOMINIO'."
 echo "=== [3/4] Unión al dominio ==="
 if ! realm discover "$DOMINIO" >/dev/null 2>&1; then
     echo "[ERR] El dominio '$DOMINIO' NO se resuelve desde este equipo."
-    echo "      El DNS del aula debe ser el del dominio (o reenviar a él)."
-    echo "      Diagnóstico:  resolvectl status ; dig -t SRV _ldap._tcp.$DOMINIO"
+    echo "      El rol ya intentó el split-DNS hacia los DC (preparaad_dominio_dnss),"
+    echo "      así que lo probable es que NO haya conectividad con ellos"
+    echo "      (routing/firewall del aula). Diagnóstico:"
+    echo "        resolvectl status"
+    echo "        dig -t SRV _ldap._tcp.$DOMINIO"
+    echo "        dig -t SRV _ldap._tcp.$DOMINIO @<IP_de_un_DC>"
     exit 1
 fi
 echo "[OK] Dominio visible por DNS."

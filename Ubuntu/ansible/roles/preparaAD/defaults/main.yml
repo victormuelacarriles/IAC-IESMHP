@@ -12,6 +12,15 @@
 #   -e preparaad_dominio=otro.local
 preparaad_dominio: "iesmhp.local"
 
+# IPs que resuelven el dominio (los DNS de los controladores de dominio),
+# separadas por comas. SOLO se usan si el DNS actual del equipo NO resuelve
+# el dominio: en ese caso el rol despliega un drop-in de systemd-resolved
+# (/etc/systemd/resolved.conf.d/50-iac-ad.conf) con split-DNS — las consultas
+# de *.{{ preparaad_dominio }} van a estos servidores y TODO lo demás sigue
+# saliendo por el DNS del aula (no se toca NetworkManager ni el DHCP).
+# VACÍO = desactiva este arreglo automático.
+preparaad_dominio_dnss: "10.0.1.48,10.0.1.54"
+
 # Stack de unión a dominio. Núcleo según la doc oficial de Ubuntu
 # (https://ubuntu.com/server/docs/how-to/sssd/with-active-directory/):
 # sssd-ad + sssd-tools + realmd + adcli. El resto son apoyos.

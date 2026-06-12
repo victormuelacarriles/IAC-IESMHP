@@ -11,8 +11,10 @@
 #   4. Comprueba si el equipo YA está unido a un dominio (realm list).
 # Solo si se conoce el dominio (preparaad_dominio o equipo ya unido):
 #   5. Despliega /etc/krb5.conf con el realm por defecto (kinit directo).
-#   6. realm discover — ¿se resuelve el dominio por DNS? Informativo, NO falla
-#      (en las aulas el DNS de DHCP puede no ser el DC).
+#   6. realm discover — ¿se resuelve el dominio por DNS? NO falla el play.
+#      Si NO resuelve y hay preparaad_dominio_dnss: fuerza split-DNS hacia
+#      los DC (drop-in de systemd-resolved, solo consultas del dominio),
+#      reinicia systemd-resolved y reintenta el discover.
 # Solo si preparaad_unir=true + credenciales (vault / -e):
 #   7. realm join desatendido + verificación de que quedó unido.
 # Solo con el equipo YA unido:
@@ -153,17 +155,65 @@
   tags: [preparaad, ad]
 
 # ---------------------------------------------------------------------------
-# 6. ¿Se ve el dominio desde aquí? (informativo, NO falla)
+# 6. ¿Se ve el dominio desde aquí? Si no, forzar split-DNS hacia los DC
 # ---------------------------------------------------------------------------
-# Si esto falla, lo normal es que el DNS del equipo (DHCP del aula) no sea el
-# del dominio: la unión NO funcionará hasta resolverlo (ver CLAUDE.md).
-- name: Descubrir el dominio por DNS (realm discover) — informativo
+- name: Descubrir el dominio por DNS (realm discover)
   ansible.builtin.command: realm discover {{ preparaad_dominio | quote }}
   register: preparaad_discover
   changed_when: false
   failed_when: false
-  when: preparaad_dominio != '' and not (preparaad_unido | bool)
+  when: preparaad_dominio != ''
   tags: [preparaad, ad]
+
+# Si el dominio NO se resuelve (lo típico: el DHCP del aula no reparte el DNS
+# del dominio), se fuerza un DNS dividido (split-DNS) vía systemd-resolved:
+# las consultas de *.dominio van a los DC (preparaad_dominio_dnss) y TODO lo
+# demás sigue saliendo por el DNS del aula. No se toca NetworkManager ni la
+# configuración por interfaz: el drop-in es global y sobrevive a cambios de
+# conexión. (Ubuntu Desktop 26.04 usa systemd-resolved de serie.)
+- name: Forzar el DNS del dominio hacia los DC (solo si no se resuelve)
+  when:
+    - preparaad_dominio != ''
+    - preparaad_dominio_dnss != ''
+    - (preparaad_discover.rc | default(0)) != 0
+  tags: [preparaad, ad]
+  block:
+    - name: Crear el directorio de configuración de systemd-resolved
+      ansible.builtin.file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Enrutar las consultas del dominio a los DC (split-DNS)
+      ansible.builtin.copy:
+        dest: /etc/systemd/resolved.conf.d/50-iac-ad.conf
+        content: |
+          # Desplegado por Ansible (rol preparaAD): el DNS del aula no
+          # resuelve el dominio AD. Split-DNS: SOLO las consultas de
+          # {{ preparaad_dominio }} van a los controladores de dominio; el
+          # resto sigue por el DNS que reparte el DHCP del aula.
+          [Resolve]
+          DNS={{ preparaad_dominio_dnss.split(',') | map('trim') | join(' ') }}
+          Domains=~{{ preparaad_dominio }}
+        owner: root
+        group: root
+        mode: "0644"
+      register: preparaad_dns_dropin
+
+    # restart NO cuelga el primer arranque (bugs 2026-05-17: solo
+    # enabled:/daemon_reload: cuelgan). Si el drop-in ya estaba (re-pase con
+    # el DNS aún roto), no se reinicia: no aportaría nada.
+    - name: Reiniciar systemd-resolved con el split-DNS
+      ansible.builtin.systemd:
+        name: systemd-resolved.service
+        state: restarted
+      when: preparaad_dns_dropin is changed
+
+    - name: Reintentar el descubrimiento del dominio (con split-DNS)
+      ansible.builtin.command: realm discover {{ preparaad_dominio | quote }}
+      register: preparaad_discover
+      changed_when: false
+      failed_when: false
 
 # ---------------------------------------------------------------------------
 # 7. Unión al dominio (SOLO bajo demanda: preparaad_unir=true + credenciales)
@@ -241,6 +291,7 @@
     msg:
       - "Unido a dominio: {{ 'SÍ (' + (preparaad_realm_post.stdout_lines | default(preparaad_realm.stdout_lines) | join(', ')) + ')' if preparaad_unido | bool else 'NO (prerequisitos instalados; ver roles/preparaAD/CLAUDE.md para unir)' }}"
       - "Dominio configurado: {{ preparaad_dominio if preparaad_dominio != '' else '(sin definir — fijar preparaad_dominio)' }}"
-      - "Dominio visible por DNS: {{ 'SÍ' if (preparaad_discover.rc | default(-1)) == 0 else ('no comprobado' if preparaad_discover is skipped or preparaad_dominio == '' else 'NO — el DNS del equipo no resuelve el dominio (la unión fallará)') }}"
+      - "Dominio visible por DNS: {{ 'SÍ' if (preparaad_discover.rc | default(-1)) == 0 else ('no comprobado' if preparaad_discover is skipped or preparaad_dominio == '' else ('NO — ni con split-DNS hacia ' + preparaad_dominio_dnss + ' (¿se llega a esas IPs?)' if preparaad_dns_dropin is defined and preparaad_dns_dropin is not skipped else 'NO — el DNS del equipo no resuelve el dominio (la unión fallará)')) }}"
+      - "Split-DNS hacia los DC: {{ 'no comprobado (sin dominio)' if preparaad_dominio == '' else ('ACTIVO → ' + preparaad_dominio_dnss if preparaad_dns_dropin is defined and preparaad_dns_dropin is not skipped else 'no aplicado en este pase (el dominio ya resuelve — puede venir de un drop-in anterior)') }}"
       - "Reloj sincronizado por NTP: {{ preparaad_ntpsync.stdout | default('?') }}"
   tags: [preparaad, ad]
