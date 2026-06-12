@@ -1,0 +1,246 @@
+# ===========================================================================
+# Rol preparaAD — deja el equipo PREPARADO para unirse a un dominio AD
+# ---------------------------------------------------------------------------
+# Hace SIEMPRE (genérico, sin necesitar conocer el dominio):
+#   1. Instala el stack realmd + SSSD + adcli + Kerberos (prerequisitos según
+#      la doc oficial de Ubuntu: sssd-ad, sssd-tools, realmd, adcli).
+#   2. Activa pam_mkhomedir (crea el home en el primer login de un usuario
+#      del dominio; en Ubuntu NO viene activo, a diferencia de RHEL).
+#   3. Comprueba la sincronización horaria (Kerberos tolera ±5 min con el DC)
+#      y el tamaño del hostname (NetBIOS de AD ≤ 15 caracteres).
+#   4. Comprueba si el equipo YA está unido a un dominio (realm list).
+# Solo si se conoce el dominio (preparaad_dominio o equipo ya unido):
+#   5. Despliega /etc/krb5.conf con el realm por defecto (kinit directo).
+#   6. realm discover — ¿se resuelve el dominio por DNS? Informativo, NO falla
+#      (en las aulas el DNS de DHCP puede no ser el DC).
+# Solo si preparaad_unir=true + credenciales (vault / -e):
+#   7. realm join desatendido + verificación de que quedó unido.
+# Solo con el equipo YA unido:
+#   8. Snippet /etc/sssd/conf.d/10-iac-ad.conf con las opciones del IES.
+#
+# ¿Por qué el snippet conf.d SOLO tras la unión? El sssd.service de
+# Debian/Ubuntu lleva ConditionPathExists=/etc/sssd/sssd.conf y
+# ConditionDirectoryNotEmpty=/etc/sssd/conf.d/: antes de unir no existe
+# sssd.conf (lo escribe realmd al unir) y la unidad se SALTA limpiamente.
+# Si dejáramos un snippet pre-unión, sssd arrancaría sin dominios y quedaría
+# como unidad FALLIDA en cada boot (saltaría la sección 8 de
+# 4-Comprobaciones.sh).
+#
+# OJO primer arranque (bugs 2026-05-17): NO usar el módulo systemd con
+# enabled:/daemon_reload: (se cuelga dentro de 3-SetupPrimerInicio.service).
+# Aquí solo se usa state: restarted/started, que no cuelga. realmd habilita
+# sssd.service él mismo al unir (fuera de Ansible, no le afecta el bug).
+# tags: preparaad, ad
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# 1. Stack de unión a dominio
+# ---------------------------------------------------------------------------
+# El módulo apt exporta DEBIAN_FRONTEND=noninteractive, así que krb5-user no
+# pregunta el realm por debconf (lo fija el krb5.conf del paso 5).
+- name: Instalar el stack de unión a dominio (realmd, SSSD, adcli, Kerberos)
+  ansible.builtin.apt:
+    name: "{{ preparaad_paquetes }}"
+    state: present
+    update_cache: false
+  tags: [preparaad, ad]
+
+# ---------------------------------------------------------------------------
+# 2. pam_mkhomedir — home automático en el primer login de dominio
+# ---------------------------------------------------------------------------
+- name: Comprobar si pam_mkhomedir ya está activo
+  ansible.builtin.command: grep -q pam_mkhomedir.so /etc/pam.d/common-session
+  register: preparaad_mkhomedir
+  changed_when: false
+  failed_when: false
+  tags: [preparaad, ad]
+
+- name: Activar pam_mkhomedir (pam-auth-update --enable mkhomedir)
+  ansible.builtin.command: pam-auth-update --enable mkhomedir
+  when: preparaad_mkhomedir.rc != 0
+  tags: [preparaad, ad]
+
+# ---------------------------------------------------------------------------
+# 3. Reloj (Kerberos) y hostname (NetBIOS)
+# ---------------------------------------------------------------------------
+- name: Apuntar systemd-timesyncd al NTP del dominio (solo si preparaad_ntp)
+  when: preparaad_ntp != ''
+  tags: [preparaad, ad]
+  block:
+    - name: Crear el directorio de configuración de systemd-timesyncd
+      ansible.builtin.file:
+        path: /etc/systemd/timesyncd.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Escribir el NTP del dominio en timesyncd
+      ansible.builtin.copy:
+        dest: /etc/systemd/timesyncd.conf.d/50-iac-ad.conf
+        content: |
+          # Desplegado por Ansible (rol preparaAD): NTP del dominio AD.
+          # Kerberos exige desfase < 5 min con el controlador de dominio.
+          [Time]
+          NTP={{ preparaad_ntp }}
+        owner: root
+        group: root
+        mode: "0644"
+      register: preparaad_ntp_conf
+
+    # restart NO cuelga el primer arranque (los que cuelgan son
+    # enabled:/daemon_reload: — bugs 2026-05-17). timesyncd relee su
+    # configuración al reiniciar, sin daemon-reload (es config, no unidad).
+    - name: Reiniciar systemd-timesyncd con el NTP nuevo
+      ansible.builtin.systemd:
+        name: systemd-timesyncd.service
+        state: restarted
+      when: preparaad_ntp_conf is changed
+
+- name: Leer si el reloj está sincronizado por NTP
+  ansible.builtin.command: timedatectl show -p NTPSynchronized --value
+  register: preparaad_ntpsync
+  changed_when: false
+  failed_when: false
+  tags: [preparaad, ad]
+
+# AD trunca el nombre de equipo a 15 caracteres (NetBIOS): dos hostnames que
+# compartan los primeros 15 colisionarían en la misma cuenta de equipo.
+# Los IABD-NN / SMRD-NN del IES van sobrados; esto es una red de seguridad.
+- name: Avisar si el hostname supera los 15 caracteres (límite NetBIOS de AD)
+  ansible.builtin.debug:
+    msg: >-
+      AVISO: el hostname '{{ ansible_hostname }}' tiene
+      {{ ansible_hostname | length }} caracteres (> 15). AD lo truncará al
+      crear la cuenta de equipo — riesgo de colisión de nombres.
+  when: ansible_hostname | length > 15
+  tags: [preparaad, ad]
+
+# ---------------------------------------------------------------------------
+# 4. ¿Ya está unido a un dominio?
+# ---------------------------------------------------------------------------
+# `realm list --name-only` imprime una línea por dominio configurado y nada
+# si no hay ninguno. Es la fuente de verdad de realmd/SSSD.
+- name: Comprobar si el equipo ya está unido a un dominio
+  ansible.builtin.command: realm list --name-only
+  register: preparaad_realm
+  changed_when: false
+  failed_when: false
+  tags: [preparaad, ad]
+
+- name: Registrar el estado de unión y el dominio efectivo
+  ansible.builtin.set_fact:
+    preparaad_unido: "{{ (preparaad_realm.stdout | trim) != '' }}"
+    # Dominio a usar en krb5.conf/snippet: el de la variable o, si el equipo
+    # ya está unido, el que diga realmd (cubre re-pases sin la variable).
+    preparaad_dominio_efectivo: >-
+      {{ preparaad_dominio if preparaad_dominio != ''
+         else (preparaad_realm.stdout_lines | first | default('')) }}
+  tags: [preparaad, ad]
+
+# ---------------------------------------------------------------------------
+# 5. /etc/krb5.conf — realm por defecto (solo si se conoce el dominio)
+# ---------------------------------------------------------------------------
+# Deja `kinit usuario` funcionando sin teclear el realm. Los KDC se localizan
+# por DNS (registros SRV del dominio), sin codificarlos a fuego. Machaca el
+# krb5.conf de paquete (que queda sin realm al instalar noninteractive).
+- name: Desplegar /etc/krb5.conf con el realm del dominio
+  ansible.builtin.template:
+    src: krb5.conf.j2
+    dest: /etc/krb5.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: preparaad_dominio_efectivo | trim != ''
+  tags: [preparaad, ad]
+
+# ---------------------------------------------------------------------------
+# 6. ¿Se ve el dominio desde aquí? (informativo, NO falla)
+# ---------------------------------------------------------------------------
+# Si esto falla, lo normal es que el DNS del equipo (DHCP del aula) no sea el
+# del dominio: la unión NO funcionará hasta resolverlo (ver CLAUDE.md).
+- name: Descubrir el dominio por DNS (realm discover) — informativo
+  ansible.builtin.command: realm discover {{ preparaad_dominio | quote }}
+  register: preparaad_discover
+  changed_when: false
+  failed_when: false
+  when: preparaad_dominio != '' and not (preparaad_unido | bool)
+  tags: [preparaad, ad]
+
+# ---------------------------------------------------------------------------
+# 7. Unión al dominio (SOLO bajo demanda: preparaad_unir=true + credenciales)
+# ---------------------------------------------------------------------------
+- name: Unión al dominio (realm join desatendido)
+  when:
+    - preparaad_unir | bool
+    - not (preparaad_unido | bool)
+    - preparaad_dominio != ''
+    - preparaad_usuario_union != ''
+    - preparaad_password_union != ''
+  tags: [preparaad, ad]
+  block:
+    # realm join lee la contraseña por stdin con --unattended (sin tty).
+    # Escribe /etc/sssd/sssd.conf, crea la cuenta de equipo + keytab
+    # (/etc/krb5.keytab) y habilita+arranca sssd.service él mismo.
+    - name: Unir el equipo al dominio {{ preparaad_dominio }}
+      ansible.builtin.shell: >-
+        echo '{{ preparaad_password_union }}' |
+        realm join --unattended
+        --user={{ preparaad_usuario_union | quote }}
+        {% if preparaad_ou != '' %}--computer-ou={{ preparaad_ou | quote }}{% endif %}
+        {{ preparaad_dominio | quote }}
+      no_log: true            # contiene la contraseña de unión
+
+    - name: Releer el estado de unión tras el join
+      ansible.builtin.command: realm list --name-only
+      register: preparaad_realm_post
+      changed_when: false
+      failed_when: false
+
+    - name: Actualizar el estado de unión
+      ansible.builtin.set_fact:
+        preparaad_unido: "{{ (preparaad_realm_post.stdout | trim) != '' }}"
+
+    # Post-condición ruidosa (mismo criterio que el rol rdp): si el join no
+    # cuajó, el play debe FALLAR, no terminar "ok" con el equipo fuera.
+    - name: Verificar que el equipo quedó unido al dominio
+      ansible.builtin.fail:
+        msg: >-
+          realm join terminó pero `realm list` sigue vacío: el equipo NO
+          quedó unido a {{ preparaad_dominio }}. Revisar DNS hacia el DC,
+          reloj y permisos del usuario de unión.
+      when: not (preparaad_unido | bool)
+
+# ---------------------------------------------------------------------------
+# 8. Opciones SSSD del IES (snippet conf.d) — SOLO con el equipo ya unido
+# ---------------------------------------------------------------------------
+# sssd fusiona conf.d/*.conf POR ENCIMA del sssd.conf que escribió realmd,
+# así que aquí se ajusta sin tocar su fichero. Permisos 0600 obligatorios
+# (sssd se niega a arrancar si el conf.d es legible por otros).
+- name: Desplegar las opciones SSSD del IES (conf.d, pisa lo de realmd)
+  ansible.builtin.template:
+    src: 10-iac-ad.conf.j2
+    dest: /etc/sssd/conf.d/10-iac-ad.conf
+    owner: root
+    group: root
+    mode: "0600"
+  when: preparaad_unido | bool and (preparaad_dominio_efectivo | trim) != ''
+  register: preparaad_snippet
+  tags: [preparaad, ad]
+
+- name: Reiniciar sssd para aplicar el snippet
+  ansible.builtin.systemd:
+    name: sssd.service
+    state: restarted
+  when: preparaad_snippet is changed
+  tags: [preparaad, ad]
+
+# ---------------------------------------------------------------------------
+# 9. Resumen del estado (sale en el log del play / 3-SetupPrimerInicio)
+# ---------------------------------------------------------------------------
+- name: Resumen preparaAD
+  ansible.builtin.debug:
+    msg:
+      - "Unido a dominio: {{ 'SÍ (' + (preparaad_realm_post.stdout_lines | default(preparaad_realm.stdout_lines) | join(', ')) + ')' if preparaad_unido | bool else 'NO (prerequisitos instalados; ver roles/preparaAD/CLAUDE.md para unir)' }}"
+      - "Dominio configurado: {{ preparaad_dominio if preparaad_dominio != '' else '(sin definir — fijar preparaad_dominio)' }}"
+      - "Dominio visible por DNS: {{ 'SÍ' if (preparaad_discover.rc | default(-1)) == 0 else ('no comprobado' if preparaad_discover is skipped or preparaad_dominio == '' else 'NO — el DNS del equipo no resuelve el dominio (la unión fallará)') }}"
+      - "Reloj sincronizado por NTP: {{ preparaad_ntpsync.stdout | default('?') }}"
+  tags: [preparaad, ad]

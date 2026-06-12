@@ -203,7 +203,8 @@ parte vive en `Ubuntu/ansible/` y está **documentada con sus propios CLAUDE.md*
   `certificados`, `comparteaula` (+ legacy `comparteaula32`/`comparteaula72`),
   `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al
   antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `Docker`
-  (instalación de sistema para uso rootless; sustituye al antiguo `contenedores`).
+  (instalación de sistema para uso rootless; sustituye al antiguo `contenedores`),
+  `preparaAD` (prerequisitos de unión a dominio Active Directory; no une por defecto).
 - **`Ubuntu/ansible/rolesUsuario/CLAUDE.md`** — configuraciones e **instalaciones
   de software sin permisos root** que **todo usuario** debería tener en su perfil
   (`~/.ssh`, dotfiles…), ejecutadas **como el usuario** (no root). Carpeta nueva,

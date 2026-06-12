@@ -1,0 +1,68 @@
+# Variables del rol preparaAD (preparación para unión a dominio Active Directory)
+# ---------------------------------------------------------------------------
+# Este rol deja el equipo PRECONFIGURADO para unirse a un dominio AD: instala
+# el stack realmd+SSSD+adcli+Kerberos, activa pam_mkhomedir, comprueba reloj/
+# hostname/DNS y verifica si el equipo ya está unido. Por defecto NO une al
+# dominio (preparaad_unir: false) — la unión necesita credenciales delegadas;
+# ver "Cómo unir" en el CLAUDE.md del rol y los scripts de apoyo en utilesAD/.
+
+# Dominio AD del IES, en formato DNS y minúsculas. Con dominio definido, el
+# rol despliega /etc/krb5.conf y comprueba con `realm discover` que el DNS
+# del aula lo resuelve. Para probar contra otro dominio:
+#   -e preparaad_dominio=otro.local
+preparaad_dominio: "iesmhp.local"
+
+# Stack de unión a dominio. Núcleo según la doc oficial de Ubuntu
+# (https://ubuntu.com/server/docs/how-to/sssd/with-active-directory/):
+# sssd-ad + sssd-tools + realmd + adcli. El resto son apoyos.
+preparaad_paquetes:
+  - realmd          # orquestador: realm discover/join/leave
+  - sssd-ad         # proveedor Active Directory de SSSD (arrastra sssd-common)
+  - sssd-tools      # sssctl, sss_cache… (diagnóstico y limpieza de caché)
+  - libnss-sss      # usuarios/grupos del dominio visibles en nsswitch (getent)
+  - libpam-sss      # autenticación PAM contra el dominio
+  - adcli           # herramienta de unión que realmd usa con AD
+  - krb5-user       # kinit/klist para diagnosticar Kerberos
+  - packagekit      # realmd lo usa para autoinstalar paquetes (aquí ya van preinstalados)
+  - bind9-dnsutils  # dig (diagnóstico DNS) y nsupdate (dyndns de sssd)
+
+# Servidor NTP del dominio (normalmente el propio controlador de dominio).
+# Kerberos exige desfase < 5 min con el DC. VACÍO = se respeta la
+# configuración por defecto de systemd-timesyncd (ntp.ubuntu.com), que en
+# general basta si el equipo tiene salida a Internet.
+preparaad_ntp: ""
+
+# OU donde se crean las cuentas de equipo al unir. La crea (y delega) el
+# script utilesAD/1-CreaUsuarioUnionAD.ps1: la cuenta de unión SOLO tiene
+# permisos en ESTA OU, así que si se cambia aquí hay que re-ejecutar ese
+# script en el DC con el nuevo nombre. Vacío = contenedor Computers por
+# defecto del dominio (NO funcionará con la cuenta delegada).
+preparaad_ou: "OU=EquiposLinuxAutomatizados,DC=iesmhp,DC=local"
+
+# ---- Unión automática al dominio (APAGADA por defecto) --------------------
+# Activarla SOLO en pases lanzados a mano, con la contraseña en ansible-vault
+# o por -e (NUNCA en claro en el repo):
+#   ansible-playbook -i equiposIABD.ini roles.yaml --tags preparaad \
+#     -e preparaad_unir=true -e @vault/preparaAD-vault.yml --ask-vault-pass
+# El vault lo genera utilesAD/2-CreaVault.sh y vive en vault/ (NO en
+# group_vars/: ahí se auto-cargaría y TODOS los pases —incluido el primer
+# arranque— exigirían la contraseña del vault).
+preparaad_unir: false
+# Cuenta del dominio DELEGADA solo para unir equipos a la OU de arriba.
+# La crea utilesAD/1-CreaUsuarioUnionAD.ps1 (ejecutado en un DC).
+preparaad_usuario_union: "svc-union-linux"
+preparaad_password_union: ""  # su contraseña — SOLO vía vault (utilesAD/2-CreaVault.sh) o -e
+# Limitación: la contraseña no debe contener comillas simples (se interpola
+# en una orden shell; la tarea va con no_log).
+
+# ---- Opciones SSSD del IES (snippet conf.d, solo se aplica YA UNIDO) ------
+# false → login como "pepe"; true → exige "pepe@dominio"
+preparaad_fqn: false
+# Home de los usuarios del dominio (AD no suele rellenar unixHomeDirectory).
+# %u=usuario, %d=dominio. pam_mkhomedir lo crea en el primer login.
+preparaad_fallback_homedir: "/home/%u"
+# ad_gpo_access_control: el default de SSSD es "enforcing" y puede DENEGAR
+# TODOS los logins si las GPO "Allow log on locally" del dominio no
+# contemplan equipos Linux (bloqueo típico en AD de centros). "permissive"
+# evalúa las GPO pero no bloquea. Endurecer cuando las GPO estén revisadas.
+preparaad_gpo: "permissive"
