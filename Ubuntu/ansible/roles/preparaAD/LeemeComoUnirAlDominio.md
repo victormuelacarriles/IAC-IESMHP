@@ -182,6 +182,22 @@ consultas de `iesmhp.local` a los DNS del dominio
 resto del tráfico DNS sigue saliendo por el DNS del aula. No toca
 NetworkManager ni el DHCP.
 
+Además, como el dominio termina en **`.local`** (el TLD reservado para
+mDNS/Avahi), el rol ajusta también la línea `hosts:` de
+**`/etc/nsswitch.conf`**: en Ubuntu lleva `mdns4_minimal [NOTFOUND=return]`
+**antes** de `dns`, lo que hace que `ping`, `kinit` o `adcli` corten en el
+mDNS y nunca lleguen a preguntar a systemd-resolved (síntoma típico: el
+resumen del rol dice "visible por DNS: SÍ" pero `ping iesmhp.local` no
+resuelve). El rol antepone `dns` al mDNS
+(`hosts: files dns mdns4_minimal [NOTFOUND=return]`); los nombres mDNS
+reales (impresoras…) siguen funcionando como fallback. Desactivable con
+`preparaad_arregla_nsswitch: false`. Comprobar cada ruta por separado:
+
+```bash
+resolvectl query iesmhp.local   # ruta systemd-resolved (la de realm/SSSD)
+getent hosts iesmhp.local       # ruta nsswitch (la de ping/kinit/adcli)
+```
+
 Si aun así el resumen del rol dice *"NO — ni con split-DNS"*, el problema ya
 no es de DNS sino de **conectividad** hacia esas IPs (routing/firewall del
 aula). Diagnóstico:

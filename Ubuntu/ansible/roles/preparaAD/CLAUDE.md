@@ -38,7 +38,14 @@ Cumple el TODO `predominio` de `roles.yaml`. Sigue la doc oficial de Ubuntu:
    `DNS=<DCs>` + `Domains=~iesmhp.local`) — solo las consultas del dominio
    van a los DC, el resto sigue por el DNS del aula; no se toca
    NetworkManager ni el DHCP —, reinicia systemd-resolved y reintenta el
-   discover.
+   discover. Además (6b), si el dominio termina en **`.local`** antepone
+   `dns` a `mdns4_minimal` en la línea `hosts:` de `/etc/nsswitch.conf`:
+   `.local` es el TLD de mDNS y el `[NOTFOUND=return]` de Ubuntu corta la
+   resolución de getaddrinfo (ping, **kinit, adcli**) antes de llegar a
+   systemd-resolved — `realm discover`/SSSD no lo sufren (resolver propio),
+   por lo que sin este ajuste el resumen diría "visible por DNS: SÍ" pero la
+   unión podría fallar. Los nombres mDNS legítimos siguen funcionando como
+   fallback. Desactivable con `preparaad_arregla_nsswitch: false`.
 7. **Unión opcional** (`preparaad_unir=true` + credenciales): `realm join
    --unattended` con la contraseña por stdin (`no_log`), `--computer-ou` si se
    define, y **post-condición ruidosa**: si `realm list` sigue vacío, el play
@@ -68,6 +75,7 @@ equipos ya unidos).
 |----------|-------------|----------|
 | `preparaad_dominio` | `iesmhp.local` | Dominio AD (DNS, minúsculas). Vacío = solo prerequisitos genéricos |
 | `preparaad_dominio_dnss` | `10.0.1.48,10.0.1.54` | IPs (separadas por comas) que resuelven el dominio (DNS de los DC). Solo se usan si el DNS del equipo NO resuelve el dominio → split-DNS vía systemd-resolved. Vacío = sin auto-arreglo |
+| `preparaad_arregla_nsswitch` | `true` | En dominios `.local`: anteponer `dns` a `mdns4_minimal` en `/etc/nsswitch.conf` (sin esto, ping/kinit/adcli no resuelven `*.local` aunque el split-DNS funcione) |
 | `preparaad_paquetes` | lista | Stack a instalar |
 | `preparaad_ntp` | `""` | NTP del dominio (normalmente el DC). Vacío = default de Ubuntu |
 | `preparaad_ou` | `OU=EquiposLinuxAutomatizados,DC=iesmhp,DC=local` | OU de las cuentas de equipo (`--computer-ou`). La crea y delega `utilesAD/1-CreaUsuarioUnionAD.ps1` — si se cambia aquí, re-ejecutar ese script |
@@ -154,6 +162,12 @@ solo afecta a las consultas del dominio). Si el resumen sigue diciendo
 "NO — ni con split-DNS", el problema es de **conectividad** con esas IPs
 (routing/firewall del aula hacia `10.0.1.48`/`10.0.1.54`), no de DNS.
 Diagnóstico: `resolvectl status`, `dig -t SRV _ldap._tcp.iesmhp.local @10.0.1.48`.
+
+El rol arregla **las dos rutas de resolución** del equipo: la de
+systemd-resolved (split-DNS — la que usan `realm`/SSSD) y la de
+nsswitch/getaddrinfo (reorden del mDNS — la que usan `ping`/`kinit`/`adcli`).
+Verificar cada una por separado: `resolvectl query iesmhp.local` (resolved) y
+`getent hosts iesmhp.local` (nsswitch).
 
 ## Estado / Notas
 - **Activo** en `roles.yaml` (modo "solo prerequisitos": sin `preparaad_dominio`

@@ -21,6 +21,14 @@ preparaad_dominio: "iesmhp.local"
 # VACÍO = desactiva este arreglo automático.
 preparaad_dominio_dnss: "10.0.1.48,10.0.1.54"
 
+# Arreglo de /etc/nsswitch.conf para dominios AD terminados en .local (como
+# iesmhp.local): la línea hosts de Ubuntu lleva `mdns4_minimal
+# [NOTFOUND=return]` ANTES de `dns`, así que ping/kinit/adcli (getaddrinfo)
+# cortan en el mDNS y nunca preguntan a systemd-resolved por *.local — aunque
+# el split-DNS funcione. true = anteponer `dns` al mDNS (los nombres mDNS
+# legítimos, impresora.local..., siguen funcionando como fallback).
+preparaad_arregla_nsswitch: true
+
 # Stack de unión a dominio. Núcleo según la doc oficial de Ubuntu
 # (https://ubuntu.com/server/docs/how-to/sssd/with-active-directory/):
 # sssd-ad + sssd-tools + realmd + adcli. El resto son apoyos.

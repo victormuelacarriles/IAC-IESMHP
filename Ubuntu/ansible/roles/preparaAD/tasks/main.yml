@@ -15,6 +15,10 @@
 #      Si NO resuelve y hay preparaad_dominio_dnss: fuerza split-DNS hacia
 #      los DC (drop-in de systemd-resolved, solo consultas del dominio),
 #      reinicia systemd-resolved y reintenta el discover.
+#   6b. Si el dominio termina en .local: antepone `dns` a `mdns4_minimal`
+#      en /etc/nsswitch.conf para que ping/kinit/adcli (getaddrinfo) lleguen
+#      a systemd-resolved en vez de morir en el mDNS (.local es el TLD de
+#      mDNS y el [NOTFOUND=return] de Ubuntu corta la cadena).
 # Solo si preparaad_unir=true + credenciales (vault / -e):
 #   7. realm join desatendido + verificación de que quedó unido.
 # Solo con el equipo YA unido:
@@ -216,6 +220,41 @@
       failed_when: false
 
 # ---------------------------------------------------------------------------
+# 6b. nsswitch.conf — dominios .local vs mDNS
+# ---------------------------------------------------------------------------
+# `.local` es el TLD reservado para mDNS (RFC 6762). La línea hosts de Ubuntu
+# Desktop (`files mdns4_minimal [NOTFOUND=return] dns`) hace que getaddrinfo()
+# —lo que usan ping, kinit y adcli— corte en el mDNS para CUALQUIER *.local y
+# NUNCA pregunte a systemd-resolved: aunque el split-DNS de arriba funcione,
+# `ping iesmhp.local` falla y la unión (kinit/adcli resuelven los DC por esta
+# ruta) puede fallar. `realm discover` y SSSD no lo sufren porque no pasan
+# por nsswitch (resolver propio), de ahí el "visible por DNS: SÍ" engañoso.
+# Arreglo: anteponer `dns` al mDNS. Los nombres mDNS legítimos
+# (impresora.local…) siguen funcionando: resolved responde "no existe" al
+# instante a los .local sin routing domain y la cadena continúa hasta
+# mdns4_minimal. Idempotente: tras el cambio el regex ya no casa. Sin
+# reinicios: glibc relee el orden en la siguiente resolución.
+- name: Anteponer dns a mdns4_minimal en nsswitch.conf (dominio .local)
+  ansible.builtin.replace:
+    path: /etc/nsswitch.conf
+    regexp: '^(hosts:\s+files\s+)mdns4_minimal\s+\[NOTFOUND=return\]\s+dns'
+    replace: '\1dns mdns4_minimal [NOTFOUND=return]'
+  register: preparaad_nsswitch
+  when:
+    - preparaad_arregla_nsswitch | bool
+    - preparaad_dominio.endswith('.local')
+  tags: [preparaad, ad]
+
+# Para el resumen: detecta líneas hosts no estándar donde el regex de arriba
+# no casó y el mDNS sigue cortando antes que dns.
+- name: Leer la línea hosts de nsswitch.conf
+  ansible.builtin.command: grep '^hosts:' /etc/nsswitch.conf
+  register: preparaad_nsswitch_linea
+  changed_when: false
+  failed_when: false
+  tags: [preparaad, ad]
+
+# ---------------------------------------------------------------------------
 # 7. Unión al dominio (SOLO bajo demanda: preparaad_unir=true + credenciales)
 # ---------------------------------------------------------------------------
 - name: Unión al dominio (realm join desatendido)
@@ -293,5 +332,6 @@
       - "Dominio configurado: {{ preparaad_dominio if preparaad_dominio != '' else '(sin definir — fijar preparaad_dominio)' }}"
       - "Dominio visible por DNS: {{ 'SÍ' if (preparaad_discover.rc | default(-1)) == 0 else ('no comprobado' if preparaad_discover is skipped or preparaad_dominio == '' else ('NO — ni con split-DNS hacia ' + preparaad_dominio_dnss + ' (¿se llega a esas IPs?)' if preparaad_dns_dropin is defined and preparaad_dns_dropin is not skipped else 'NO — el DNS del equipo no resuelve el dominio (la unión fallará)')) }}"
       - "Split-DNS hacia los DC: {{ 'no comprobado (sin dominio)' if preparaad_dominio == '' else ('ACTIVO → ' + preparaad_dominio_dnss if preparaad_dns_dropin is defined and preparaad_dns_dropin is not skipped else 'no aplicado en este pase (el dominio ya resuelve — puede venir de un drop-in anterior)') }}"
+      - "nsswitch hosts (.local/mDNS): {{ 'AJUSTADO en este pase (dns antepuesto a mdns4_minimal)' if (preparaad_nsswitch is defined and preparaad_nsswitch is changed) else ('AVISO: mdns4_minimal sigue ANTES de dns (línea no estándar — ajustar a mano: ping a *.local fallará)' if (preparaad_nsswitch_linea.stdout | default('')) is search('mdns4_minimal.* dns') else 'OK') }}"
       - "Reloj sincronizado por NTP: {{ preparaad_ntpsync.stdout | default('?') }}"
   tags: [preparaad, ad]
