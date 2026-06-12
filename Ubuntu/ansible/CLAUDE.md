@@ -32,7 +32,7 @@ Esta carpeta contiene la **configuración automática del equipo ya instalado**,
 | [`vscode`](roles/vscode/CLAUDE.md) | ✅ activo | VS Code desde .deb oficial |
 | [`virtualbox`](roles/virtualbox/CLAUDE.md) | ⛔ comentado (TODO versión) | VirtualBox desde repo Oracle |
 | [`virtualboxFUERA`](roles/virtualboxFUERA/CLAUDE.md) | no listado | Desinstala VirtualBox y limpia repos |
-| [`vmware`](roles/vmware/CLAUDE.md) | ⛔ comentado (compila en 1er arranque) | VMware Workstation desde .bundle |
+| [`vmware`](roles/vmware/CLAUDE.md) | ✅ activo (falla compilación en 1er arranque) | VMware Workstation desde .bundle |
 | [`Docker`](roles/Docker/CLAUDE.md) | ✅ activo | Instalación de **sistema** de Docker para uso **rootless** (repo, paquetes, subuid/subgid, lingering). La parte por usuario la hace [`rolesUsuario/DockerRootless`](rolesUsuario/roles/DockerRootless/CLAUDE.md). Sustituye al antiguo `contenedores` |
 
 > Cada carpeta de rol tiene su propio `CLAUDE.md` con el detalle de tareas, variables (`defaults/`) e issues conocidos.

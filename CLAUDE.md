@@ -110,10 +110,10 @@ ls /var/log/IAC-IESMHP/Ubuntu/
   - Instala `zfsutils-linux` en el entorno live.
   - Detecta Fast Dedup (OpenZFS ≥ 2.3) y lo activa si está.
   - `zpool create rpool` con `compression=zstd, dedup=on, recordsize=64K,
-    ashift=12, autotrim=on` y altroot `-R /mnt`. Crea dataset único
-    `rpool/home canmount=on mountpoint=/home` para que el rsync vuelque
-    /home (squashfs) al pool. `2-SetupSOdesdeLiveCD.sh` lo reestructura
-    en padre+hijo por usuario.
+    ashift=12, autotrim=on` y altroot `-R /mnt`. Crea el dataset **único y
+    definitivo** `rpool/home canmount=on mountpoint=/home`: el rsync vuelca
+    /home (squashfs) al pool y los usuarios viven como directorios normales
+    dentro (desde 2026-06-12 ya NO hay datasets por usuario ni cuotas).
   - `zpool create tank` análogo pero **sin dedup**, `recordsize=1M`. Crea
     `tank/datos canmount=on mountpoint=/datos setuid=off devices=off`,
     `chmod 1777`.
@@ -144,25 +144,16 @@ ls /var/log/IAC-IESMHP/Ubuntu/
   `zfs.target zfs-import-cache zfs-mount zfs-zed`; deshabilita
   `zfs-import-scan` (redundante con cachefile); `zpool set cachefile=` en
   `rpool` y `tank` para regenerar el cache desde el sistema instalado.
-- **Reestructuración `rpool/home` (CEIABD)**: el dataset único de FASE 1
-  (canmount=on) se destruye y recrea como contenedor `canmount=off
-  mountpoint=/home`. Se crea `rpool/home/usuario` con `canmount=on` y
-  **sin cuota** (la línea `zfs set quota=200G` está comentada desde
-  2026-06-09; ver nota abajo). `useradd -d /home/usuario` sin `-m` (el
-  dataset ya está montado vacío); copia manual de `/etc/skel` + `chown -R`.
-  Snapshot `rpool/home/usuario@inicial` tras configurar `authorized_keys`.
-- **Helper `/usr/local/sbin/nuevo-alumno.sh` (solo CEIABD)**: generado
-  inline. Acepta `<usuario> [cuota=200G]` (el 2.º arg se sigue aceptando
-  pero **se ignora** mientras la cuota esté desactivada). Crea
-  `rpool/home/<u>` **sin cuota**, `useradd` con grupos (`sudo` + opcionales
-  detectados), copia skel, snapshot `@inicial`, `passwd` interactivo. Uso
-  típico por SSH: `sudo nuevo-alumno.sh alvaro`.
-- **Cuotas ZFS DESACTIVADAS (2026-06-09)**: las dos líneas `zfs set quota=…`
-  de `2-SetupSOdesdeLiveCD.sh` (usuario inicial y helper `nuevo-alumno.sh`)
-  quedan **comentadas, no borradas**. `/home` crece sin límite (solo lo
-  acota el pool). Para reactivar: descomentar la línea correspondiente.
-  Para quitar una cuota ya aplicada en un equipo existente:
-  `zfs set quota=none rpool/home/<u>`.
+- **`/home` = dataset ZFS único (CEIABD, simplificación 2026-06-12)**:
+  `rpool/home` (canmount=on, mountpoint=/home, creado en `1-SetupLiveCD.sh`)
+  se usa tal cual — ya NO se reestructura en contenedor + dataset por
+  usuario, NO hay cuotas y NO existe el helper `nuevo-alumno.sh`. El script
+  solo verifica que `rpool/home` está montado en `/home` (red de seguridad:
+  abortar antes de escribir al ext4 subyacente) y crea el usuario con
+  `useradd -m` estándar (misma rama que DISTANCIA). Alta de usuarios en el
+  equipo instalado: `sudo adduser <usuario>`. Snapshot global
+  `rpool/home@inicial` tras eliminar el usuario `ubuntu` del Live CD
+  (rollback devuelve TODO /home al estado post-instalación).
 - **Parche grub.cfg**: `update-grub` en chroot a veces escribe `root=/dev/nvme0n1p3` en lugar de `root=UUID=...`. El script lo detecta y parchea con `sed`.
 - **Casper hooks**: se eliminan directamente con `rm -rf` (sin `apt remove`) para evitar que los triggers dpkg se bloqueen en el chroot. Los hooks afectados: `/usr/share/initramfs-tools/hooks/casper` y variantes.
 - `update-initramfs -c -k all` tarda 2–4 min; es el paso más lento del chroot. Con `zfs-initramfs` instalado, el initramfs incluye el módulo ZFS (informativo: `/` sigue siendo ext4).
@@ -179,7 +170,7 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 - Ejecuta `Auto-Ansible.sh` y lanza directamente `ansible-playbook roles.yaml` desde `$RAIZANSIBLE` (ver sección **Configuración post-instalación con Ansible**).
 
 ### 4-Comprobaciones.sh — Diagnóstico
-Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de hooks casper, grub.cfg con UUIDs, fstab vs blkid, paquetes dpkg rotos, servicio SSH. **Sección 9 ZFS (CEIABD)**: salud de pools, datasets esperados (`rpool/home`, `rpool/home/usuario`, `tank/datos`), dedup ratio + feature `fast_dedup`, servicios `zfs-import-cache`/`zfs-mount`/`zfs-zed`, módulo `zfs.ko` en initramfs y helper `nuevo-alumno.sh`. Genera resumen de errores/warnings al final. Útil como primer análisis al pegar un log.
+Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de hooks casper, grub.cfg con UUIDs, fstab vs blkid, paquetes dpkg rotos, servicio SSH. **Sección 9 ZFS (CEIABD)**: salud de pools, datasets esperados (`rpool/home` montado en `/home`, `tank/datos` en `/datos`), dedup ratio + feature `fast_dedup`, servicios `zfs-import-cache`/`zfs-mount`/`zfs-zed` y módulo `zfs.ko` en initramfs. Genera resumen de errores/warnings al final. Útil como primer análisis al pegar un log.
 
 ---
 

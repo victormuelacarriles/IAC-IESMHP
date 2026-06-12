@@ -10,7 +10,7 @@ Automatización del despliegue de Ubuntu 26.04 Desktop en equipos del IES Miguel
 
 ### Protocolo de diagnóstico (seguir en este orden)
 1. Leer el fichero de cambios más reciente en `Ubuntu/RegistroDeCambios/` para saber qué se tocó en la última sesión y qué consecuencias puede haber tenido.
-2. Leer el log pegado o los ficheros de log en `Ubuntu/ISO/26.04/logs/ (ficheros *.log y *.steps)
+2. Leer el log pegado o los ficheros de log en `Ubuntu/ISO/26.04/logs/` (ficheros `*.log` y `*.steps`)
 3. **Antes de proponer un fix**, cruzar cada `[ERR]` con la lista de falsos positivos conocidos documentada más abajo — muchos errores son del propio script de diagnóstico, no del sistema instalado.
 4. Si el error es real (no falso positivo), buscar en el script correspondiente la línea exacta que lo genera y proponer el cambio mínimo necesario.
 5. Documentar el fix en `Ubuntu/RegistroDeCambios/YYYYMMDD-Cambios.md` (crear el fichero del día si no existe. Indicar dentro del fichero la hora de los cambios.).
@@ -77,9 +77,10 @@ ls /var/log/IAC-IESMHP/Ubuntu/
   datos (`FICHERO_MACS`, `URL_MACS`, `FICHERO_AUTORIZADOS`) y redes/proxy de aula
   (`RED_IABD`/`RED_SMRD`, `PROXY_IABD`/`PROXY_SMRD`).
 - Carga: cada script lo localiza relativo a `${BASH_SOURCE[0]}` y hace `source`.
-  En `ISO/26.04/` → `source "$_DIR/comun.sh"`; en `ISO/26.04/utiles/` →
-  `source "$_DIR/../comun.sh"`. No se ejecuta (lleva guarda `IAC_COMUN_CARGADO`
-  y no fija `set -e`). **Para mover una ruta, editar solo este fichero.**
+  En `ISO/26.04/` → `_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"`; en
+  `ISO/26.04/utiles/` → `_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"`;
+  ambos hacen luego `source "$_DIR/comun.sh"`. No se ejecuta (lleva guarda
+  `IAC_COMUN_CARGADO` y no fija `set -e`). **Para mover una ruta, editar solo este fichero.**
 - **Excepción `0b-Github.sh`**: corre en el Live CD antes de clonar el repo, así
   que conserva un bloque de arranque con solo `GITHUB_USER`+`REPO` (la única
   duplicación, marcada en el código); tras clonar carga `comun.sh`. Cambiar la
@@ -125,9 +126,9 @@ ls /var/log/IAC-IESMHP/Ubuntu/
     cachefile=/etc/zfs/zpool.cache, compression=zstd, dedup=on,
     recordsize=64K, acltype=posixacl, xattr=sa, atime=off, -R /mnt` sobre
     `/dev/disk/by-id/...-part4`. Crea `rpool/home` con `canmount=on
-    mountpoint=/home` (un único dataset para que el rsync vuelque /home al
-    pool — `2-SetupSOdesdeLiveCD.sh` lo refina luego en estructura
-    contenedor + hijo por usuario).
+    mountpoint=/home` — dataset **único y definitivo** (desde 2026-06-12):
+    el rsync vuelca /home al pool y los usuarios viven como directorios
+    normales dentro; `2-SetupSOdesdeLiveCD.sh` ya NO lo reestructura.
   - `zpool create tank` análogo pero **sin dedup**, `recordsize=1M`,
     sobre el SDA entero. `zfs create tank/datos` con `mountpoint=/datos`,
     `setuid=off`, `devices=off`; `chmod 1777`.
@@ -149,7 +150,7 @@ ls /var/log/IAC-IESMHP/Ubuntu/
   los pools siguen accesibles desde `/mnt` para diagnóstico manual.
 - Si `2-SetupSOdesdeLiveCD.sh` termina con la línea literal `Correcto`, reinicia automáticamente; si no, espera 100000 s para diagnóstico.
 
-### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot (v23.0-20260520-zfs)
+### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot (v23.7-20260612-zfs-homeunico)
 - **Preámbulo**: carga `.iac-partitions.env` AL INICIO (antes del primer
   `paso`) y deja la variable `PERFIL` disponible globalmente. Si el fichero
   no existe (re-ejecución manual desde un sistema ya instalado), asume
@@ -159,7 +160,7 @@ ls /var/log/IAC-IESMHP/Ubuntu/
     `/datos` ext4, `swap`). El criterio `sd*`→`/datos`, `nvme*`→`/home`
     lo decide `PART_DATA` del `.iac-partitions.env`.
   - **CEIABD**: 3 líneas (`/`, `/boot/efi`, `swap`). `/home` lo monta
-    `rpool/home/<usuario>` y `/datos` lo monta `tank/datos` vía
+    `rpool/home` y `/datos` lo monta `tank/datos` vía
     `zfs-mount.service`; ambas entradas SE OMITEN del fstab. La raíz lleva
     `defaults,noatime`.
 - **Bloque ZFS (solo CEIABD, tras "Verificar conectividad")**:
@@ -171,27 +172,19 @@ ls /var/log/IAC-IESMHP/Ubuntu/
     escanear discos en cada boot).
   - `zpool set cachefile=/etc/zfs/zpool.cache` para `rpool` y `tank`,
     refrescando el cachefile con los binarios del sistema instalado.
-- **Reestructuración `rpool/home`** (en el bloque "Usuarios", solo CEIABD):
-  - En FASE 1 (`1-SetupLiveCD.sh`) era `rpool/home canmount=on`
-    (dataset único). Ahora se destruye y recrea como contenedor
-    `canmount=off mountpoint=/home`.
-  - Se crea `rpool/home/usuario` con `canmount=on` y **sin cuota** (la línea
-    `zfs set quota=200G` está comentada desde 2026-06-09).
-    `mountpoint` heredado del padre → `/home/usuario`.
-  - `useradd -d /home/usuario` sin `-m` (el dir ya existe como dataset
-    montado), seguido de `cp -aT /etc/skel /home/usuario/.` + `chown -R`.
-  - Snapshot `rpool/home/usuario@inicial` tras configurar `authorized_keys`.
-- **Helper `/usr/local/sbin/nuevo-alumno.sh`** (solo CEIABD): generado
-  inline con heredoc. Acepta `<usuario> [cuota=200G]` (el 2.º arg se acepta
-  pero **se ignora** mientras la cuota esté desactivada). Crea
-  `rpool/home/<u>` **sin cuota**, `useradd` con grupos (`sudo` + opcionales
-  `vboxusers/libvirt/docker` si existen), copia `/etc/skel` + permisos,
-  snapshot `@inicial`, y `passwd` interactivo al final. **Uso**: `sudo
-  nuevo-alumno.sh alvaro`.
-- **Cuotas ZFS DESACTIVADAS (2026-06-09)**: ambas líneas `zfs set quota=…`
-  (usuario inicial y helper) quedan **comentadas, no borradas**; `/home`
-  crece sin límite (solo lo acota el pool). Reactivar = descomentar la línea.
-  Quitar una cuota ya aplicada en un equipo: `zfs set quota=none rpool/home/<u>`.
+- **`/home` = dataset ZFS único** (bloque "Usuarios", solo CEIABD —
+  simplificación 2026-06-12, v23.7):
+  - `rpool/home` (canmount=on, mountpoint=/home, creado en
+    `1-SetupLiveCD.sh`) se usa tal cual. Ya NO se destruye ni se recrea
+    como contenedor + dataset por usuario, NO hay cuotas, NO hay re-import
+    sin altroot (no se crean datasets nuevos dentro del chroot, que era lo
+    que rompía el auto-mount) y NO existe el helper `nuevo-alumno.sh`.
+  - Red de seguridad: el script verifica `mountpoint -q /home` y aborta si
+    el dataset no está montado (evita escribir al ext4 subyacente).
+  - El usuario se crea con `useradd -m` estándar (misma rama que DISTANCIA).
+    Alta de usuarios en el equipo instalado: `sudo adduser <usuario>`.
+  - Snapshot global `rpool/home@inicial` tras eliminar el usuario `ubuntu`
+    del Live CD (para no arrastrar `/home/ubuntu` en el snapshot).
 - Genera fstab con UUIDs reales leídos de `blkid` (PART_EFI/SWAP/ROOT del
   `.iac-partitions.env`).
 - **Limpia fuentes APT del Live CD (`cdrom:`)**: el rsync arrastra al sistema instalado la entrada `deb cdrom:[Ubuntu ...]/ resolute main` (o el equivalente DEB822 en `/etc/apt/sources.list.d/*.sources`) que el Live CD añade automáticamente. Sin limpiarla, `apt update` falla con "El repositorio file:/cdrom ... no tiene un fichero de Publicación". El paso depura `sources.list` y `*.list` con `sed`, y elimina los `.sources` (DEB822) cuyo `URIs:` apunte a `cdrom:`.
@@ -234,12 +227,12 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 ### Configuración Ansible (post-instalación)
 La fase Ansible (software, NFS de aula, drivers, claves SSH…) está **documentada con sus propios CLAUDE.md** dentro de `Ubuntu/ansible/`:
 - `Ubuntu/ansible/CLAUDE.md` — describe `roles.yaml` (playbook maestro), inventarios `*.ini`, comandos de ejecución, estado de cada rol (activo/comentado/legacy) y convenciones (caché apt, detección de aula por IP, equipo `-00` = servidor NFS).
-- `Ubuntu/ansible/roles/<rol>/CLAUDE.md` — un fichero por rol (`basicos`, `certificados`, `comparteaula` + legacy `comparteaula32`/`comparteaula72`, `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `Docker` (instalación de sistema para uso rootless; sustituye al antiguo `contenedores`)) con tareas, variables e issues conocidos.
+- `Ubuntu/ansible/roles/<rol>/CLAUDE.md` — un fichero por rol (`basicos`, `clienteNAS`, `certificados`, `comparteaula` + legacy `comparteaula32`/`comparteaula72`, `DirtyFrag`, `flatpak`, `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `Docker` (instalación de sistema para uso rootless; sustituye al antiguo `contenedores`)) con tareas, variables e issues conocidos.
 - `Ubuntu/ansible/rolesUsuario/CLAUDE.md` — configuraciones por usuario (`~/.ssh`, dotfiles…), ejecutadas **como el usuario** (no root). Carpeta nueva, en construcción; aún no enganchada a `roles.yaml`.
 - **Al diagnosticar/modificar la fase Ansible, leer primero esos CLAUDE.md** (sobre todo el de `Ubuntu/ansible/` para saber qué roles están activos en `roles.yaml`).
 
-### 4-Comprobaciones.sh — Diagnóstico (v1.3-20260520-zfs)
-Comprueba en 9 secciones: (1) kernel+initramfs+NVMe+casper, (2) grub.cfg con UUIDs+línea initrd, (3) fstab vs blkid, (4) lsblk particiones, (5) paquetes clave (casper por ficheros en disco, no dpkg; ubiquity; dpkg --audit), (6) initramfs-tools config (MODULES=most, RESUME=none), (7) GRUB EFI instalado (grubx64.efi, módulos), (8) servicios systemd fallidos + SSH (solo si sistema arrancado, no en chroot), **(9) ZFS — solo si hay zpool importado: salud de pools, datasets esperados, propiedades dedup/compresión/fast_dedup, servicios systemd zfs-*, módulo zfs.ko en initramfs, helper nuevo-alumno.sh**. Genera resumen ERRORES/AVISOS al final. **Cuando ERRORES=0, reinicia automáticamente tras cuenta atrás de 30 s.** Útil como primer análisis al pegar un log.
+### 4-Comprobaciones.sh — Diagnóstico (v1.4-20260612-zfs)
+Comprueba en 9 secciones: (1) kernel+initramfs+NVMe+casper, (2) grub.cfg con UUIDs+línea initrd, (3) fstab vs blkid, (4) lsblk particiones, (5) paquetes clave (casper por ficheros en disco, no dpkg; ubiquity; dpkg --audit), (6) initramfs-tools config (MODULES=most, RESUME=none), (7) GRUB EFI instalado (grubx64.efi, módulos), (8) servicios systemd fallidos + SSH (solo si sistema arrancado, no en chroot), **(9) ZFS — solo si hay zpool importado: salud de pools, datasets esperados (`rpool/home` montado en `/home`, `tank/datos` en `/datos`), propiedades dedup/compresión/fast_dedup, servicios systemd zfs-*, módulo zfs.ko en initramfs**. Genera resumen ERRORES/AVISOS al final. **Cuando ERRORES=0, reinicia automáticamente tras cuenta atrás de 30 s.** Útil como primer análisis al pegar un log.
 
 **Falsos positivos conocidos en 4-Comprobaciones.sh** — verificar antes de asumir que el sistema está roto:
 
@@ -274,14 +267,19 @@ operativo en la sección "ZFS — operación" más abajo.
 ```
 rpool                         (ashift=12, autotrim=on, compression=zstd, dedup=on,
                                recordsize=64K, feature@fast_dedup=enabled si ≥ 2.3)
-└── rpool/home                (canmount=off, mountpoint=/home — contenedor)
-    ├── rpool/home/usuario    (canmount=on, mountpoint=/home/usuario, SIN cuota)
-    └── rpool/home/<alumno>   (creado por /usr/local/sbin/nuevo-alumno.sh, SIN cuota)
+└── rpool/home                (canmount=on, mountpoint=/home — dataset ÚNICO, SIN cuotas;
+                               todos los usuarios son directorios normales dentro)
 
 tank                          (ashift=12, autotrim=on, compression=zstd, recordsize=1M)
 └── tank/datos                (canmount=on, mountpoint=/datos, setuid=off,
                                devices=off, permisos 1777)
 ```
+
+> **Simplificación 2026-06-12**: antes `rpool/home` era un contenedor
+> `canmount=off` con un dataset hijo por usuario (`rpool/home/usuario`,
+> `rpool/home/<alumno>` vía helper `nuevo-alumno.sh`). Todo eso se eliminó:
+> un solo dataset, sin cuotas, sin helper. Los equipos instalados antes de
+> esa fecha conservan la estructura antigua.
 
 - `/etc/zfs/zpool.cache` se copia desde el live al sistema instalado para que
   `zfs-import-cache.service` importe los pools sin escanear discos al boot.
@@ -293,18 +291,17 @@ tank                          (ashift=12, autotrim=on, compression=zstd, records
 ### Alta de un usuario nuevo
 
 ```bash
-sudo /usr/local/sbin/nuevo-alumno.sh <usuario> [cuota=200G]
-# Ejemplos:
-sudo nuevo-alumno.sh alvaro
-sudo nuevo-alumno.sh maria 60G   # el 2.º arg se ignora: cuotas desactivadas
+sudo adduser <usuario>
+# Privilegios opcionales a posteriori:
+sudo usermod -aG sudo <usuario>      # administrador
+sudo usermod -aG docker <usuario>    # uso de Docker
 ```
 
-El helper crea `rpool/home/<u>` **sin cuota** (cuotas desactivadas 2026-06-09;
-la línea `zfs set quota` está comentada en el script), hace `useradd` con
-grupos detectados dinámicamente (`sudo` + opcionales `vboxusers/libvirt/docker`),
-copia `/etc/skel`, snapshot `@inicial` y pide contraseña interactiva. El 2.º
-argumento `[cuota]` se sigue aceptando pero no tiene efecto hasta reactivar la
-línea comentada.
+Flujo estándar de Linux: el home es un directorio normal dentro del dataset
+`rpool/home` (hereda compresión y dedup del pool automáticamente). No hay
+datasets por usuario ni cuotas. El antiguo helper
+`/usr/local/sbin/nuevo-alumno.sh` fue eliminado el 2026-06-12 (puede seguir
+presente en equipos instalados antes de esa fecha — no usarlo).
 
 ### Operaciones habituales
 
@@ -318,23 +315,24 @@ zfs list -t snapshot    # snapshots existentes
 # Ratio de deduplicación (clave para decidir si compensa)
 zpool get dedupratio rpool
 
-# Rollback al snapshot @inicial de un usuario
-zfs rollback rpool/home/<u>@inicial
+# Rollback al snapshot @inicial — OJO: afecta a TODO /home (todos los usuarios)
+zfs rollback rpool/home@inicial
 
-# Snapshot diario manual (cron sugerido)
-zfs snapshot rpool/home/<u>@$(date +%Y%m%d)
+# Snapshot manual de todo /home (cron sugerido)
+zfs snapshot rpool/home@$(date +%Y%m%d)
 
-# Borrar snapshots antiguos
-zfs list -H -o name -t snapshot rpool/home/<u> | grep -v '@inicial' | xargs -r -n1 zfs destroy
+# Borrar snapshots antiguos (conserva @inicial)
+zfs list -H -o name -t snapshot rpool/home | grep -v '@inicial' | xargs -r -n1 zfs destroy
 
-# Cuotas DESACTIVADAS por defecto (2026-06-09). Comandos manuales si se quieren usar:
-zfs set quota=80G rpool/home/<u>    # aplicar/cambiar una cuota
-zfs set quota=none rpool/home/<u>   # quitar la cuota (espacio ilimitado)
-zfs get quota -r rpool tank         # ver cuotas existentes (none = sin cuota)
+# Cuotas: NO se usan (dataset único sin cuota). Si algún día hiciera falta
+# limitar por usuario sin datasets, ZFS soporta cuotas de usuario POSIX:
+zfs userspace rpool/home                  # consumo por usuario
+zfs set userquota@<u>=200G rpool/home     # cuota por usuario (opcional)
+zfs set userquota@<u>=none rpool/home     # quitarla
 
 # Backup vía zfs send (incremental, requiere snapshot común)
-zfs snapshot rpool/home/<u>@backup-20260601
-zfs send -i @inicial rpool/home/<u>@backup-20260601 | ssh backup-host "zfs recv tank-backup/<u>"
+zfs snapshot rpool/home@backup-20260601
+zfs send -i @inicial rpool/home@backup-20260601 | ssh backup-host "zfs recv tank-backup/home"
 
 # Scrub manual (programado por zfs-zed mensualmente por defecto)
 zpool scrub rpool
@@ -344,10 +342,10 @@ zpool scrub tank
 ### Diagnóstico
 
 `4-Comprobaciones.sh` sección 9 cubre: salud de pools, datasets esperados
-(`rpool/home`, `rpool/home/usuario`, `tank/datos`), propiedades
-(`compression`, `dedup`, `recordsize`, `dedupratio`, feature `fast_dedup`),
-servicios systemd (`zfs-import-cache`, `zfs-mount`, `zfs-zed`), módulo
-`zfs.ko` en initramfs y presencia del helper `nuevo-alumno.sh`.
+(`rpool/home` montado en `/home`, `tank/datos` montado en `/datos`),
+propiedades (`compression`, `dedup`, `recordsize`, `dedupratio`, feature
+`fast_dedup`), servicios systemd (`zfs-import-cache`, `zfs-mount`,
+`zfs-zed`) y módulo `zfs.ko` en initramfs.
 
 ---
 
@@ -378,7 +376,7 @@ Antes de modificar un script, consulta ese directorio para evitar repetir correc
 
 ### Bugs corregidos (historial para no repetirlos)
 
-- **2026-05-20 — `/home/usuario` queda root:root sin skel tras instalar (CEIABD)**: el pool `rpool` se importa en `1-SetupLiveCD.sh` con `zpool create -R /mnt` (altroot) para que los datasets se monten bajo `/mnt/*` durante el rsync. Esa `altroot` PERSISTE en el pool (es runtime-only, solo se puede cambiar via export+import). Dentro del chroot, cuando `2-SetupSOdesdeLiveCD.sh` hace `zfs create -o canmount=on rpool/home/usuario`, el auto-mount calcula `path = altroot + mountpoint = /mnt + /home/usuario = /mnt/home/usuario` y se lo pasa al syscall `mount`; el kernel resuelve esa ruta relativa al root del proceso (chroot root = host:`/mnt`) → host:`/mnt/mnt/home/usuario`, fuera del árbol → mount falla silenciosamente (no afecta al exit code de `zfs create`). `useradd -m`, `cp -aT /etc/skel` y `chown -R` siguientes caen al **ext4 subyacente**, el snapshot `@inicial` se toma del dataset ZFS vacío y, al rebotar, `zfs-mount.service` monta el dataset encima ocultando el contenido bueno. Síntoma: GDM «Sin Carpeta Personal», `mkdir` denegado en `/home/usuario`, dataset con `used` mínimo y solo `verLog.sh` (que escribe `3-SetupPrimerInicio.sh`). Pista: `zfs list` dentro del chroot muestra los mountpoints con prefijo `/mnt/` (delata la altroot residual). **Fix**: en `2-SetupSOdesdeLiveCD.sh` PASO 11, entre destruir `rpool/home` y recrearlo, `zpool export rpool && zpool import -d /dev/disk/by-id rpool` (sin `-R`) + `zpool set cachefile=`. Tras esto altroot=`-` y el auto-mount funciona. Además: red de seguridad `mountpoint -q /home/usuario || (err; exit 1)`, `useradd` sin `-m`, y `cp skel + chown + chmod 750` incondicionales. Mismo patrón de verificación de mount en el helper `nuevo-alumno.sh`. Versión `2-SetupSOdesdeLiveCD.sh`: `23.3` → `23.6` (intermedias: `23.4` redes de seguridad de mount, `23.5` re-import sin altroot, `23.6` `useradd` sin `-k` — Ubuntu 26.04 rechaza `-k` sin `-m`).
+- **2026-05-20 — `/home/usuario` queda root:root sin skel tras instalar (CEIABD)**: el pool `rpool` se importa en `1-SetupLiveCD.sh` con `zpool create -R /mnt` (altroot) para que los datasets se monten bajo `/mnt/*` durante el rsync. Esa `altroot` PERSISTE en el pool (es runtime-only, solo se puede cambiar via export+import). Dentro del chroot, cuando `2-SetupSOdesdeLiveCD.sh` hace `zfs create -o canmount=on rpool/home/usuario`, el auto-mount calcula `path = altroot + mountpoint = /mnt + /home/usuario = /mnt/home/usuario` y se lo pasa al syscall `mount`; el kernel resuelve esa ruta relativa al root del proceso (chroot root = host:`/mnt`) → host:`/mnt/mnt/home/usuario`, fuera del árbol → mount falla silenciosamente (no afecta al exit code de `zfs create`). `useradd -m`, `cp -aT /etc/skel` y `chown -R` siguientes caen al **ext4 subyacente**, el snapshot `@inicial` se toma del dataset ZFS vacío y, al rebotar, `zfs-mount.service` monta el dataset encima ocultando el contenido bueno. Síntoma: GDM «Sin Carpeta Personal», `mkdir` denegado en `/home/usuario`, dataset con `used` mínimo y solo `verLog.sh` (que escribe `3-SetupPrimerInicio.sh`). Pista: `zfs list` dentro del chroot muestra los mountpoints con prefijo `/mnt/` (delata la altroot residual). **Fix**: en `2-SetupSOdesdeLiveCD.sh` PASO 11, entre destruir `rpool/home` y recrearlo, `zpool export rpool && zpool import -d /dev/disk/by-id rpool` (sin `-R`) + `zpool set cachefile=`. Tras esto altroot=`-` y el auto-mount funciona. Además: red de seguridad `mountpoint -q /home/usuario || (err; exit 1)`, `useradd` sin `-m`, y `cp skel + chown + chmod 750` incondicionales. Mismo patrón de verificación de mount en el helper `nuevo-alumno.sh`. Versión `2-SetupSOdesdeLiveCD.sh`: `23.3` → `23.6` (intermedias: `23.4` redes de seguridad de mount, `23.5` re-import sin altroot, `23.6` `useradd` sin `-k` — Ubuntu 26.04 rechaza `-k` sin `-m`). **Nota 2026-06-12 (v23.7)**: el flujo de reestructuración y su re-import sin altroot fueron eliminados al pasar a dataset único `rpool/home` — dentro del chroot ya no se crean datasets, así que el problema de la altroot no aplica; solo queda la red de seguridad `mountpoint -q /home`.
 - **2026-05-15 — `3-SetupPrimerInicio.sh.log` con cada línea duplicada**: la unidad `3-SetupPrimerInicio.service` tenía `StandardOutput/StandardError=append:$RAIZLOG/$SCRIPT3.log` **además** del `exec > >(tee -a "$FLOG") 2>&1` del propio script → cada línea se grababa dos veces (tee + re-append de systemd al mismo fichero). Pista: la línea previa al `exec` aparece una sola vez. **Fix**: en `2-SetupSOdesdeLiveCD.sh`, la unidad pasa a `StandardOutput=journal`/`StandardError=journal` (único escritor del fichero = el `tee` del script); en `3-SetupPrimerInicio.sh`, `bash "$SCRIPT4" 2>&1 | tee -a "$FLOG"` → `bash "$SCRIPT4"` (el `exec` ya redirige a `$FLOG`).
 - **2026-05-15 — Ansible falla con `The module interpreter '/usr/bin/python3.12' was not found`**: `3-SetupPrimerInicio.sh` pasaba `-e ansible_python_interpreter=/usr/bin/python3.12` codificado a fuego; Ubuntu 26.04 «resolute» no trae python3.12 → `ansible-playbook` aborta (`failed=1, ok=0`, rc=127). **Fix**: resolver el intérprete en runtime con `PYINT="$(command -v python3 || echo /usr/bin/python3)"` y pasar `-e "ansible_python_interpreter=$PYINT"`; inventarios `Ubuntu/ansible/*.ini` cambiados a `auto_silent` (Mint/ no se toca).
 - **2026-05-15 — `apt update` falla con "file:/cdrom resolute Release no tiene un fichero de Publicación"**: el Live CD añade automáticamente una entrada `deb cdrom:` apuntando al ISO montado en `/cdrom`. El rsync de `1-SetupLiveCD.sh` copia esa entrada al sistema instalado, donde `/cdrom` no existe → `apt update` falla en cada ejecución. **Fix**: nuevo paso "Limpiar fuentes APT del Live CD (cdrom:)" en `2-SetupSOdesdeLiveCD.sh` que (a) borra con `sed` líneas `deb cdrom:` de `/etc/apt/sources.list` y `*.list`, y (b) elimina ficheros `.sources` (DEB822) cuyo `URIs:` apunte a `cdrom:`.

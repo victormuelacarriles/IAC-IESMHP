@@ -16,7 +16,7 @@
 # =============================================================================
 set -e
 
-VERSIONSCRIPT="23.0-20260520-Ubuntu-zfs"
+VERSIONSCRIPT="23.1-20260612-Ubuntu-zfs"
 
 # Variables comunes del proyecto (REPO, GITREPO, DISTRO, RAIZSCRIPTS, RAIZLOG,
 # versionDISTRO...). Único punto de definición: comun.sh (mismo directorio).
@@ -357,9 +357,11 @@ if [ "$PERFIL" = "CEIABD" ]; then
         -O recordsize=64K \
         -R /mnt \
         rpool "$ZFS_HOME_BYID"
-    # FASE 1: un único dataset rpool/home canmount=on para que el rsync vuelque
-    # /home (squashfs) al pool. FASE 2 (en 2-SetupSOdesdeLiveCD.sh) refinará
-    # la estructura creando rpool/home/<usuario> al crear el usuario final.
+    # Dataset ÚNICO y DEFINITIVO: rpool/home canmount=on mountpoint=/home.
+    # El rsync vuelca /home (squashfs) al pool y los usuarios viven como
+    # directorios normales dentro (sin datasets por usuario ni cuotas —
+    # simplificación 2026-06-12; antes 2-SetupSOdesdeLiveCD.sh lo
+    # reestructuraba en contenedor + rpool/home/<usuario>).
     zfs create -o canmount=on -o mountpoint=/home rpool/home
     echoverde "  rpool creado, dataset rpool/home montado en /mnt/home"
 

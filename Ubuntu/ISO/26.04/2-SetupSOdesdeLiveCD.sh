@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="23.6-20260520-zfs"
+VERSIONSCRIPT="23.7-20260612-zfs-homeunico"
 
 # Variables comunes del proyecto (REPO, DISTRO, RAIZSCRIPTS, RAIZDISTRO,
 # RAIZLOG, versionDISTRO...). Único punto de definición: comun.sh (mismo
@@ -542,88 +542,29 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Usuarios (root y usuario)"
 # ─────────────────────────────────────────────────────────────────────────────
-# CEIABD: reestructurar rpool/home antes de crear el usuario.
-# En FASE 1 (1-SetupLiveCD.sh) creamos un único dataset rpool/home canmount=on
-# para que el rsync volcara /home (incluido /home/ubuntu del live) al pool.
-# Ahora lo convertimos en la estructura definitiva:
-#   rpool/home                — contenedor (canmount=off, mountpoint=/home)
-#   rpool/home/<usuario>      — dataset por usuario (canmount=on, SIN cuota)
-# Cada usuario tiene su propio dataset y snapshots @inicial / @diario vía
-# /usr/local/sbin/nuevo-alumno.sh. Las cuotas están DESACTIVADAS (2026-06-09):
-# la línea `zfs set quota=...` queda comentada más abajo.
+# CEIABD: /home es el dataset ÚNICO rpool/home (canmount=on, mountpoint=/home),
+# creado en 1-SetupLiveCD.sh y montado en este chroot vía la altroot del live
+# (host:/mnt/home = chroot:/home). Todos los usuarios viven como directorios
+# normales dentro de él: SIN datasets por usuario, SIN cuotas, SIN helper de
+# alta (simplificación 2026-06-12; antes había contenedor canmount=off +
+# rpool/home/<u> + /usr/local/sbin/nuevo-alumno.sh — ver RegistroDeCambios).
+# Alta de usuarios en el equipo instalado: sudo adduser <usuario>.
+# Red de seguridad: si el dataset NO estuviera montado, useradd -m escribiría
+# al ext4 subyacente y el contenido quedaría oculto al arrancar (zfs-mount
+# montaría el dataset encima). Mejor abortar aquí.
 if [ "$PERFIL" = "CEIABD" ] && zpool list rpool >/dev/null 2>&1; then
-    info "Reestructurando rpool/home (contenedor + dataset por usuario)..."
-    if zfs list -H -o name rpool/home >/dev/null 2>&1; then
-        # Destruir el dataset único de FASE 1 con todo su contenido.
-        # /home/ubuntu (del rsync del live) se va con esto — el usuario
-        # 'ubuntu' lo eliminamos completo en el paso siguiente.
-        zfs umount rpool/home 2>/dev/null || true
-        zfs destroy -r rpool/home || err "No se pudo destruir rpool/home (revisar procesos con /home abierto)"
-    fi
-
-    # CRÍTICO: re-importar rpool sin altroot dentro del chroot.
-    # En 1-SetupLiveCD.sh se importó con -R /mnt para que los datasets se
-    # montaran bajo /mnt/* durante el rsync. Esa altroot PERSISTE en el pool
-    # (es runtime-only, no se puede cambiar con 'zpool set', solo via
-    # export+import). Dentro del chroot rompe el auto-mount: zfs calcula
-    # path = altroot + mountpoint = /mnt/home/usuario, que el syscall mount
-    # resuelve desde la raíz del chroot (= host:/mnt) → host:/mnt/mnt/home/usuario,
-    # fuera del árbol → mkdir+mount fallan silenciosamente y todo lo que
-    # escribimos después cae al ext4 subyacente, oculto al rebotar.
-    # Síntoma observado v23.4: 'rpool/home/usuario NO está montado tras zfs
-    # create+mount' (mi propio check defensivo aborta correctamente).
-    info "Re-importando rpool sin altroot para que el auto-mount funcione en chroot..."
-    _ALTROOT_PRE=$(zpool get -H -o value altroot rpool 2>/dev/null)
-    info "  altroot actual: $_ALTROOT_PRE"
-    zpool export rpool 2>&1 || zpool export -f rpool 2>&1 \
-        || { err "No se pudo exportar rpool antes del re-import"; exit 1; }
-    zpool import -d /dev/disk/by-id rpool 2>&1 \
-        || { err "No se pudo re-importar rpool sin altroot"; exit 1; }
-    # Refrescar cachefile con la nueva config (sin altroot).
-    zpool set cachefile=/etc/zfs/zpool.cache rpool
-    ok "  rpool re-importado (altroot=$(zpool get -H -o value altroot rpool))"
-
-    zfs create -o canmount=off -o mountpoint=/home rpool/home
-    ok "rpool/home recreado como contenedor (canmount=off, mountpoint=/home)"
-
-    # Dataset del usuario inicial.
-    # Cuota 200 G: razonable para el usuario de control del IES; los alumnos
-    # se crean con /usr/local/sbin/nuevo-alumno.sh que acepta una cuota
-    # distinta por parámetro.
-    zfs create -o canmount=on rpool/home/usuario
-    # CUOTAS DESACTIVADAS (2026-06-09): /home crece sin límite (solo lo limita el pool).
-    # Para reactivar el límite, descomenta la línea siguiente.
-    # Para quitar una cuota ya aplicada en un equipo existente: zfs set quota=none rpool/home/usuario
-    #zfs set quota=200G rpool/home/usuario
-
-    # Red de seguridad: con altroot eliminado el auto-mount debería ir bien,
-    # pero verificamos por si acaso (mejor abortar que escribir al ext4).
-    zfs mount rpool/home/usuario 2>/dev/null || true
-    if ! mountpoint -q /home/usuario; then
-        err "rpool/home/usuario NO está montado en /home/usuario tras re-import sin altroot — abortando antes de escribir al fs subyacente"
+    if ! mountpoint -q /home; then
+        err "rpool/home NO está montado en /home — abortando antes de escribir al fs subyacente"
         exit 1
     fi
-    ok "Dataset rpool/home/usuario creado y montado en /home/usuario (verificado)"
+    ok "rpool/home montado en /home (dataset único, sin cuotas)"
 fi
 
 if id usuario &>/dev/null; then
     info "Usuario 'usuario' ya existe"
 else
-    if [ "$PERFIL" = "CEIABD" ]; then
-        # /home/usuario es el dataset ZFS recién creado y verificado como
-        # montado (vacío). Sin -m (el dir ya existe como mountpoint ZFS) y
-        # sin -k (Ubuntu 26.04: '-k requiere -m'; además la copia de skel
-        # la hacemos explícita en la siguiente línea para no depender del
-        # comportamiento de useradd con dir existente).
-        useradd -d /home/usuario -s /bin/bash -p '*' usuario
-        cp -aT /etc/skel /home/usuario/.
-        chown -R usuario:usuario /home/usuario
-        chmod 750 /home/usuario
-        ok "Usuario 'usuario' creado con home en dataset ZFS rpool/home/usuario"
-    else
-        useradd -m -s /bin/bash -p '*' usuario
-        ok "Usuario 'usuario' creado"
-    fi
+    useradd -m -s /bin/bash -p '*' usuario
+    ok "Usuario 'usuario' creado"
 fi
 adduser usuario sudo 2>/dev/null || usermod -aG sudo usuario
 ok "Usuario 'usuario' en grupo sudo"
@@ -678,129 +619,9 @@ if [ -f /root/.ssh/authorized_keys ]; then
     ok "authorized_keys copiado a /home/usuario/.ssh/ (.ssh → usuario:usuario 700)"
 fi
 
-# CEIABD: snapshot @inicial del usuario recién creado. Útil como ancla de
-# rollback ("vuelve a como estaba justo tras la instalación") y como muestra
-# del flujo que /usr/local/sbin/nuevo-alumno.sh aplicará a los alumnos.
-if [ "$PERFIL" = "CEIABD" ] && zfs list -H -o name rpool/home/usuario >/dev/null 2>&1; then
-    if zfs list -H -t snapshot rpool/home/usuario@inicial >/dev/null 2>&1; then
-        info "Snapshot rpool/home/usuario@inicial ya existe"
-    else
-        zfs snapshot rpool/home/usuario@inicial \
-            && ok "Snapshot rpool/home/usuario@inicial creado" \
-            || info "No se pudo crear el snapshot inicial (no crítico)"
-    fi
-fi
-
-# ─────────────────────────────────────────────────────────────────────────────
-if [ "$PERFIL" = "CEIABD" ]; then
-paso "Helper /usr/local/sbin/nuevo-alumno.sh (alta de usuarios en CEIABD)"
-# ─────────────────────────────────────────────────────────────────────────────
-# Se instala SOLO en CEIABD porque necesita rpool/home como contenedor ZFS.
-# Lo invoca el admin del IES por SSH:  sudo nuevo-alumno.sh <usuario> [cuota]
-# Pasos: crea dataset rpool/home/<u> → useradd con home en el dataset → copia
-# skel → permisos → (cuota DESACTIVADA, línea comentada) → snapshot @inicial →
-# passwd interactivo. El arg [cuota] se acepta pero se ignora mientras la línea
-# `zfs set quota` siga comentada.
-cat > /usr/local/sbin/nuevo-alumno.sh << 'NUEVOALUMNOEOF'
-#!/bin/bash
-# Alta de un usuario nuevo en el equipo CEIABD (ZFS).
-# Crea su dataset propio dentro de rpool/home con cuota y snapshot inicial.
-#
-# Uso:
-#   sudo nuevo-alumno.sh <usuario> [cuota]
-# Ejemplos:
-#   sudo nuevo-alumno.sh alvaro
-#   sudo nuevo-alumno.sh maria 60G
-set -e
-
-U="${1:?Uso: $0 <usuario> [cuota=200G]}"
-QUOTA="${2:-200G}"
-POOL_HOME="rpool"
-DATASET="${POOL_HOME}/home/${U}"
-HOME_DIR="/home/${U}"
-
-# ── Validaciones ───────────────────────────────────────────────────────────
-if [ "$(id -u)" -ne 0 ]; then
-    echo "ERROR: este script debe ejecutarse como root (sudo)." >&2
-    exit 1
-fi
-if ! zpool list -H -o name "$POOL_HOME" >/dev/null 2>&1; then
-    echo "ERROR: el zpool '$POOL_HOME' no existe en este equipo." >&2
-    echo "       Este helper requiere ZFS (perfil CEIABD)." >&2
-    exit 1
-fi
-if id "$U" >/dev/null 2>&1; then
-    echo "ERROR: el usuario '$U' ya existe en /etc/passwd." >&2
-    exit 1
-fi
-if zfs list -H -o name "$DATASET" >/dev/null 2>&1; then
-    echo "ERROR: el dataset '$DATASET' ya existe." >&2
-    echo "       Borralo con: zfs destroy -r $DATASET   (perderás los datos)" >&2
-    exit 1
-fi
-case "$U" in
-    *[!a-z0-9_-]*|-*|[0-9]*)
-        echo "ERROR: nombre de usuario no válido: '$U'" >&2
-        echo "       Solo se permiten minúsculas, números, guion y _, sin empezar por número/guion." >&2
-        exit 1
-        ;;
-esac
-
-# ── Grupos (2026-06-09): los alumnos NO van en 'sudo' ni 'docker' por ───────
-# defecto. useradd crea un grupo primario propio (= nombre de usuario) y el
-# usuario queda SOLO en ese grupo. Para dar privilegios puntuales a posteriori:
-#   sudo usermod -aG sudo <usuario>      # privilegios de administrador
-#   sudo usermod -aG docker <usuario>    # uso de Docker
-
-# ── Crear dataset + usuario ────────────────────────────────────────────────
-echo "[+] Creando dataset $DATASET ..."
-zfs create -o canmount=on "$DATASET"
-# CUOTAS DESACTIVADAS (2026-06-09): el dataset del alumno crece sin límite.
-# Para reactivar el límite, descomenta la línea siguiente (usa $QUOTA, arg 2 o 200G).
-# Para quitar una cuota ya aplicada: zfs set quota=none "$DATASET"
-#zfs set quota="$QUOTA" "$DATASET"
-
-# CRÍTICO: forzar y verificar que el dataset queda montado en $HOME_DIR antes
-# de escribir nada. Si zfs create no auto-montó (raro en sistema arrancado,
-# pero defensivo), useradd + cp skel + chown irían al fs subyacente y
-# quedarían ocultos al desmontar/remontar el dataset.
-zfs mount "$DATASET" 2>/dev/null || true
-if ! mountpoint -q "$HOME_DIR"; then
-    echo "[ERR] $DATASET no está montado en $HOME_DIR — abortando" >&2
-    exit 1
-fi
-
-echo "[+] Creando usuario $U (solo grupo propio, home: $HOME_DIR) ..."
-# Sin -m (el dir ya existe como mountpoint ZFS) y sin -k (Ubuntu 26.04:
-# '-k requiere -m'; la copia de skel se hace explícita debajo). Sin -G: el
-# usuario queda únicamente en su grupo primario (= nombre de usuario).
-useradd -d "$HOME_DIR" -s /bin/bash "$U"
-
-# Dataset ya está montado vacío. Copia de skel + chown explícitos.
-cp -aT /etc/skel "$HOME_DIR/."
-chown -R "$U:$U" "$HOME_DIR"
-chmod 750 "$HOME_DIR"
-
-# ── Snapshot inicial ───────────────────────────────────────────────────────
-zfs snapshot "${DATASET}@inicial"
-echo "[+] Snapshot ${DATASET}@inicial creado"
-
-# ── Contraseña interactiva ─────────────────────────────────────────────────
-echo "[+] Establece la contraseña para '$U':"
-passwd "$U"
-
-echo
-echo "Usuario '$U' creado:"
-echo "  - home    : $HOME_DIR"
-echo "  - dataset : $DATASET (sin cuota — cuotas desactivadas)"
-echo "  - grupos  : solo grupo propio '$U' (sin sudo ni docker)"
-echo "  - snapshot: ${DATASET}@inicial"
-NUEVOALUMNOEOF
-chmod +x /usr/local/sbin/nuevo-alumno.sh
-ok "Helper /usr/local/sbin/nuevo-alumno.sh instalado"
-info "Uso: sudo nuevo-alumno.sh <usuario> [cuota=200G]"
-
-fi  # end if PERFIL=CEIABD para el helper
+# Helper /usr/local/sbin/nuevo-alumno.sh ELIMINADO (2026-06-12): con el
+# dataset único rpool/home ya no hay que crear datasets por usuario, así que
+# el alta de un usuario nuevo es el flujo estándar: sudo adduser <usuario>.
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Eliminar usuario ubuntu (Live CD) y deshabilitar auto-login GDM"
@@ -816,6 +637,20 @@ if id ubuntu &>/dev/null; then
     ok "Usuario 'ubuntu' del Live CD eliminado"
 else
     info "Usuario 'ubuntu' no presente"
+fi
+
+# CEIABD: snapshot @inicial del dataset único rpool/home. Se toma DESPUÉS de
+# eliminar /home/ubuntu (Live CD) para no arrastrarlo en el snapshot. Ancla de
+# rollback global: zfs rollback rpool/home@inicial devuelve TODO /home (todos
+# los usuarios) al estado post-instalación — usar con cuidado.
+if [ "$PERFIL" = "CEIABD" ] && zfs list -H -o name rpool/home >/dev/null 2>&1; then
+    if zfs list -H -t snapshot rpool/home@inicial >/dev/null 2>&1; then
+        info "Snapshot rpool/home@inicial ya existe"
+    else
+        zfs snapshot rpool/home@inicial \
+            && ok "Snapshot rpool/home@inicial creado" \
+            || info "No se pudo crear el snapshot inicial (no crítico)"
+    fi
 fi
 
 # AccountsService: GDM lee AccountsService con MAYOR PRIORIDAD que /etc/gdm3/custom.conf.

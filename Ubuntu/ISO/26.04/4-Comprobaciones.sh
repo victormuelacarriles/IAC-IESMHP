@@ -5,7 +5,7 @@
 #  Funciona tanto dentro del chroot (llamado desde 2-SetupSOdesdeLiveCD.sh)
 #  como en el sistema ya arrancado (llamado desde 3-SetupPrimerInicio.sh).
 # =============================================================================
-VERSIONSCRIPT="1.3-20260520-zfs"
+VERSIONSCRIPT="1.4-20260612-zfs"
 
 # Variables comunes del proyecto (REPO, DISTRO, RAIZLOG...). Único punto de
 # definición: comun.sh (mismo directorio que este script).
@@ -294,17 +294,17 @@ if command -v zpool >/dev/null 2>&1 && zpool list -H 2>/dev/null | grep -q .; th
         zpool status 2>/dev/null | sed 's/^/    /' | tee -a "$LOGFILE"
     fi
 
-    # Datasets clave esperados en CEIABD
-    for _ds in rpool/home rpool/home/usuario tank/datos; do
+    # Datasets clave esperados en CEIABD (desde 2026-06-12: rpool/home es un
+    # dataset ÚNICO montado en /home — sin datasets por usuario ni cuotas)
+    for _ds in rpool/home tank/datos; do
         if zfs list -H -o name "$_ds" >/dev/null 2>&1; then
             _MP=$(zfs get -H -o value mountpoint "$_ds" 2>/dev/null)
             _MOUNTED=$(zfs get -H -o value mounted "$_ds" 2>/dev/null)
             _OK_MNT="?"
             case "$_MOUNTED:$_MP" in
-                yes:/home/usuario) _OK_MNT="OK" ;;
-                yes:/datos)        _OK_MNT="OK" ;;
-                no:/home)          _OK_MNT="OK"  ;;   # contenedor, canmount=off
-                *)                 _OK_MNT="REVISAR ($_MOUNTED, $_MP)" ;;
+                yes:/home)  _OK_MNT="OK" ;;
+                yes:/datos) _OK_MNT="OK" ;;
+                *)          _OK_MNT="REVISAR ($_MOUNTED, $_MP)" ;;
             esac
             _ok "  $_ds → mountpoint=$_MP mounted=$_MOUNTED  [$_OK_MNT]"
         else
@@ -353,11 +353,11 @@ if command -v zpool >/dev/null 2>&1 && zpool list -H 2>/dev/null | grep -q .; th
         fi
     fi
 
-    # Helper de alta de usuarios
+    # Helper nuevo-alumno.sh ELIMINADO (2026-06-12): con dataset único en /home
+    # el alta de usuarios es el flujo estándar (sudo adduser <u>). Si aparece
+    # en un equipo es resto de una instalación anterior — solo informativo.
     if [ -x /usr/local/sbin/nuevo-alumno.sh ]; then
-        _ok "  Helper /usr/local/sbin/nuevo-alumno.sh instalado"
-    else
-        _avs "  Helper /usr/local/sbin/nuevo-alumno.sh NO instalado"
+        _inf "  Helper nuevo-alumno.sh presente (legacy, instalación pre-2026-06-12)"
     fi
 else
     _sep "9. ZFS"
