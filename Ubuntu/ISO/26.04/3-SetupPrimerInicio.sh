@@ -8,16 +8,15 @@ SCRIPT3=$(basename "$0")
 echo "$SCRIPT3 (vs$VERSIONSCRIPT)"
 #Nos quedamos solo con el nombre del script sin ruta
 
-REPO="IAC-IESMHP"
-DISTRO="Ubuntu"
-versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
-RAIZSCRIPTS="/opt/$REPO"
-RAIZLOG="/var/log/$REPO/$DISTRO"
-RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
-RAIZANSIBLE="$RAIZSCRIPTS/$DISTRO/ansible"
+# Variables comunes del proyecto (REPO, DISTRO, RAIZSCRIPTS, RAIZLOG,
+# RAIZDISTRO, RAIZANSIBLE, versionDISTRO, rutas de sub-scripts...). Único
+# punto de definición: comun.sh (mismo directorio que este script).
+_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$_DIR/comun.sh"
 
-SCRIPT4nombreip="$RAIZDISTRO/utiles/NombreIP.sh"
-SCRIPT5ansible="$RAIZDISTRO/utiles/Auto-Ansible.sh"
+SCRIPT4nombreip="$SCRIPT_NOMBREIP"
+SCRIPT5ansible="$SCRIPT_AUTOANSIBLE"
 
 VERLOGSCRIPT="/home/usuario/verLog.sh"
 

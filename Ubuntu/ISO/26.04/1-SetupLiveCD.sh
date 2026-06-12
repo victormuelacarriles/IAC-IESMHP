@@ -17,18 +17,16 @@
 set -e
 
 VERSIONSCRIPT="23.0-20260520-Ubuntu-zfs"
-REPO="IAC-IESMHP"
-GITREPO="https://github.com/victormuelacarriles/$REPO.git"
 
-# CAMBIO: el repo ya está clonado por perso.sh en /opt/$REPO
-RAIZSCRIPTSLIVE="/opt/$REPO"
-# CAMBIO: Distro Ubuntu en lugar de Mint
-DISTRO="Ubuntu"
-RAIZSCRIPTS="/opt/$REPO"
-RAIZLOG="/var/log/$REPO/$DISTRO"
+# Variables comunes del proyecto (REPO, GITREPO, DISTRO, RAIZSCRIPTS, RAIZLOG,
+# versionDISTRO...). Único punto de definición: comun.sh (mismo directorio).
+_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$_DIR/comun.sh"
 
-SCRIPT2="2-SetupSOdesdeLiveCD.sh"
-versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
+# El repo ya está clonado por 0b-Github.sh en /opt/$REPO (= $RAIZSCRIPTS).
+RAIZSCRIPTSLIVE="$RAIZSCRIPTS"
+SCRIPT2="$(basename "$SCRIPT_CHROOT")"
 
 # ─────────────── Colores ───────────────
 echoverde()    { echo -e "\033[32m$1\033[0m"; }

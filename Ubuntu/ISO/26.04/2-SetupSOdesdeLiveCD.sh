@@ -1,13 +1,15 @@
 #!/bin/bash
 set -e
 VERSIONSCRIPT="23.6-20260520-zfs"
-REPO="IAC-IESMHP"
-DISTRO="Ubuntu"
-versionDISTRO=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
-RAIZSCRIPTS="/opt/$REPO"
-RAIZDISTRO="$RAIZSCRIPTS/$DISTRO/ISO/$versionDISTRO"
-RAIZLOG="/var/log/$REPO/$DISTRO"
-SCRIPT3="3-SetupPrimerInicio.sh"
+
+# Variables comunes del proyecto (REPO, DISTRO, RAIZSCRIPTS, RAIZDISTRO,
+# RAIZLOG, versionDISTRO...). Único punto de definición: comun.sh (mismo
+# directorio; este script corre dentro del chroot con ruta absoluta).
+_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$_DIR/comun.sh"
+
+SCRIPT3="$(basename "$SCRIPT_PRIMERINICIO")"
 
 # ─── Logging propio ───────────────────────────────────────────────────────────
 # Todo stdout/stderr va al terminal (via tee del padre) Y a este log.

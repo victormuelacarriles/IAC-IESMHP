@@ -6,9 +6,13 @@
 #  como en el sistema ya arrancado (llamado desde 3-SetupPrimerInicio.sh).
 # =============================================================================
 VERSIONSCRIPT="1.3-20260520-zfs"
-REPO="IAC-IESMHP"
-DISTRO="Ubuntu"
-RAIZLOG="/var/log/$REPO/$DISTRO"
+
+# Variables comunes del proyecto (REPO, DISTRO, RAIZLOG...). Único punto de
+# definición: comun.sh (mismo directorio que este script).
+_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$_DIR/comun.sh"
+
 mkdir -p "$RAIZLOG"
 LOGFILE="$RAIZLOG/4-Comprobaciones.sh.log"
 

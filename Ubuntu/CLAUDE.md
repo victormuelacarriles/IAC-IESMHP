@@ -68,6 +68,25 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 
 ## Arquitectura y decisiones clave
 
+### comun.sh — Variables centralizadas (única fuente de verdad)
+- **`Ubuntu/ISO/26.04/comun.sh`** centraliza en **un solo sitio** todas las rutas
+  y constantes "mágicas" que antes estaban duplicadas a mano en cada script:
+  `GITHUB_USER`/`REPO`/`GITREPO`/`GITRAW`, `DISTRO`/`versionDISTRO`,
+  `RAIZSCRIPTS` (`/opt/IAC-IESMHP`), `RAIZDISTRO`, `RAIZANSIBLE`, `RAIZLOG`,
+  rutas de los sub-scripts (`SCRIPT_LIVECD`…`SCRIPT_AUTOANSIBLE`), ficheros de
+  datos (`FICHERO_MACS`, `URL_MACS`, `FICHERO_AUTORIZADOS`) y redes/proxy de aula
+  (`RED_IABD`/`RED_SMRD`, `PROXY_IABD`/`PROXY_SMRD`).
+- Carga: cada script lo localiza relativo a `${BASH_SOURCE[0]}` y hace `source`.
+  En `ISO/26.04/` → `source "$_DIR/comun.sh"`; en `ISO/26.04/utiles/` →
+  `source "$_DIR/../comun.sh"`. No se ejecuta (lleva guarda `IAC_COMUN_CARGADO`
+  y no fija `set -e`). **Para mover una ruta, editar solo este fichero.**
+- **Excepción `0b-Github.sh`**: corre en el Live CD antes de clonar el repo, así
+  que conserva un bloque de arranque con solo `GITHUB_USER`+`REPO` (la única
+  duplicación, marcada en el código); tras clonar carga `comun.sh`. Cambiar la
+  URL del repo ⇒ tocar `comun.sh` **y** esas dos líneas de `0b-Github.sh`.
+- Fichero **nuevo** (2026-06-12): requiere commit+push a `main` antes de generar
+  una ISO. Detalle en `Ubuntu/RegistroDeCambios/20260612-Cambios.md`.
+
 ### 0a-CreaISO.sh — Generación de la ISO
 - **Squashfs multicapa (Ubuntu 26.04+)**: la ISO usa capas `minimal.squashfs` / `minimal.standard.squashfs` / `minimal.standard.live.squashfs`. El script detecta la capa `*.live.squashfs` para insertar el autostart de escritorio, que es donde vive el entorno GNOME.
 - **snapd enmascarado**: se enmascaran `snapd.service`, `snapd.socket` y `snapd.seeded.service` vía symlinks a `/dev/null` en el squashfs. Esto reduce el tiempo de arranque del Live CD de ~3 min a ~10 s y bloquea definitivamente `ubuntu-desktop-bootstrap` (el instalador snap de Ubuntu 26.04).

@@ -7,10 +7,17 @@
 # =============================================================================
 set -euo pipefail
 
+# ── BLOQUE DE ARRANQUE (única duplicación inevitable del proyecto) ───────────
+# 0b-Github.sh corre en el Live CD ANTES de clonar el repo, así que todavía no
+# puede hacer `source comun.sh` (aún no existe en disco). Estos dos valores son
+# los ÚNICOS que se repiten fuera de comun.sh y DEBEN COINCIDIR con los de
+# Ubuntu/ISO/26.04/comun.sh. Todo lo demás (SCRIPT_INSTALL, rutas...) se obtiene
+# cargando comun.sh tras clonar (ver más abajo).
+GITHUB_USER="victormuelacarriles"
 REPO="IAC-IESMHP"
-GITREPO="https://github.com/victormuelacarriles/${REPO}.git"
+# ─────────────────────────────────────────────────────────────────────────────
+GITREPO="https://github.com/${GITHUB_USER}/${REPO}.git"
 DESTDIR="/opt/${REPO}"
-SCRIPT_INSTALL="${DESTDIR}/Ubuntu/ISO/26.04/1-SetupLiveCD.sh"
 
 RAIZLOG="/var/log/${REPO}/Ubuntu"
 LOG0B="${RAIZLOG}/0b-Github.sh.log"
@@ -32,7 +39,6 @@ exec > >(tee -a "$LOG0B") 2>&1
 
 log "=== 0b-Github.sh iniciado: $(date) ==="
 log "REPO=$REPO  GITREPO=$GITREPO  DESTDIR=$DESTDIR"
-log "SCRIPT_INSTALL=$SCRIPT_INSTALL"
 log "Kernel: $(uname -r)  CPU: $(nproc) cores  RAM: $(free -h | awk '/^Mem:/{print $2}')"
 
 # ─────────────── Red: esperar DHCP ─────
@@ -83,6 +89,23 @@ else
     log "Clonando ${GITREPO} → ${DESTDIR} ..."
     git clone "${GITREPO}" "${DESTDIR}"
     log "Repo clonado: $(git -C "${DESTDIR}" log -1 --oneline 2>/dev/null || echo 'sin commits')"
+fi
+
+# ─────────────── Cargar variables comunes ──
+# El repo ya está clonado: a partir de aquí comun.sh es la única fuente de
+# verdad. Obtenemos de ahí la ruta del script de instalación (SCRIPT_LIVECD)
+# en vez de codificar a fuego la versión (26.04) y la ruta.
+VERSIONUBUNTU="$(grep VERSION_ID /etc/os-release 2>/dev/null | cut -d'"' -f2 || true)"
+COMUN="${DESTDIR}/Ubuntu/ISO/${VERSIONUBUNTU:-26.04}/comun.sh"
+if [[ -f "$COMUN" ]]; then
+    # shellcheck disable=SC1090
+    source "$COMUN"
+    SCRIPT_INSTALL="$SCRIPT_LIVECD"
+    log "comun.sh cargado — SCRIPT_INSTALL=$SCRIPT_INSTALL"
+else
+    # Fallback si comun.sh no estuviera (repo antiguo): ruta directa.
+    SCRIPT_INSTALL="${DESTDIR}/Ubuntu/ISO/${VERSIONUBUNTU:-26.04}/1-SetupLiveCD.sh"
+    warn "comun.sh no encontrado en $COMUN — usando ruta directa $SCRIPT_INSTALL"
 fi
 
 # ─────────────── Verificar script ──────

@@ -3,11 +3,14 @@
 #vs 11/6/2026
 set -e
 
-REPO="IAC-IESMHP"
-DISTRO="Ubuntu"
-RAIZSCRIPTS="/opt/$REPO"
-RAIZLOGS="/var/log/$REPO/$DISTRO"
+# Variables comunes del proyecto (REPO, DISTRO, RAIZSCRIPTS, RAIZLOG, URL_MACS,
+# redes de aula RED_IABD/RED_SMRD...). Único punto de definición: comun.sh
+# (este script vive en ISO/26.04/utiles/, de ahí el "/.." para subir a 26.04).
+_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$_DIR/comun.sh"
 
+RAIZLOGS="$RAIZLOG"   # alias histórico usado por el resto del script
 mkdir -p "$RAIZLOGS"
 
 # Funciones de colores
@@ -36,7 +39,7 @@ cambiar_ip_estatica() {
 MAC=$(ip link show | awk '/ether/ {print $2}' | head -n 1)
 echo "0-MAC: $MAC"
 #DOING: descargar desde github usuarios autorizados y claves ssh
-URL_MACS="https://raw.githubusercontent.com/victormuelacarriles/IAC-IESMHP/refs/heads/main/macs.csv"
+# URL_MACS lo define comun.sh (https://raw.githubusercontent.com/.../macs.csv).
 # Se descarga a RAIZLOGS (no al clon git de $RAIZSCRIPTS): más abajo este
 # fichero se sobreescribe dejando solo la línea de la MAC, y hacerlo sobre
 # /opt/IAC-IESMHP/macs.csv ensuciaría el repo clonado.
@@ -120,8 +123,8 @@ nmcli c modify "$ncCONEXION" 802-3-ethernet.accept-all-mac-addresses 1
 
 BNECESARIORESTABLECERRED="N"
 #Compramos si la dirección actual está asociada al aula que corrsponde
-if [[ ("$IP_REDAULA" == "10.0.72" && "$AULA" == "IABD") || 
-      ("$IP_REDAULA" == "10.0.32" && "$AULA" == "SMRD") ]]; then
+if [[ ("$IP_REDAULA" == "$RED_IABD" && "$AULA" == "IABD") ||
+      ("$IP_REDAULA" == "$RED_SMRD" && "$AULA" == "SMRD") ]]; then
     IPESTATICANUEVA="$IP_REDAULA.$IPFINALENMACS/24"
     if [ "$IP_METHOD" == "auto" ]; then
         echoverde "La IP actual ($IP_RED) es dinámica, vamos a convertirla en estática (-> $IPESTATICANUEVA)"

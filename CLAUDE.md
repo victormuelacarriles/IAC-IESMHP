@@ -61,6 +61,25 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 
 ## Arquitectura y decisiones clave
 
+### comun.sh — Variables centralizadas (única fuente de verdad)
+- **`Ubuntu/ISO/26.04/comun.sh`** define **una sola vez** todas las rutas y
+  constantes "mágicas" del proyecto: `GITHUB_USER`/`REPO`/`GITREPO`/`GITRAW`,
+  `DISTRO`/`versionDISTRO`, `RAIZSCRIPTS` (`/opt/IAC-IESMHP`), `RAIZDISTRO`,
+  `RAIZANSIBLE`, `RAIZLOG`, rutas absolutas de los sub-scripts
+  (`SCRIPT_LIVECD`…`SCRIPT_AUTOANSIBLE`), ficheros de datos (`FICHERO_MACS`,
+  `URL_MACS`, `FICHERO_AUTORIZADOS`) y redes/proxy de aula
+  (`RED_IABD`/`RED_SMRD`, `PROXY_IABD`/`PROXY_SMRD`).
+- Los scripts **1, 2, 3, 4, NombreIP** hacen `source` de él (localizándolo
+  relativo a `${BASH_SOURCE[0]}`, sin codificar `/opt/...` a fuego) en lugar de
+  redefinir esas variables. **Para cambiar una ruta, editar solo `comun.sh`.**
+- **Excepción**: `0b-Github.sh` corre en el Live CD *antes* de clonar el repo,
+  así que no puede cargar `comun.sh` aún. Mantiene un bloque de arranque mínimo
+  con solo `GITHUB_USER`+`REPO` (única duplicación inevitable, marcada en el
+  código) y tras clonar carga `comun.sh`. Si se cambia la URL/nombre del repo,
+  actualizar también esas dos líneas de `0b-Github.sh`.
+- `comun.sh` es un fichero **nuevo**: hay que hacer commit+push a `main` antes de
+  arrancar una ISO (0b lo clona desde GitHub). Ver `Ubuntu/RegistroDeCambios/20260612-Cambios.md`.
+
 ### 0a-CreaISO.sh — Generación de la ISO
 - **Squashfs multicapa (Ubuntu 26.04+)**: la ISO usa capas `minimal.squashfs` / `minimal.standard.squashfs` / `minimal.standard.live.squashfs`. El script detecta la capa `*.live.squashfs` para insertar el autostart de escritorio, que es donde vive el entorno GNOME.
 - **snapd enmascarado**: se enmascaran `snapd.service`, `snapd.socket` y `snapd.seeded.service` vía symlinks a `/dev/null` en el squashfs. Esto reduce el tiempo de arranque del Live CD de ~3 min a ~10 s y bloquea definitivamente `ubuntu-desktop-bootstrap` (el instalador snap de Ubuntu 26.04).
