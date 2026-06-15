@@ -447,6 +447,55 @@
   tags: [preparaad, ad]
 
 # ---------------------------------------------------------------------------
+# 8b. pam_sss / nss 'sss' — red de seguridad para RE-UNIONES
+# ---------------------------------------------------------------------------
+# En una instalación NUEVA el postinst de libpam-sss enciende el perfil 'sss'
+# de pam-auth-update al instalar el paquete (pam_sss entra en /etc/pam.d/
+# common-*) y realmd repone 'sss' en nsswitch al unir → el login de dominio
+# funciona a la primera. PERO 4-SacaDelDominio.sh (paso 6) los RETIRA al salir
+# (`pam-auth-update --disable sss` + quita 'sss' de nsswitch) para que pam_sss
+# no quede apuntando a un sssd muerto (greeter de GDM / handover RDP en negro).
+# Al RE-UNIR, los paquetes YA están instalados → su postinst NO se re-ejecuta y
+# `realm join` NO vuelve a tocar pam-auth-update → pam_sss se queda FUERA del
+# stack → el equipo aparece UNIDO pero NINGÚN usuario del dominio puede hacer
+# login: el greeter pinta (el handover RDP llega a la ventana de usuarios) pero
+# la fase auth/account de PAM no consulta a SSSD. Este bloque lo repone — es el
+# INVERSO del paso 6 del leave. Idempotente: solo actúa si falta. Solo con el
+# equipo ya unido (en instalación nueva pam_sss ya está → no-op).
+- name: Comprobar si pam_sss está en el stack PAM (equipo unido)
+  ansible.builtin.command: grep -q pam_sss /etc/pam.d/common-auth
+  register: preparaad_pam_sss
+  changed_when: false
+  failed_when: false
+  when: preparaad_unido | bool
+  tags: [preparaad, ad]
+
+- name: Re-activar pam_sss en el stack PAM (pam-auth-update --enable sss)
+  ansible.builtin.command: pam-auth-update --enable sss
+  when:
+    - preparaad_unido | bool
+    - preparaad_pam_sss.rc is defined
+    - preparaad_pam_sss.rc != 0
+  tags: [preparaad, ad]
+
+# realm join suele reponer 'sss' en nsswitch, pero 4-SacaDelDominio.sh lo quita
+# y no hay garantía de que realmd lo vuelva a poner en una re-unión → sin 'sss'
+# en passwd/group, `getent passwd <usuario_dominio>` falla y el login también.
+# lineinfile con backrefs: si el lookahead (?!.*\bsss\b) ya no casa (sss
+# presente) NO toca la línea → idempotente, sin duplicar 'sss'.
+- name: Reponer 'sss' en passwd/group de nsswitch.conf (equipo unido)
+  ansible.builtin.lineinfile:
+    path: /etc/nsswitch.conf
+    regexp: '^({{ item }}:\s+(?!.*\bsss\b).*\S)\s*$'
+    line: '\1 sss'
+    backrefs: true
+  loop:
+    - passwd
+    - group
+  when: preparaad_unido | bool
+  tags: [preparaad, ad]
+
+# ---------------------------------------------------------------------------
 # 9. Resumen del estado (sale en el log del play / 3-SetupPrimerInicio)
 # ---------------------------------------------------------------------------
 - name: Resumen preparaAD

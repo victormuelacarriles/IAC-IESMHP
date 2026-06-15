@@ -14,6 +14,9 @@
 #      configuración local (sssd.conf, keytab). Verifica que quedó fuera.
 #   5. Limpia el snippet SSSD huérfano (/etc/sssd/conf.d/10-iac-ad.conf): sin
 #      dominio, sssd no debe arrancar con él (quedaría como unidad fallida).
+#   5b. Vacía la caché de SSSD (/var/lib/sss/{db,mc}) que realm leave NO borra,
+#      para que una RE-UNIÓN posterior no arranque con datos del enrolamiento
+#      viejo (login de dominio inestable).
 #   6. Revierte lo que mete *realmd* al unir y NO quita al salir: pam_sss en
 #      /etc/pam.d/common-* y el módulo 'sss' en las bases passwd/group de
 #      nsswitch. Si se dejan, pam_sss apunta a un sssd ya inexistente →
@@ -96,6 +99,20 @@ SNIPPET="/etc/sssd/conf.d/10-iac-ad.conf"
 if [[ -f "$SNIPPET" ]]; then
     rm -f "$SNIPPET"
     echo "[OK] Eliminado snippet SSSD huérfano: $SNIPPET"
+fi
+
+# --- 5b. Caché de SSSD del enrolamiento deshecho ----------------------------
+# realm leave deshace sssd.conf y el keytab, pero NO vacía la caché de SSSD
+# (/var/lib/sss/db = base ldb por dominio; /var/lib/sss/mc = caché en memoria
+# de NSS). Si se deja, una RE-UNIÓN posterior (3-UneAlDominio.sh) arrancaría
+# sssd con datos del enrolamiento VIEJO (la cuenta de equipo se borró y se
+# recreará con otra contraseña/keytab) → resolución/login de dominio inestables.
+# Vaciarla deja la próxima unión limpia. Tras realm leave sssd ya suele estar
+# parado; el stop es por si acaso (no hay config con la que arrancarlo aquí).
+if [[ -d /var/lib/sss ]]; then
+    systemctl stop sssd 2>/dev/null || true
+    rm -f /var/lib/sss/db/* /var/lib/sss/mc/* 2>/dev/null || true
+    echo "[OK] Caché de SSSD vaciada (/var/lib/sss/{db,mc})."
 fi
 
 # --- 6. Revertir pam_sss y nss 'sss' (realmd los deja al unir y NO al salir) -
