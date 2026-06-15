@@ -131,11 +131,22 @@
             state: restarted
           when: preparaad_chrony_conf is changed
 
-        # Ajuste inmediato: sin esto chrony corrige despacio (slew) y la unión
-        # que viene a continuación podría pillar el reloj aún desfasado.
-        # makestep da el salto de una vez (best-effort; no falla el play).
-        - name: Forzar el ajuste inmediato del reloj (chrony makestep)
-          ansible.builtin.command: chronyc makestep
+        # Ajuste inmediato + ESPERA. Tras el restart chrony AÚN no tiene muestras
+        # del NTP (el iburst tarda unos segundos): un `makestep` lanzado al
+        # instante es un no-op y la unión que viene a continuación pillaría el
+        # reloj aún desfasado (causa del "join a medias" del 2026-06-15). Por eso
+        # se ARMA el salto para las próximas muestras (makestep <umbral> <nº>, no
+        # slew) y se ESPERA a que sincronice de verdad antes de seguir.
+        - name: Armar el salto del reloj para las próximas muestras (chrony)
+          ansible.builtin.command: chronyc makestep 0.1 3
+          changed_when: false
+          failed_when: false
+
+        # waitsync <intentos> <corrección máx> <skew> <intervalo>: bloquea hasta
+        # que el reloj quede dentro de 0.05 s o agote ~30 s (30×1 s). best-effort:
+        # si expira no falla el play; el resumen final dirá si quedó sincronizado.
+        - name: Esperar a que chrony sincronice el reloj (waitsync, máx ~30 s)
+          ansible.builtin.command: chronyc waitsync 30 0.05 0 1
           changed_when: false
           failed_when: false
 
@@ -171,6 +182,20 @@
             name: systemd-timesyncd.service
             state: restarted
           when: preparaad_ntp_conf is changed
+
+        # Esperar a la sincronización igual que en chrony: timesyncd da el salto
+        # del reloj al primer contacto, pero la corrección es asíncrona y la
+        # unión vendría a continuación. Se sondea NTPSynchronized hasta 'yes' o
+        # ~30 s (10×3 s). Sin `when`: en re-pases (conf sin cambios) confirma que
+        # el reloj ya está bien sin reiniciar el servicio. best-effort.
+        - name: Esperar a que systemd-timesyncd sincronice el reloj (máx ~30 s)
+          ansible.builtin.command: timedatectl show -p NTPSynchronized --value
+          register: preparaad_ts_wait
+          until: preparaad_ts_wait.stdout == 'yes'
+          retries: 10
+          delay: 3
+          changed_when: false
+          failed_when: false
 
     # --- ninguno conocido -----------------------------------------------
     - name: Avisar si no hay cliente NTP conocido (ni chrony ni timesyncd)
@@ -415,5 +440,5 @@
       - "Dominio visible por DNS: {{ 'SÍ' if (preparaad_discover.rc | default(-1)) == 0 else ('no comprobado' if preparaad_discover is skipped or preparaad_dominio == '' else ('NO — ni con split-DNS hacia ' + preparaad_dominio_dnss + ' (¿se llega a esas IPs?)' if preparaad_dns_dropin is defined and preparaad_dns_dropin is not skipped else 'NO — el DNS del equipo no resuelve el dominio (la unión fallará)')) }}"
       - "Split-DNS hacia los DC: {{ 'no comprobado (sin dominio)' if preparaad_dominio == '' else ('ACTIVO → ' + preparaad_dominio_dnss if preparaad_dns_dropin is defined and preparaad_dns_dropin is not skipped else 'no aplicado en este pase (el dominio ya resuelve — puede venir de un drop-in anterior)') }}"
       - "nsswitch hosts (.local/mDNS): {{ 'AJUSTADO en este pase (dns antepuesto a mdns4_minimal)' if (preparaad_nsswitch is defined and preparaad_nsswitch is changed) else ('AVISO: mdns4_minimal sigue ANTES de dns (línea no estándar — ajustar a mano: ping a *.local fallará)' if (preparaad_nsswitch_linea.stdout | default('')) is search('mdns4_minimal.* dns') else 'OK') }}"
-      - "Reloj sincronizado por NTP: {{ preparaad_ntpsync.stdout | default('?') }}"
+      - "Reloj sincronizado por NTP: {{ 'SÍ' if (preparaad_ntpsync.stdout | default('')) == 'yes' else ('NO — Kerberos fallará por desfase >5 min con el DC; revisa NTP/conectividad' + ((' (NTP=' + preparaad_ntp + ')') if preparaad_ntp != '' else ' (preparaad_ntp VACÍO — fíjalo en entornoAD.yml)')) }}"
   tags: [preparaad, ad]

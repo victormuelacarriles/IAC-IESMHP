@@ -64,6 +64,36 @@ if ! realm discover "$DOMINIO" >/dev/null 2>&1; then
 fi
 echo "[OK] Dominio visible por DNS."
 
+# --- 3b. Reloj sincronizado (Kerberos exige <5 min de desfase con el DC) ------
+# El rol ya apuntó el cliente NTP (chrony/timesyncd) al DC y esperó a que
+# sincronizara, pero esto es una RED DE SEGURIDAD: si el reloj sigue desfasado,
+# `realm join` crea la cuenta de equipo (fase LDAP) pero falla al finalizar
+# (keytab/auth como máquina), dejando un objeto HUÉRFANO en AD y un mensaje
+# confuso ("posible fallo de sincronización"). Mejor abortar ANTES, sin pedir
+# credenciales ni ensuciar el dominio.
+clock_ok() { [[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" == "yes" ]]; }
+if ! clock_ok; then
+    echo "[AVISO] El reloj NO está sincronizado por NTP. Forzando ajuste${NTP:+ (NTP=$NTP)}..."
+    if command -v chronyc >/dev/null; then
+        chronyc makestep 0.1 3      >/dev/null 2>&1 || true
+        chronyc waitsync 30 0.05 0 1 >/dev/null 2>&1 || true
+    else
+        systemctl restart systemd-timesyncd 2>/dev/null || true
+        for _ in $(seq 1 10); do clock_ok && break; sleep 3; done
+    fi
+fi
+if ! clock_ok; then
+    echo "[ERR] El reloj sigue SIN sincronizar (timedatectl: NTPSynchronized=no)."
+    echo "      Kerberos exige <5 min de desfase con el DC; 'realm join' fallaría"
+    echo "      tras crear la cuenta de equipo (objeto huérfano en la OU)."
+    echo "      Revisa NTP/conectividad con el DC${NTP:+ ($NTP)}:"
+    echo "        timedatectl status"
+    echo "        chronyc tracking        # (o: systemctl status systemd-timesyncd)"
+    echo "        chronyc sources -v      # ¿se alcanza el NTP del dominio?"
+    exit 1
+fi
+echo "[OK] Reloj sincronizado por NTP."
+
 # Contraseña en blanco = la cuenta delegada no está disponible → se ofrece
 # unir con OTRO usuario del dominio con permisos de unión (p. ej. un admin).
 # OJO: la cuenta de equipo se crea igualmente en $OU (debe existir).

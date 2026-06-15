@@ -26,10 +26,15 @@ credenciales y se lanza bajo demanda (sección 4).
 2. **`pam_mkhomedir`** (`pam-auth-update --enable mkhomedir`): en Ubuntu no
    viene activo y, sin él, los usuarios del dominio entrarían **sin carpeta
    personal**. Con esto el home se crea solo en el primer login.
-3. **Reloj**: Kerberos exige menos de **5 minutos** de desfase con el
-   controlador de dominio. La variable opcional `preparaad_ntp` apunta
-   `systemd-timesyncd` al DC; el resumen del rol siempre informa de si hay
-   sincronización NTP.
+3. **Reloj** (requisito **duro**, no opcional): Kerberos exige menos de
+   **5 minutos** de desfase con el controlador de dominio. `preparaad_ntp`
+   ([`entornoAD.yml`](entornoAD.yml)) apunta el cliente NTP del equipo al DC —
+   el rol **detecta cuál hay** (chrony en Mint/Debian, `systemd-timesyncd` en
+   Ubuntu), lo configura y **espera a que sincronice** antes de seguir
+   (`chronyc waitsync` / sondeo de `timedatectl`). Si `preparaad_ntp` queda
+   vacío o el reloj no sincroniza, la unión hace un *"join a medias"* (crea la
+   cuenta de equipo pero la autenticación falla — ver sección 7). El resumen del
+   rol informa siempre de si hay sincronización NTP.
 4. **Hostname**: aviso si supera **15 caracteres** (límite NetBIOS de la
    cuenta de equipo en AD). Los `IABD-NN`/`SMRD-NN` van sobrados.
 5. **`/etc/krb5.conf`** con el realm por defecto (`IESMHP.LOCAL`) y
@@ -254,8 +259,62 @@ el rol y todos los scripts de `utilesAD/`). Queda:
 3. **Verificar la conectividad de las aulas con los DC** (`10.0.1.48` /
    `10.0.1.54`): la resolución DNS la auto-arregla el rol (sección 5), pero
    tiene que haber ruta hasta esas IPs.
-4. Opcional: `preparaad_ntp` apuntando al DC.
+4. **`preparaad_ntp` apuntando al DC** (NO opcional): sin NTP alcanzable el
+   reloj no sincroniza y la unión hace un *"join a medias"* (sección 7). En
+   producción ha de apuntar a un DC que reparta NTP y sea **alcanzable desde el
+   aula** (el pool de internet de chrony NO llega desde la red del centro).
 
 Tras la primera unión real, revisar `ad_gpo_access_control` (el rol lo deja
 en `permissive` para evitar el bloqueo típico de logins cuando las GPO no
 contemplan Linux; endurecer a `enforcing` cuando estén revisadas).
+
+---
+
+## 7. Problema típico: reloj desfasado → *"join a medias"*
+
+**Síntoma**: `realm join` (o `3-UneAlDominio.sh`) **falla** con un mensaje sobre
+*sincronización de reloj* / *clock skew*, pero al mirar `realm list` el equipo
+**aparece unido**… y, sin embargo, **no se puede autenticar** ningún usuario del
+dominio.
+
+**Causa**: Kerberos exige < 5 min de desfase con el DC. `realm join` se hace en
+dos fases: (1) por LDAP crea la cuenta de equipo en la OU — esto va **aunque el
+reloj esté mal**; (2) se autentica como esa cuenta de máquina (Kerberos) para
+generar el keytab — esto **falla por el desfase**. Resultado: cuenta de equipo
+creada (parece unido) pero unión inservible, y un **objeto huérfano** en la OU.
+
+**Por qué pasaba**: en aulas sin salida a internet el pool NTP por defecto
+(chrony) **no se alcanza**, así que el reloj nunca sincronizaba. Había que
+apuntar el NTP al **DC** (que sí reparte hora y es alcanzable). El rol ya lo
+hace y **espera** a la sincronización, pero conviene saber diagnosticarlo.
+
+**Comprobar el reloj**:
+
+```bash
+timedatectl status            # "System clock synchronized: yes" ← lo que hace falta
+chronyc tracking              # (Mint/Debian) offset actual respecto al NTP
+chronyc sources -v            # ¿se alcanza el NTP del dominio? (línea con '*')
+systemctl status systemd-timesyncd   # (Ubuntu) alternativa a chrony
+```
+
+**Forzar la sincronización a mano** (si hiciera falta):
+
+```bash
+# chrony (Mint/Debian):
+sudo chronyc makestep 0.1 3 && sudo chronyc waitsync 30 0.05 0 1
+# systemd-timesyncd (Ubuntu):
+sudo systemctl restart systemd-timesyncd && sleep 5 && timedatectl show -p NTPSynchronized --value
+```
+
+**Limpiar el objeto huérfano** en AD antes de reintentar (si la unión quedó a
+medias):
+
+```bash
+sudo adcli delete-computer --domain=iesmhp.local --login-user=svc-union-linux NOMBREEQUIPO
+# y reintentar:
+sudo /opt/IAC-IESMHP/Ubuntu/ansible/roles/preparaAD/utilesAD/3-UneAlDominio.sh
+```
+
+`3-UneAlDominio.sh` incorpora una **guarda de reloj**: si tras forzar el ajuste
+sigue sin sincronizar, **aborta antes de pedir la contraseña** (no crea el
+objeto huérfano) e indica qué revisar (NTP/conectividad al DC).

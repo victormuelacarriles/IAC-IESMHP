@@ -24,15 +24,21 @@ Cumple el TODO `predominio` de `roles.yaml`. Sigue la doc oficial de Ubuntu:
    ya en `/etc/pam.d/common-session`.
 3. **Reloj**: Kerberos exige desfase < 5 min con el DC. Si `preparaad_ntp` se
    define (normalmente el propio DC), el rol **detecta el cliente NTP** del
-   equipo y configura ESE, con prioridad a chrony:
+   equipo, lo apunta al DC y **espera a que sincronice ANTES de continuar** (sin
+   la espera, la unión posterior pillaba el reloj aún desfasado → *"join a
+   medias"*, ver Estado/Notas). Prioridad a chrony:
    - **chrony** (Mint/Debian; no traen timesyncd): añade `server <ntp> iburst
      prefer trust` a `chrony.conf` (bloque marcado, idempotente), reinicia el
-     servicio y fuerza `chronyc makestep` (ajuste inmediato, para que la unión
-     posterior no pille el reloj aún desfasado).
+     servicio, **arma el salto** (`chronyc makestep 0.1 3` — step, no slew, en
+     las próximas muestras) y **espera** (`chronyc waitsync 30 0.05 0 1`, máx
+     ~30 s). OJO: un `chronyc makestep` lanzado al instante tras el restart es
+     un **no-op** (chrony aún no tiene muestras del NTP); de ahí el armar+esperar.
    - **systemd-timesyncd** (Ubuntu Desktop por defecto): escribe
-     `/etc/systemd/timesyncd.conf.d/50-iac-ad.conf` y lo reinicia.
+     `/etc/systemd/timesyncd.conf.d/50-iac-ad.conf`, lo reinicia y **sondea**
+     `timedatectl … NTPSynchronized` hasta `yes` o ~30 s.
    - Si no hay ninguno de los dos, avisa (`debug`) y no toca el reloj.
-   Siempre se lee `timedatectl … NTPSynchronized` para el resumen.
+   El resumen final muestra SÍ/NO con pista accionable (NTP/conectividad al DC)
+   leyendo `timedatectl … NTPSynchronized`.
 4. **Hostname**: aviso si supera 15 caracteres (límite NetBIOS de la cuenta
    de equipo en AD). Los `IABD-NN`/`SMRD-NN` van sobrados.
 5. **`/etc/krb5.conf`** (solo si se conoce el dominio): realm por defecto en
@@ -117,7 +123,7 @@ Todas se pueden pisar puntualmente con `-e` (extra-vars > include_vars).
 |--------|------------------|----------|
 | `1-CreaUsuarioUnionAD.ps1` | Controlador de dominio (admin del dominio) | OU `ComputersLinux` (si falta) + cuenta `svc-union-linux` (si falta; resetea contraseña si existe) + delegación mínima sobre la OU para **unir Y sacar** equipos (crear equipos, **borrar equipos**, reset password, validated writes dNSHostName/SPN, property set Account Restrictions). El borrado (`DeleteChild` de la clase equipo) queda **acotado a esta OU**. Idempotente: comprueba ACE a ACE. Lee OU/usuario de `entornoAD.yml`; el dominio lo autodetecta con `Get-ADDomain`. Solo pregunta la contraseña. **Sin tildes a propósito** (PS 5.1 lee UTF-8 sin BOM como ANSI) |
 | `2-CreaVault.sh` | Equipo del profesor | Crea `Ubuntu/ansible/vault/preparaAD-vault.yml` (AES256, committeable) con las credenciales de unión. Rechaza contraseñas con comilla simple (limitación del rol) |
-| `3-UneAlDominio.sh` | El equipo a unir (root) | Rol preparaAD (prerequisitos) → si no unido: `realm discover` + pregunta la contraseña de `svc-union-linux` (**en blanco** = pide OTRO usuario del dominio con permisos de unión y su contraseña) + `realm join` a la OU → verifica → re-pase del rol (despliega el snippet SSSD) |
+| `3-UneAlDominio.sh` | El equipo a unir (root) | Rol preparaAD (prerequisitos) → si no unido: `realm discover` + **guarda de reloj** (verifica `NTPSynchronized`; si no, fuerza `chronyc makestep`+`waitsync` / reinicia timesyncd y, si sigue desfasado, **aborta antes de pedir credenciales** para no dejar un objeto de equipo huérfano en AD) + pregunta la contraseña de `svc-union-linux` (**en blanco** = pide OTRO usuario del dominio con permisos de unión y su contraseña) + `realm join` a la OU → verifica → re-pase del rol (despliega el snippet SSSD) |
 | `4-SacaDelDominio.sh` | El equipo a sacar (root) | **Inverso de 3**. Comprueba si está unido (si no, termina) → pide confirmación → pregunta la contraseña de `svc-union-linux` (**en blanco** = OTRO usuario con permisos de borrado) + `realm leave -U` (borra la cuenta de equipo en AD y deshace la config local) → verifica → elimina el snippet SSSD huérfano. Deja krb5/split-DNS/nsswitch intactos (facilitan reunir) |
 
 ## Cómo unir el equipo (cuando se decida)
@@ -206,6 +212,15 @@ Verificar cada una por separado: `resolvectl query iesmhp.local` (resolved) y
   documentados 2026-05-17 son de `enabled:`/`daemon_reload:` — no se usan).
 - **Limitación**: `preparaad_password_union` no debe contener comillas simples
   (se interpola en una orden shell; la tarea va con `no_log`).
+- **Reloj = requisito DURO, no opcional**: si `preparaad_ntp` está vacío o el
+  reloj no sincroniza, `realm join` hace un **"join a medias"**: crea la cuenta
+  de equipo por LDAP pero falla la finalización Kerberos (keytab/auth de
+  máquina) → el equipo **aparece unido** pero la **autenticación falla** y queda
+  un objeto huérfano en la OU. Síntoma del mensaje "posible fallo de
+  sincronización de reloj". Por eso el rol ahora **espera** a la sincronización
+  (chrony `waitsync` / sondeo de timesyncd) y `3-UneAlDominio.sh` aborta si el
+  reloj no está OK. Limpiar un objeto huérfano: `adcli delete-computer
+  --domain=DOMINIO --login-user=svc-union-linux HOSTNAME`.
 - **Salir del dominio**: `utilesAD/4-SacaDelDominio.sh` (borra la cuenta de
   equipo de la OU con `realm leave -U`, deshace la config local y elimina el
   snippet `conf.d/10-iac-ad.conf` huérfano). A mano: `realm leave` deshace solo

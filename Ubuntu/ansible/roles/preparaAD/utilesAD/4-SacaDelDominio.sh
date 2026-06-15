@@ -19,7 +19,8 @@
 # son inofensivos y facilitan una reunión posterior con 3-UneAlDominio.sh.
 # ===========================================================================
 #  Util: para sacar un equipo del dominio AD (rol preparaAD de IAC-IESMHP).
-#  adcli delete-computer --domain=mhpies.local --login-user=svc-union-linux [hostname]
+#  Limpieza manual de un objeto huérfano (join a medias por reloj desfasado):
+#  adcli delete-computer --domain=<dominio> --login-user=<usuario_union> [hostname]
 set -euo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "[ERR] Ejecutar como root (sudo $0)"; exit 1; }
