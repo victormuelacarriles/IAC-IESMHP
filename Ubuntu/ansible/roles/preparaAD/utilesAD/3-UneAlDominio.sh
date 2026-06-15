@@ -26,8 +26,12 @@ set -euo pipefail
 # DEBEN COINCIDIR con defaults/main.yml del rol (preparaad_*). Se pueden
 # sobreescribir por entorno:  DOMINIO=otro.local ./3-UneAlDominio.sh
 USUARIO_UNION="${USUARIO_UNION:-svc-union-linux}"
-DOMINIO="${DOMINIO:-iesmhp.local}"
-OU="${OU:-OU=ComputersLinux,DC=iesmhp,DC=local}"
+#DOMINIO="${DOMINIO:-iesmhp.local}"
+#OU="${OU:-OU=ComputersLinux,DC=iesmhp,DC=local}"
+DOMINIO="${DOMINIO:-mhpies.local}"
+OU="${OU:-OU=ComputersLinux,DC=mhpies,DC=local}"
+
+
 
 [[ $EUID -eq 0 ]] || { echo "[ERR] Ejecutar como root (sudo $0)"; exit 1; }
 
