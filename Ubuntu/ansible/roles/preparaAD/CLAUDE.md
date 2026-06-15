@@ -23,8 +23,15 @@ Cumple el TODO `predominio` de `roles.yaml`. Sigue la doc oficial de Ubuntu:
    diferencia de RHEL). Idempotente: solo corre si `pam_mkhomedir.so` no está
    ya en `/etc/pam.d/common-session`.
 3. **Reloj**: Kerberos exige desfase < 5 min con el DC. Si `preparaad_ntp` se
-   define (normalmente el propio DC), se escribe
-   `/etc/systemd/timesyncd.conf.d/50-iac-ad.conf` y se reinicia timesyncd.
+   define (normalmente el propio DC), el rol **detecta el cliente NTP** del
+   equipo y configura ESE, con prioridad a chrony:
+   - **chrony** (Mint/Debian; no traen timesyncd): añade `server <ntp> iburst
+     prefer trust` a `chrony.conf` (bloque marcado, idempotente), reinicia el
+     servicio y fuerza `chronyc makestep` (ajuste inmediato, para que la unión
+     posterior no pille el reloj aún desfasado).
+   - **systemd-timesyncd** (Ubuntu Desktop por defecto): escribe
+     `/etc/systemd/timesyncd.conf.d/50-iac-ad.conf` y lo reinicia.
+   - Si no hay ninguno de los dos, avisa (`debug`) y no toca el reloj.
    Siempre se lee `timedatectl … NTPSynchronized` para el resumen.
 4. **Hostname**: aviso si supera 15 caracteres (límite NetBIOS de la cuenta
    de equipo en AD). Los `IABD-NN`/`SMRD-NN` van sobrados.
@@ -90,7 +97,7 @@ Conmutar **producción ⇄ pruebas** = editar SOLO este fichero.
 | `preparaad_nombre_ou` | `ComputersLinux` | Nombre (hoja) de la OU de las cuentas de equipo. La crea y delega `utilesAD/1-CreaUsuarioUnionAD.ps1` con este nombre |
 | `preparaad_ou` | *(derivada)* `OU={{ nombre_ou }},DC=...` | OU completa (DN), **calculada** a partir de `preparaad_dominio` + `preparaad_nombre_ou`. No editar: cambia sola con el dominio |
 | `preparaad_usuario_union` | `svc-union-linux` | Cuenta delegada de unión (la crea `utilesAD/1-CreaUsuarioUnionAD.ps1`) |
-| `preparaad_ntp` | `""` | NTP del dominio (normalmente el DC). Vacío = default de Ubuntu |
+| `preparaad_ntp` | prod `10.0.1.48` / test `10.0.72.118` | NTP del dominio (normalmente el DC), o varios separados por comas. El rol detecta el cliente NTP (chrony en Mint/Debian, systemd-timesyncd en Ubuntu) y lo apunta aquí + `chronyc makestep`. Vacío = no se toca el reloj |
 
 Todas se pueden pisar puntualmente con `-e` (extra-vars > include_vars).
 

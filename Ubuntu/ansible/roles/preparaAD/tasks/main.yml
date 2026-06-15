@@ -80,37 +80,108 @@
 # ---------------------------------------------------------------------------
 # 3. Reloj (Kerberos) y hostname (NetBIOS)
 # ---------------------------------------------------------------------------
-- name: Apuntar systemd-timesyncd al NTP del dominio (solo si preparaad_ntp)
+# Kerberos exige desfase < 5 min con el DC. Se apunta el cliente NTP del equipo
+# al NTP del dominio (normalmente el propio DC). El cliente NTP varía según la
+# base: Ubuntu Desktop trae systemd-timesyncd; Mint/Debian con chrony usan
+# chrony (y NO traen timesyncd). El rol detecta cuál hay y configura ESE, con
+# PRIORIDAD a chrony (si está instalado suele enmascarar timesyncd).
+- name: Configurar el NTP del dominio (chrony o systemd-timesyncd)
   when: preparaad_ntp != ''
   tags: [preparaad, ad]
   block:
-    - name: Crear el directorio de configuración de systemd-timesyncd
-      ansible.builtin.file:
-        path: /etc/systemd/timesyncd.conf.d
-        state: directory
-        mode: "0755"
+    - name: Listar los unit files de systemd (para detectar el cliente NTP)
+      ansible.builtin.command: systemctl list-unit-files --type=service --no-legend
+      register: preparaad_units
+      changed_when: false
 
-    - name: Escribir el NTP del dominio en timesyncd
-      ansible.builtin.copy:
-        dest: /etc/systemd/timesyncd.conf.d/50-iac-ad.conf
-        content: |
-          # Desplegado por Ansible (rol preparaAD): NTP del dominio AD.
-          # Kerberos exige desfase < 5 min con el controlador de dominio.
-          [Time]
-          NTP={{ preparaad_ntp }}
-        owner: root
-        group: root
-        mode: "0644"
-      register: preparaad_ntp_conf
+    - name: Determinar el cliente NTP presente
+      ansible.builtin.set_fact:
+        preparaad_ntp_chrony: "{{ 'chrony.service' in preparaad_units.stdout or 'chronyd.service' in preparaad_units.stdout }}"
+        preparaad_ntp_timesyncd: "{{ 'systemd-timesyncd.service' in preparaad_units.stdout }}"
+        preparaad_chrony_svc: "{{ 'chronyd.service' if 'chronyd.service' in preparaad_units.stdout else 'chrony.service' }}"
 
-    # restart NO cuelga el primer arranque (los que cuelgan son
-    # enabled:/daemon_reload: — bugs 2026-05-17). timesyncd relee su
-    # configuración al reiniciar, sin daemon-reload (es config, no unidad).
-    - name: Reiniciar systemd-timesyncd con el NTP nuevo
-      ansible.builtin.systemd:
-        name: systemd-timesyncd.service
-        state: restarted
-      when: preparaad_ntp_conf is changed
+    # --- chrony (Mint/Debian con chrony, RHEL…) --------------------------
+    - name: Apuntar chrony al NTP del dominio
+      when: preparaad_ntp_chrony | bool
+      block:
+        - name: Localizar el chrony.conf (Debian vs resto)
+          ansible.builtin.stat:
+            path: /etc/chrony/chrony.conf
+          register: preparaad_chrony_deb
+
+        - name: Escribir el NTP del dominio en chrony.conf
+          ansible.builtin.blockinfile:
+            path: "{{ '/etc/chrony/chrony.conf' if preparaad_chrony_deb.stat.exists else '/etc/chrony.conf' }}"
+            create: false
+            marker: "# {mark} IAC-IESMHP preparaAD (NTP del dominio AD)"
+            block: |
+              # Kerberos exige desfase < 5 min con el controlador de dominio.
+              # 'prefer trust' = fuente preferida y de confianza (suele ser la
+              # única alcanzable en el aula; el pool de internet no llega).
+              {% for ntp in preparaad_ntp.split(',') %}
+              server {{ ntp | trim }} iburst prefer trust
+              {% endfor %}
+          register: preparaad_chrony_conf
+
+        # restart NO cuelga el primer arranque (los que cuelgan son
+        # enabled:/daemon_reload: — bugs 2026-05-17).
+        - name: Reiniciar chrony con el NTP nuevo
+          ansible.builtin.systemd:
+            name: "{{ preparaad_chrony_svc }}"
+            state: restarted
+          when: preparaad_chrony_conf is changed
+
+        # Ajuste inmediato: sin esto chrony corrige despacio (slew) y la unión
+        # que viene a continuación podría pillar el reloj aún desfasado.
+        # makestep da el salto de una vez (best-effort; no falla el play).
+        - name: Forzar el ajuste inmediato del reloj (chrony makestep)
+          ansible.builtin.command: chronyc makestep
+          changed_when: false
+          failed_when: false
+
+    # --- systemd-timesyncd (Ubuntu Desktop por defecto) -----------------
+    - name: Apuntar systemd-timesyncd al NTP del dominio
+      when:
+        - not (preparaad_ntp_chrony | bool)
+        - preparaad_ntp_timesyncd | bool
+      block:
+        - name: Crear el directorio de configuración de systemd-timesyncd
+          ansible.builtin.file:
+            path: /etc/systemd/timesyncd.conf.d
+            state: directory
+            mode: "0755"
+
+        - name: Escribir el NTP del dominio en timesyncd
+          ansible.builtin.copy:
+            dest: /etc/systemd/timesyncd.conf.d/50-iac-ad.conf
+            content: |
+              # Desplegado por Ansible (rol preparaAD): NTP del dominio AD.
+              # Kerberos exige desfase < 5 min con el controlador de dominio.
+              [Time]
+              NTP={{ preparaad_ntp.split(',') | map('trim') | join(' ') }}
+            owner: root
+            group: root
+            mode: "0644"
+          register: preparaad_ntp_conf
+
+        # restart NO cuelga el primer arranque (bugs 2026-05-17). timesyncd
+        # relee su configuración al reiniciar, sin daemon-reload.
+        - name: Reiniciar systemd-timesyncd con el NTP nuevo
+          ansible.builtin.systemd:
+            name: systemd-timesyncd.service
+            state: restarted
+          when: preparaad_ntp_conf is changed
+
+    # --- ninguno conocido -----------------------------------------------
+    - name: Avisar si no hay cliente NTP conocido (ni chrony ni timesyncd)
+      ansible.builtin.debug:
+        msg: >-
+          AVISO: preparaad_ntp='{{ preparaad_ntp }}' pero no se encontró ni
+          chrony ni systemd-timesyncd. El reloj NO se ha apuntado al DC;
+          Kerberos puede fallar por desfase. Instala uno de los dos.
+      when:
+        - not (preparaad_ntp_chrony | bool)
+        - not (preparaad_ntp_timesyncd | bool)
 
 - name: Leer si el reloj está sincronizado por NTP
   ansible.builtin.command: timedatectl show -p NTPSynchronized --value

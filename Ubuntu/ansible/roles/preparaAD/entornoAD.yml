@@ -8,9 +8,9 @@
 #                                fichero a través de utilesAD/entornoAD.sh)
 #   - 1-CreaUsuarioUnionAD.ps1  (lee de aquí la OU y la cuenta de unión)
 #
-# Conmutar producción ⇄ pruebas = editar las dos primeras claves de abajo:
-#   Producción : preparaad_dominio: "iesmhp.local"   dnss: "10.0.1.48,10.0.1.54"
-#   Pruebas    : preparaad_dominio: "mhpies.local"   dnss: "10.0.72.118"
+# Conmutar producción ⇄ pruebas = editar las claves de abajo:
+#   Producción : preparaad_dominio: "iesmhp.local"  dnss: "10.0.1.48,10.0.1.54"  ntp: "10.0.1.48"
+#   Pruebas    : preparaad_dominio: "mhpies.local"  dnss: "10.0.72.118"           ntp: "10.0.72.118"
 # La OU se DERIVA del dominio automáticamente — no hay que tocarla.
 # ===========================================================================
 
@@ -35,6 +35,8 @@ preparaad_ou: "OU={{ preparaad_nombre_ou }},DC={{ preparaad_dominio.split('.') |
 # La crea utilesAD/1-CreaUsuarioUnionAD.ps1 (ejecutado en un DC).
 preparaad_usuario_union: "svc-union-linux"
 
-# Servidor NTP del dominio (normalmente el propio DC). Kerberos exige desfase
-# < 5 min con el DC. VACÍO = default de systemd-timesyncd (ntp.ubuntu.com).
-preparaad_ntp: ""
+# Servidor NTP del dominio (normalmente el propio DC), o varios separados por
+# comas. Kerberos exige desfase < 5 min con el DC. El rol detecta el cliente NTP
+# del equipo (chrony en Mint/Debian, systemd-timesyncd en Ubuntu) y lo apunta
+# aquí. VACÍO = no se toca el reloj (default del sistema, p. ej. ntp.ubuntu.com).
+preparaad_ntp: "10.0.72.118"
