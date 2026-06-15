@@ -9,8 +9,8 @@
 #   - 1-CreaUsuarioUnionAD.ps1  (lee de aquí la OU y la cuenta de unión)
 #
 # Conmutar producción ⇄ pruebas = editar las claves de abajo:
-#   Producción : preparaad_dominio: "iesmhp.local"  dnss: "10.0.1.48,10.0.1.54"  ntp: "10.0.1.48"
-#   Pruebas    : preparaad_dominio: "mhpies.local"  dnss: "10.0.72.118"           ntp: "10.0.72.118"
+#   Producción : preparaad_dominio: "iesmhp.local"  dnss: "10.0.1.48,10.0.1.54"  ntp: "10.0.1.48"   membership_software: ""       (Windows AD → adcli)
+#   Pruebas    : preparaad_dominio: "mhpies.local"  dnss: "10.0.72.118"           ntp: "10.0.72.118"  membership_software: "samba"  (DC Samba → net ads join)
 # La OU se DERIVA del dominio automáticamente — no hay que tocarla.
 # ===========================================================================
 
@@ -40,3 +40,16 @@ preparaad_usuario_union: "svc-union-linux"
 # del equipo (chrony en Mint/Debian, systemd-timesyncd en Ubuntu) y lo apunta
 # aquí. VACÍO = no se toca el reloj (default del sistema, p. ej. ntp.ubuntu.com).
 preparaad_ntp: "10.0.72.118"
+
+# Motor de UNIÓN que usa realmd (`realm join --membership-software=...`):
+#   ""       → default de realmd = adcli. Correcto contra Windows AD (producción
+#              iesmhp.local). adcli fija la contraseña de máquina por kpasswd.
+#   "samba"  → realmd delega la unión en `net ads join` (Samba), que fija la
+#              contraseña por el canal de netlogon en vez de por kpasswd. NECESARIO
+#              contra DC Samba (pruebas mhpies.local / "dcfake"): ahí adcli crea la
+#              cuenta por LDAP pero el set-password Kerberos falla con
+#              "Message stream modified" (quirk del kpasswd de Samba). El cliente
+#              de identidad sigue siendo SSSD (se fuerza --client-software=sssd).
+# Requiere el paquete samba-common-bin (ya en preparaad_paquetes). Ver
+# Ubuntu/RegistroDeCambios/20260615-Cambios.md.
+preparaad_membership_software: "samba"

@@ -108,12 +108,25 @@ fi
 # realm join lee la contraseña por stdin con --unattended (sin tty).
 # Crea la cuenta de equipo en la OU delegada, escribe /etc/sssd/sssd.conf,
 # genera /etc/krb5.keytab y habilita+arranca sssd.
+#
+# MEMBERSHIP_SOFTWARE (de entornoAD.yml): vacío = adcli (default, Windows AD);
+# "samba" = realmd delega en `net ads join`, que fija la contraseña de máquina
+# por netlogon en vez de por kpasswd (NECESARIO contra DC Samba, donde adcli
+# falla con "Message stream modified"). Con samba se fuerza el cliente SSSD.
+MEMB_ARGS=()
+if [[ -n "${MEMBERSHIP_SOFTWARE:-}" ]]; then
+    MEMB_ARGS=(--membership-software="$MEMBERSHIP_SOFTWARE" --client-software=sssd)
+    echo "[INFO] Motor de unión: $MEMBERSHIP_SOFTWARE (cliente de identidad: sssd)."
+fi
 if ! printf '%s\n' "$PASS" | realm join --unattended \
-        --user="$USUARIO_UNION" --computer-ou="$OU" "$DOMINIO"; then
+        --user="$USUARIO_UNION" "${MEMB_ARGS[@]}" --computer-ou="$OU" "$DOMINIO"; then
     unset PASS
     echo "[ERR] realm join ha fallado. Causas típicas: contraseña incorrecta,"
     echo "      reloj desfasado >5 min con el DC (timedatectl), cuenta sin"
     echo "      delegación en la OU, u OU inexistente ($OU)."
+    echo "      Si el DC es Samba y el log dice 'Message stream modified' al fijar"
+    echo "      la contraseña de máquina, pon preparaad_membership_software: \"samba\""
+    echo "      en entornoAD.yml (une por net ads join en vez de kpasswd)."
     exit 1
 fi
 unset PASS

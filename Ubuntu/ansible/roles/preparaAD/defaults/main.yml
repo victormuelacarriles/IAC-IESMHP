@@ -38,6 +38,8 @@ preparaad_paquetes:
   - krb5-user       # kinit/klist para diagnosticar Kerberos
   - packagekit      # realmd lo usa para autoinstalar paquetes (aquí ya van preinstalados)
   - bind9-dnsutils  # dig (diagnóstico DNS) y nsupdate (dyndns de sssd)
+  - samba-common-bin # `net` — motor de unión alternativo (realm join --membership-software=samba),
+                     # necesario contra DC Samba (ver preparaad_membership_software en entornoAD.yml)
 
 # ---- Unión automática al dominio (APAGADA por defecto) --------------------
 # Activarla SOLO en pases lanzados a mano, con la contraseña en ansible-vault

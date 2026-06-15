@@ -113,6 +113,7 @@ Conmutar **producción ⇄ pruebas** = editar SOLO este fichero.
 | `preparaad_ou` | *(derivada)* `OU={{ nombre_ou }},DC=...` | OU completa (DN), **calculada** a partir de `preparaad_dominio` + `preparaad_nombre_ou`. No editar: cambia sola con el dominio |
 | `preparaad_usuario_union` | `svc-union-linux` | Cuenta delegada de unión (la crea `utilesAD/1-CreaUsuarioUnionAD.ps1`) |
 | `preparaad_ntp` | prod `10.0.1.48` / test `10.0.72.118` | NTP del dominio (normalmente el DC), o varios separados por comas. El rol detecta el cliente NTP (chrony en Mint/Debian, systemd-timesyncd en Ubuntu) y lo apunta aquí + `chronyc makestep`. Vacío = no se toca el reloj |
+| `preparaad_membership_software` | prod `""` (adcli) / test `"samba"` | Motor de unión de `realm join`. **Vacío = adcli** (default de realmd, correcto contra Windows AD: fija la contraseña de máquina por kpasswd). **`"samba"`** = realmd delega en `net ads join` (paquete `samba-common-bin`), que fija la contraseña por netlogon en vez de kpasswd; **necesario contra DC Samba**, donde adcli crea la cuenta por LDAP pero el set-password Kerberos falla con `Message stream modified`. Con `samba` se fuerza `--client-software=sssd` (SSSD sigue siendo el cliente de identidad). Ver `Ubuntu/RegistroDeCambios/20260615-Cambios.md` |
 
 Todas se pueden pisar puntualmente con `-e` (extra-vars > include_vars).
 
@@ -230,6 +231,19 @@ Verificar cada una por separado: `resolvectl query iesmhp.local` (resolved) y
   (chrony `waitsync` / sondeo de timesyncd) y `3-UneAlDominio.sh` aborta si el
   reloj no está OK. Limpiar un objeto huérfano: `adcli delete-computer
   --domain=DOMINIO --login-user=svc-union-linux HOSTNAME`.
+- **DC Samba — `Message stream modified` al fijar la contraseña de máquina**
+  (visto 2026-06-15 en pruebas `mhpies.local` / `dcfake`): con el motor por
+  defecto (adcli), `realm join`/`adcli join` autentica OK, crea la cuenta de
+  equipo por LDAP en la OU (¡por eso **aparece en AD aunque el join "falle"**!),
+  pero el `set computer password` por Kerberos (kpasswd) falla con
+  `Couldn't set password for computer account: HOST$: Message stream modified`.
+  Descartado: red/puerto 464, reloj, OU/delegación, host del kpasswd (mismo DC) y
+  enctype (RC4/AES-SHA1/SHA2). Es un quirk del kpasswd de Samba. **Solución**:
+  `preparaad_membership_software: "samba"` en `entornoAD.yml` → realmd une por
+  `net ads join` (no usa kpasswd) manteniendo SSSD. Limpiar el objeto huérfano
+  antes de reintentar: `adcli delete-computer --domain=DOMINIO
+  --login-user=svc-union-linux HOSTNAME`. Producción Windows AD no lo sufre
+  (adcli funciona) → ahí se deja `""`.
 - **Salir del dominio**: `utilesAD/4-SacaDelDominio.sh` (borra la cuenta de
   equipo de la OU con `realm leave -U`, deshace la config local y elimina el
   snippet `conf.d/10-iac-ad.conf` huérfano). A mano: `realm leave` deshace solo

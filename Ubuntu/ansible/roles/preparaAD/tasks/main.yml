@@ -386,11 +386,18 @@
     # realm join lee la contraseña por stdin con --unattended (sin tty).
     # Escribe /etc/sssd/sssd.conf, crea la cuenta de equipo + keytab
     # (/etc/krb5.keytab) y habilita+arranca sssd.service él mismo.
+    #
+    # preparaad_membership_software (de entornoAD.yml): vacío = adcli (default,
+    # Windows AD); "samba" = realmd delega en `net ads join`, que fija la
+    # contraseña de máquina por netlogon en vez de por kpasswd (NECESARIO contra
+    # DC Samba, donde adcli falla con "Message stream modified"). Con samba se
+    # fuerza --client-software=sssd para conservar SSSD como cliente de identidad.
     - name: Unir el equipo al dominio {{ preparaad_dominio }}
       ansible.builtin.shell: >-
         echo '{{ preparaad_password_union }}' |
         realm join --unattended
         --user={{ preparaad_usuario_union | quote }}
+        {% if (preparaad_membership_software | default('')) != '' %}--membership-software={{ preparaad_membership_software }} --client-software=sssd{% endif %}
         {% if preparaad_ou != '' %}--computer-ou={{ preparaad_ou | quote }}{% endif %}
         {{ preparaad_dominio | quote }}
       no_log: true            # contiene la contraseña de unión

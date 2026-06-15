@@ -7,7 +7,8 @@
 # Fuente de verdad: ../entornoAD.yml (la misma que carga el rol Ansible). Aquí
 # solo se PARSEA; para cambiar el dominio editar ese .yml, NO este fichero.
 #
-# Exporta: DOMINIO, NOMBRE_OU, OU (derivada), USUARIO_UNION, DOMINIO_DNSS, NTP.
+# Exporta: DOMINIO, NOMBRE_OU, OU (derivada), USUARIO_UNION, DOMINIO_DNSS, NTP,
+#          MEMBERSHIP_SOFTWARE (motor de unión: ""=adcli / "samba"=net ads join).
 # Respeta valores ya puestos por entorno (p. ej. DOMINIO=otro.local ./3-...sh).
 # ===========================================================================
 
@@ -38,6 +39,7 @@ NOMBRE_OU="${NOMBRE_OU:-$(_entorno_get preparaad_nombre_ou)}"
 USUARIO_UNION="${USUARIO_UNION:-$(_entorno_get preparaad_usuario_union)}"
 DOMINIO_DNSS="${DOMINIO_DNSS:-$(_entorno_get preparaad_dominio_dnss)}"
 NTP="${NTP:-$(_entorno_get preparaad_ntp)}"   # NTP del dominio (pista de diagnóstico)
+MEMBERSHIP_SOFTWARE="${MEMBERSHIP_SOFTWARE:-$(_entorno_get preparaad_membership_software)}"   # ""=adcli / "samba"=net ads join
 
 [[ -n "$DOMINIO"   ]] || { echo "[ERR] preparaad_dominio vacío en $ENTORNO_AD" >&2; exit 1; }
 [[ -n "$NOMBRE_OU" ]] || NOMBRE_OU="ComputersLinux"
