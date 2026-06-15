@@ -18,6 +18,8 @@
 # Los prerequisitos del rol (krb5.conf, split-DNS, nsswitch) se DEJAN intactos:
 # son inofensivos y facilitan una reunión posterior con 3-UneAlDominio.sh.
 # ===========================================================================
+#  Util: para sacar un equipo del dominio AD (rol preparaAD de IAC-IESMHP).
+#  adcli delete-computer --domain=mhpies.local --login-user=svc-union-linux [hostname]
 set -euo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "[ERR] Ejecutar como root (sudo $0)"; exit 1; }
