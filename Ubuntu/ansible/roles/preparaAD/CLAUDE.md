@@ -134,7 +134,7 @@ Todas se pueden pisar puntualmente con `-e` (extra-vars > include_vars).
 | `1-CreaUsuarioUnionAD.ps1` | Controlador de dominio (admin del dominio) | OU `ComputersLinux` (si falta) + cuenta `svc-union-linux` (si falta; resetea contraseña si existe) + delegación mínima sobre la OU para **unir Y sacar** equipos (crear equipos, **borrar equipos**, reset password, validated writes dNSHostName/SPN, property set Account Restrictions). El borrado (`DeleteChild` de la clase equipo) queda **acotado a esta OU**. Idempotente: comprueba ACE a ACE. Lee OU/usuario de `entornoAD.yml`; el dominio lo autodetecta con `Get-ADDomain`. Solo pregunta la contraseña. **Sin tildes a propósito** (PS 5.1 lee UTF-8 sin BOM como ANSI) |
 | `2-CreaVault.sh` | Equipo del profesor | Crea `Ubuntu/ansible/vault/preparaAD-vault.yml` (AES256, committeable) con las credenciales de unión. Rechaza contraseñas con comilla simple (limitación del rol) |
 | `3-UneAlDominio.sh` | El equipo a unir (root) | Rol preparaAD (prerequisitos) → si no unido: `realm discover` + **guarda de reloj** (verifica `NTPSynchronized`; si no, fuerza `chronyc makestep`+`waitsync` / reinicia timesyncd y, si sigue desfasado, **aborta antes de pedir credenciales** para no dejar un objeto de equipo huérfano en AD) + pregunta la contraseña de `svc-union-linux` (**en blanco** = pide OTRO usuario del dominio con permisos de unión y su contraseña) + `realm join` a la OU → verifica → re-pase del rol (despliega el snippet SSSD) |
-| `4-SacaDelDominio.sh` | El equipo a sacar (root) | **Inverso de 3**. Comprueba si está unido (si no, termina) → pide confirmación → pregunta la contraseña de `svc-union-linux` (**en blanco** = OTRO usuario con permisos de borrado) + `realm leave -U` (borra la cuenta de equipo en AD y deshace la config local) → verifica → elimina el snippet SSSD huérfano. Deja krb5/split-DNS/nsswitch intactos (facilitan reunir) |
+| `4-SacaDelDominio.sh` | El equipo a sacar (root) | **Inverso de 3**. Comprueba si está unido (si no, termina) → pide confirmación → pregunta la contraseña de `svc-union-linux` (**en blanco** = OTRO usuario con permisos de borrado) + `realm leave -U` (borra la cuenta de equipo en AD y deshace la config local) → verifica → elimina el snippet SSSD huérfano → **(paso 6) revierte `pam_sss` y el módulo `sss` de nsswitch** que realmd metió al unir y NO quita al salir (si no, `pam_sss` apunta a un sssd ya inexistente → rompe el greeter GDM / handover RDP = pantalla en negro; ver Notas). Deja krb5/split-DNS/reorden-mDNS de nsswitch intactos (facilitan reunir) |
 
 ## Cómo unir el equipo (cuando se decida)
 
@@ -244,6 +244,18 @@ Verificar cada una por separado: `resolvectl query iesmhp.local` (resolved) y
   antes de reintentar: `adcli delete-computer --domain=DOMINIO
   --login-user=svc-union-linux HOSTNAME`. Producción Windows AD no lo sufre
   (adcli funciona) → ahí se deja `""`.
+- **Tras salir del dominio — pantalla en negro por RDP (pam_sss huérfano)**
+  (visto 2026-06-15 en `IABD-14`, PC físico): `realm leave` deshace `sssd.conf`
+  pero **NO retira `pam_sss` de `/etc/pam.d/common-*` ni el módulo `sss` de
+  `/etc/nsswitch.conf`** (los puso realmd al unir). Al reiniciar, sssd no
+  arranca (sin config) y `pam_sss` queda apuntando a un socket muerto →
+  `pam_sss(...:account): Request to sssd failed. Connection refused` en **cada**
+  arranque de sesión gráfica → el greeter de GDM y el *handover* de
+  `gnome-remote-desktop` abortan la sesión → **RDP en negro** (`Aborting
+  handover`). No es render/Wayland (`systemd-detect-virt`=none, sin 3D de por
+  medio). **Solución**: `pam-auth-update --disable sss` + quitar `sss` de las
+  bases passwd/group de nsswitch + reiniciar `gnome-remote-desktop`. Desde
+  2026-06-15 lo hace **`4-SacaDelDominio.sh` (paso 6)** automáticamente.
 - **Salir del dominio**: `utilesAD/4-SacaDelDominio.sh` (borra la cuenta de
   equipo de la OU con `realm leave -U`, deshace la config local y elimina el
   snippet `conf.d/10-iac-ad.conf` huérfano). A mano: `realm leave` deshace solo

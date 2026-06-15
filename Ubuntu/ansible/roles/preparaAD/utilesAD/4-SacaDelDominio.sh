@@ -14,9 +14,17 @@
 #      configuración local (sssd.conf, keytab). Verifica que quedó fuera.
 #   5. Limpia el snippet SSSD huérfano (/etc/sssd/conf.d/10-iac-ad.conf): sin
 #      dominio, sssd no debe arrancar con él (quedaría como unidad fallida).
+#   6. Revierte lo que mete *realmd* al unir y NO quita al salir: pam_sss en
+#      /etc/pam.d/common-* y el módulo 'sss' en las bases passwd/group de
+#      nsswitch. Si se dejan, pam_sss apunta a un sssd ya inexistente →
+#      "Request to sssd failed: Connection refused" en la fase ACCOUNT del
+#      stack PAM → rompe el arranque de sesiones gráficas (greeter de GDM y,
+#      en consecuencia, el handover RDP de gnome-remote-desktop = pantalla en
+#      negro). Un 3-UneAlDominio.sh posterior los vuelve a poner al re-unir.
 #
-# Los prerequisitos del rol (krb5.conf, split-DNS, nsswitch) se DEJAN intactos:
-# son inofensivos y facilitan una reunión posterior con 3-UneAlDominio.sh.
+# Los prerequisitos del rol (krb5.conf, split-DNS, reorden mDNS de nsswitch) se
+# DEJAN intactos: son inofensivos y facilitan una reunión posterior con
+# 3-UneAlDominio.sh.
 # ===========================================================================
 #  Util: para sacar un equipo del dominio AD (rol preparaAD de IAC-IESMHP).
 #  Limpieza manual de un objeto huérfano (join a medias por reloj desfasado):
@@ -88,6 +96,33 @@ SNIPPET="/etc/sssd/conf.d/10-iac-ad.conf"
 if [[ -f "$SNIPPET" ]]; then
     rm -f "$SNIPPET"
     echo "[OK] Eliminado snippet SSSD huérfano: $SNIPPET"
+fi
+
+# --- 6. Revertir pam_sss y nss 'sss' (realmd los deja al unir y NO al salir) -
+# Sin esto, pam_sss queda en /etc/pam.d/common-* apuntando a un sssd que ya no
+# arranca → "Request to sssd failed: Connection refused" en el stack ACCOUNT →
+# rompe el greeter de GDM y el handover RDP de gnome-remote-desktop (negro).
+echo "=== [6] Limpiar pam_sss / nss 'sss' (los puso realmd al unir) ==="
+if command -v pam-auth-update >/dev/null 2>&1 && grep -q pam_sss /etc/pam.d/common-account 2>/dev/null; then
+    DEBIAN_FRONTEND=noninteractive pam-auth-update --disable sss --force >/dev/null 2>&1 \
+        || DEBIAN_FRONTEND=noninteractive pam-auth-update --remove sss >/dev/null 2>&1 \
+        || true
+    if grep -q pam_sss /etc/pam.d/common-account 2>/dev/null; then
+        echo "[AVISO] pam_sss sigue en /etc/pam.d/common-account. Quítalo a mano:"
+        echo "        sudo pam-auth-update   (desmarca «SSS authentication»)"
+    else
+        echo "[OK] pam_sss retirado del stack PAM."
+    fi
+fi
+if grep -qE '^(passwd|group|shadow|gshadow|netgroup):.*[[:space:]]sss\b' /etc/nsswitch.conf 2>/dev/null; then
+    sed -i -E '/^(passwd|group|shadow|gshadow|netgroup):/ s/[[:space:]]+sss\b//g' /etc/nsswitch.conf
+    echo "[OK] Eliminado 'sss' de /etc/nsswitch.conf (passwd/group/…)."
+fi
+# Si el servidor RDP está activo, reiniciarlo para que la próxima sesión de
+# handover no arrastre el PAM viejo (si no, seguiría el negro hasta el reboot).
+if systemctl is-active --quiet gnome-remote-desktop 2>/dev/null; then
+    systemctl restart gnome-remote-desktop 2>/dev/null || true
+    echo "[OK] gnome-remote-desktop reiniciado (RDP)."
 fi
 
 echo
