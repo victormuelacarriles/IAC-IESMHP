@@ -24,9 +24,13 @@
          cuenta via reset password, no necesita borrarla.
          Comprueba ACE a ACE y solo anade las que falten.
 
-    Los valores por defecto DEBEN COINCIDIR con defaults/main.yml del rol
-    (preparaad_usuario_union, preparaad_ou). Tras ejecutar esto, generar el
-    vault con 2-CreaVault.sh (misma contrasena).
+    Los valores por defecto (usuario de union y nombre de OU) se leen del
+    UNICO punto de cambio del entorno: ..\entornoAD.yml (el mismo fichero que
+    usa el rol Ansible y los scripts de utilesAD/), si esta presente junto al
+    repo; si no, caen a los literales svc-union-linux / ComputersLinux. El
+    DOMINIO no se lee de ahi: se autodetecta del DC con Get-ADDomain (asi el
+    script vale para cualquier dominio sin tocarlo). Tras ejecutar esto,
+    generar el vault con 2-CreaVault.sh (misma contrasena).
 
     (Sin tildes a proposito: PowerShell 5.1 lee UTF-8 sin BOM como ANSI.)
 
@@ -37,12 +41,32 @@
 #Requires -Modules ActiveDirectory
 [CmdletBinding()]
 param(
-    [string]$Usuario  = 'svc-union-linux',
-    [string]$NombreOU = 'ComputersLinux'
+    [string]$Usuario,
+    [string]$NombreOU
 )
 
 $ErrorActionPreference = 'Stop'
 Import-Module ActiveDirectory   # crea tambien la unidad AD: para Get/Set-Acl
+
+# ---------------------------------------------------------------------------
+# Defaults desde el UNICO punto de cambio (..\entornoAD.yml), si no se pasaron
+# por parametro. Si el fichero no esta (script copiado suelto al DC), caen a
+# los literales. El dominio NO sale de aqui: se autodetecta abajo con Get-ADDomain.
+# ---------------------------------------------------------------------------
+$entornoYml = Join-Path (Split-Path $PSScriptRoot -Parent) 'entornoAD.yml'
+function Get-EntornoValor {
+    param([string]$Clave, [string]$PorDefecto)
+    if (Test-Path $entornoYml) {
+        foreach ($linea in Get-Content -LiteralPath $entornoYml) {
+            if ($linea -match "^\s*$Clave\s*:\s*[`"']?([^`"'#]+?)[`"']?\s*(#.*)?$") {
+                return $Matches[1].Trim()
+            }
+        }
+    }
+    return $PorDefecto
+}
+if (-not $PSBoundParameters.ContainsKey('Usuario'))  { $Usuario  = Get-EntornoValor 'preparaad_usuario_union' 'svc-union-linux' }
+if (-not $PSBoundParameters.ContainsKey('NombreOU')) { $NombreOU = Get-EntornoValor 'preparaad_nombre_ou'     'ComputersLinux' }
 
 function ConvertFrom-SecureStringPlain {
     param([securestring]$Seguro)

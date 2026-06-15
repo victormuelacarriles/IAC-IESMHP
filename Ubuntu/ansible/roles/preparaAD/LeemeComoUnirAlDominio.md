@@ -34,7 +34,7 @@ credenciales y se lanza bajo demanda (sección 4).
    cuenta de equipo en AD). Los `IABD-NN`/`SMRD-NN` van sobrados.
 5. **`/etc/krb5.conf`** con el realm por defecto (`IESMHP.LOCAL`) y
    localización de los KDC por DNS (`preparaad_dominio: iesmhp.local` en
-   `defaults/main.yml`).
+   [`entornoAD.yml`](entornoAD.yml) — **único punto de cambio** del dominio).
 
 ### Detalles de diseño importantes
 
@@ -184,9 +184,9 @@ el DHCP del aula normalmente NO es el del dominio, el rol lo detecta y lo
 arregla solo: despliega un **split-DNS** con systemd-resolved
 (`/etc/systemd/resolved.conf.d/50-iac-ad.conf`) que enruta **solo** las
 consultas de `iesmhp.local` a los DNS del dominio
-(`preparaad_dominio_dnss: 10.0.1.48,10.0.1.54` en `defaults/main.yml`); el
-resto del tráfico DNS sigue saliendo por el DNS del aula. No toca
-NetworkManager ni el DHCP.
+(`preparaad_dominio_dnss: 10.0.1.48,10.0.1.54` en
+[`entornoAD.yml`](entornoAD.yml)); el resto del tráfico DNS sigue saliendo por
+el DNS del aula. No toca NetworkManager ni el DHCP.
 
 Además, como el dominio termina en **`.local`** (el TLD reservado para
 mDNS/Avahi), el rol ajusta también la línea `hosts:` de
@@ -219,7 +219,8 @@ dig -t SRV _ldap._tcp.iesmhp.local @10.0.1.48     # ¿se llega al DC directament
 ## 6. Qué falta para activarlo de verdad
 
 El dominio (`iesmhp.local`) y la OU (`ComputersLinux`) ya están
-fijados en [`defaults/main.yml`](defaults/main.yml). Queda:
+fijados en [`entornoAD.yml`](entornoAD.yml) (**único punto de cambio**: lo leen
+el rol y todos los scripts de `utilesAD/`). Queda:
 
 1. **Crear la cuenta delegada**: ejecutar
    [`utilesAD/1-CreaUsuarioUnionAD.ps1`](utilesAD/1-CreaUsuarioUnionAD.ps1)

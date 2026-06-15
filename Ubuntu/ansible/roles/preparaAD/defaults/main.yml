@@ -6,22 +6,16 @@
 # dominio (preparaad_unir: false) — la unión necesita credenciales delegadas;
 # ver "Cómo unir" en el CLAUDE.md del rol y los scripts de apoyo en utilesAD/.
 
-# Dominio AD del IES, en formato DNS y minúsculas. Con dominio definido, el
-# rol despliega /etc/krb5.conf y comprueba con `realm discover` que el DNS
-# del aula lo resuelve. Para probar contra otro dominio:
+# ---------------------------------------------------------------------------
+# Dominio / DNS / OU / cuenta de unión / NTP → ENTORNO (único punto de cambio)
+# ---------------------------------------------------------------------------
+# Esas variables (preparaad_dominio, preparaad_dominio_dnss, preparaad_ou,
+# preparaad_usuario_union, preparaad_ntp) ya NO viven aquí: se centralizan en
+# ../entornoAD.yml, que cargan tanto el rol (include_vars en tasks/main.yml)
+# como los scripts de utilesAD/. Para cambiar el dominio (producción ⇄ pruebas)
+# editar SOLO ese fichero. Se siguen pudiendo pisar puntualmente con -e:
 #   -e preparaad_dominio=otro.local
-#preparaad_dominio: "iesmhp.local"
-preparaad_dominio: "mhpies.local"
-
-# IPs que resuelven el dominio (los DNS de los controladores de dominio),
-# separadas por comas. SOLO se usan si el DNS actual del equipo NO resuelve
-# el dominio: en ese caso el rol despliega un drop-in de systemd-resolved
-# (/etc/systemd/resolved.conf.d/50-iac-ad.conf) con split-DNS — las consultas
-# de *.{{ preparaad_dominio }} van a estos servidores y TODO lo demás sigue
-# saliendo por el DNS del aula (no se toca NetworkManager ni el DHCP).
-# VACÍO = desactiva este arreglo automático.
-#preparaad_dominio_dnss: "10.0.1.48,10.0.1.54"
-preparaad_dominio_dnss: "10.0.72.118"
+# Aquí quedan solo los ajustes de COMPORTAMIENTO del rol (no del entorno).
 
 # Arreglo de /etc/nsswitch.conf para dominios AD terminados en .local (como
 # iesmhp.local): la línea hosts de Ubuntu lleva `mdns4_minimal
@@ -45,20 +39,6 @@ preparaad_paquetes:
   - packagekit      # realmd lo usa para autoinstalar paquetes (aquí ya van preinstalados)
   - bind9-dnsutils  # dig (diagnóstico DNS) y nsupdate (dyndns de sssd)
 
-# Servidor NTP del dominio (normalmente el propio controlador de dominio).
-# Kerberos exige desfase < 5 min con el DC. VACÍO = se respeta la
-# configuración por defecto de systemd-timesyncd (ntp.ubuntu.com), que en
-# general basta si el equipo tiene salida a Internet.
-preparaad_ntp: ""
-
-# OU donde se crean las cuentas de equipo al unir. La crea (y delega) el
-# script utilesAD/1-CreaUsuarioUnionAD.ps1: la cuenta de unión SOLO tiene
-# permisos en ESTA OU, así que si se cambia aquí hay que re-ejecutar ese
-# script en el DC con el nuevo nombre. Vacío = contenedor Computers por
-# defecto del dominio (NO funcionará con la cuenta delegada).
-#preparaad_ou: "OU=ComputersLinux,DC=iesmhp,DC=local"
-preparaad_ou: "OU=ComputersLinux,DC=mhpies,DC=local"
-
 # ---- Unión automática al dominio (APAGADA por defecto) --------------------
 # Activarla SOLO en pases lanzados a mano, con la contraseña en ansible-vault
 # o por -e (NUNCA en claro en el repo):
@@ -68,9 +48,7 @@ preparaad_ou: "OU=ComputersLinux,DC=mhpies,DC=local"
 # group_vars/: ahí se auto-cargaría y TODOS los pases —incluido el primer
 # arranque— exigirían la contraseña del vault).
 preparaad_unir: false
-# Cuenta del dominio DELEGADA solo para unir equipos a la OU de arriba.
-# La crea utilesAD/1-CreaUsuarioUnionAD.ps1 (ejecutado en un DC).
-preparaad_usuario_union: "svc-union-linux"
+# La cuenta de unión (preparaad_usuario_union) se define en ../entornoAD.yml.
 preparaad_password_union: ""  # su contraseña — SOLO vía vault (utilesAD/2-CreaVault.sh) o -e
 # Limitación: la contraseña no debe contener comillas simples (se interpola
 # en una orden shell; la tarea va con no_log).

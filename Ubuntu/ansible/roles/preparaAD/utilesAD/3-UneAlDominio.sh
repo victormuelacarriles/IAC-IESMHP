@@ -23,21 +23,17 @@
 # ===========================================================================
 set -euo pipefail
 
-# DEBEN COINCIDIR con defaults/main.yml del rol (preparaad_*). Se pueden
-# sobreescribir por entorno:  DOMINIO=otro.local ./3-UneAlDominio.sh
-USUARIO_UNION="${USUARIO_UNION:-svc-union-linux}"
-#DOMINIO="${DOMINIO:-iesmhp.local}"
-#OU="${OU:-OU=ComputersLinux,DC=iesmhp,DC=local}"
-DOMINIO="${DOMINIO:-mhpies.local}"
-OU="${OU:-OU=ComputersLinux,DC=mhpies,DC=local}"
-
-
-
 [[ $EUID -eq 0 ]] || { echo "[ERR] Ejecutar como root (sudo $0)"; exit 1; }
 
 # El script vive en roles/preparaAD/utilesAD/ → la raíz ansible está 3 niveles arriba
 _DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANSIBLE_DIR="$(cd "$_DIR/../../.." && pwd)"
+
+# DOMINIO / OU / USUARIO_UNION desde el ÚNICO punto de cambio (../entornoAD.yml,
+# el mismo que carga el rol). Se pueden pisar por entorno antes de invocar:
+#   DOMINIO=otro.local OU="OU=...,DC=..." ./3-UneAlDominio.sh
+# shellcheck source=entornoAD.sh
+source "$_DIR/entornoAD.sh"
 command -v ansible-playbook >/dev/null || { echo "[ERR] ansible-playbook no encontrado (sudo apt install ansible)"; exit 1; }
 
 # --- 1. Prerequisitos (rol preparaAD en modo local) -------------------------

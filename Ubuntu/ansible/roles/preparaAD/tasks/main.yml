@@ -40,6 +40,17 @@
 # ===========================================================================
 
 # ---------------------------------------------------------------------------
+# 0. Entorno AD (único punto de cambio: dominio, DNS, OU, cuenta, NTP)
+# ---------------------------------------------------------------------------
+# Carga ../entornoAD.yml — la MISMA fuente de verdad que leen los scripts de
+# utilesAD/. Cambiar el dominio (producción ⇄ pruebas) = editar SOLO ese
+# fichero. -e sigue pisando estos valores (extra-vars > include_vars).
+- name: Cargar el entorno AD (dominio/DNS/OU desde entornoAD.yml)
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/entornoAD.yml"
+  tags: [preparaad, ad]
+
+# ---------------------------------------------------------------------------
 # 1. Stack de unión a dominio
 # ---------------------------------------------------------------------------
 # El módulo apt exporta DEBIAN_FRONTEND=noninteractive, así que krb5-user no

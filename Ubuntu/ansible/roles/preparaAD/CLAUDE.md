@@ -70,18 +70,37 @@ sin dominios → **unidad fallida en cada boot** (saltaría la sección 8 de
 vacío y el snippet se aplica en el mismo pase que une (o en re-pases sobre
 equipos ya unidos).
 
-## Variables (`defaults/`)
+## Variables
+
+### `entornoAD.yml` — ÚNICO PUNTO DE CAMBIO del entorno (dominio/DNS/OU)
+Fichero en la **raíz del rol** (`roles/preparaAD/entornoAD.yml`). Es la **única
+fuente de verdad** del dominio al que se une el equipo, compartida por:
+- el **rol** (`tasks/main.yml` lo carga con `include_vars` como tarea 0),
+- los **scripts** `utilesAD/2-CreaVault.sh` y `utilesAD/3-UneAlDominio.sh` (lo
+  parsean vía `utilesAD/entornoAD.sh`),
+- `utilesAD/1-CreaUsuarioUnionAD.ps1` (lee de él la OU y la cuenta; el dominio
+  lo autodetecta con `Get-ADDomain`).
+
+Conmutar **producción ⇄ pruebas** = editar SOLO este fichero.
+
+| Variable (en `entornoAD.yml`) | Valor | Para qué |
+|----------|-------------|----------|
+| `preparaad_dominio` | prod `iesmhp.local` / test `mhpies.local` | Dominio AD (DNS, minúsculas). Vacío = solo prerequisitos genéricos |
+| `preparaad_dominio_dnss` | prod `10.0.1.48,10.0.1.54` / test `10.0.72.118` | IPs (separadas por comas) que resuelven el dominio (DNS de los DC). Solo si el DNS del equipo NO resuelve → split-DNS vía systemd-resolved. Vacío = sin auto-arreglo |
+| `preparaad_nombre_ou` | `ComputersLinux` | Nombre (hoja) de la OU de las cuentas de equipo. La crea y delega `utilesAD/1-CreaUsuarioUnionAD.ps1` con este nombre |
+| `preparaad_ou` | *(derivada)* `OU={{ nombre_ou }},DC=...` | OU completa (DN), **calculada** a partir de `preparaad_dominio` + `preparaad_nombre_ou`. No editar: cambia sola con el dominio |
+| `preparaad_usuario_union` | `svc-union-linux` | Cuenta delegada de unión (la crea `utilesAD/1-CreaUsuarioUnionAD.ps1`) |
+| `preparaad_ntp` | `""` | NTP del dominio (normalmente el DC). Vacío = default de Ubuntu |
+
+Todas se pueden pisar puntualmente con `-e` (extra-vars > include_vars).
+
+### `defaults/main.yml` — comportamiento del rol (no del entorno)
 | Variable | Por defecto | Para qué |
 |----------|-------------|----------|
-| `preparaad_dominio` | `iesmhp.local` | Dominio AD (DNS, minúsculas). Vacío = solo prerequisitos genéricos |
-| `preparaad_dominio_dnss` | `10.0.1.48,10.0.1.54` | IPs (separadas por comas) que resuelven el dominio (DNS de los DC). Solo se usan si el DNS del equipo NO resuelve el dominio → split-DNS vía systemd-resolved. Vacío = sin auto-arreglo |
 | `preparaad_arregla_nsswitch` | `true` | En dominios `.local`: anteponer `dns` a `mdns4_minimal` en `/etc/nsswitch.conf` (sin esto, ping/kinit/adcli no resuelven `*.local` aunque el split-DNS funcione) |
 | `preparaad_paquetes` | lista | Stack a instalar |
-| `preparaad_ntp` | `""` | NTP del dominio (normalmente el DC). Vacío = default de Ubuntu |
-| `preparaad_ou` | `OU=ComputersLinux,DC=iesmhp,DC=local` | OU de las cuentas de equipo (`--computer-ou`). La crea y delega `utilesAD/1-CreaUsuarioUnionAD.ps1` — si se cambia aquí, re-ejecutar ese script |
 | `preparaad_unir` | `false` | Intentar la unión en este pase |
-| `preparaad_usuario_union` | `svc-union-linux` | Cuenta delegada de unión (la crea `utilesAD/1-CreaUsuarioUnionAD.ps1`) |
-| `preparaad_password_union` | `""` | Su contraseña — **solo vía vault (`utilesAD/2-CreaVault.sh`) o `-e`** |
+| `preparaad_password_union` | `""` | Contraseña de la cuenta de unión — **solo vía vault (`utilesAD/2-CreaVault.sh`) o `-e`** |
 | `preparaad_fqn` | `false` | `use_fully_qualified_names` |
 | `preparaad_fallback_homedir` | `/home/%u` | Home de usuarios del dominio |
 | `preparaad_gpo` | `permissive` | `ad_gpo_access_control` (endurecer a `enforcing` con las GPO revisadas) |

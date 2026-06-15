@@ -25,11 +25,14 @@
 # ===========================================================================
 set -euo pipefail
 
-USUARIO_UNION="svc-union-linux"   # DEBE COINCIDIR con preparaad_usuario_union (defaults del rol)
-
 # El script vive en roles/preparaAD/utilesAD/ → la raíz ansible está 3 niveles arriba
 _DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANSIBLE_DIR="$(cd "$_DIR/../../.." && pwd)"
+
+# USUARIO_UNION desde el ÚNICO punto de cambio (../entornoAD.yml, el mismo que
+# carga el rol). El vault DEBE llevar el mismo usuario que preparaad_usuario_union.
+# shellcheck source=entornoAD.sh
+source "$_DIR/entornoAD.sh"
 VAULT_DIR="$ANSIBLE_DIR/vault"
 VAULT_FILE="$VAULT_DIR/preparaAD-vault.yml"
 
