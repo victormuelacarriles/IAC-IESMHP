@@ -103,6 +103,27 @@ ansible-playbook -i localhost, --connection=local roles.yaml --tags preparaad
 ```
 </details>
 
+### Sacar UN equipo del dominio: `utilesAD/4-SacaDelDominio.sh`
+
+El inverso de la unión. En el equipo a sacar (como root):
+
+```bash
+sudo /opt/IAC-IESMHP/Ubuntu/ansible/roles/preparaAD/utilesAD/4-SacaDelDominio.sh
+```
+
+El script: (1) comprueba si está unido (si no, termina sin tocar nada); (2)
+pide **confirmación**; (3) pregunta la contraseña de `svc-union-linux` (en
+blanco = otro usuario del dominio con permisos de borrado) y ejecuta
+`realm leave -U`, que **borra la cuenta de equipo de la OU en AD** y deshace la
+configuración local (sssd.conf, keytab); (4) verifica y elimina el snippet SSSD
+huérfano. Los prerequisitos (krb5.conf, split-DNS, nsswitch) se dejan intactos
+para facilitar una reunión posterior.
+
+> El borrado de la cuenta en AD lo permite la delegación `DeleteChild` que
+> `1-CreaUsuarioUnionAD.ps1` concede a `svc-union-linux` **solo en la OU
+> `ComputersLinux`**. A mano, `realm leave` (sin `-U`) deshace solo la config
+> local y deja la cuenta en el dominio.
+
 ---
 
 ## 4. Unión automatizada (recomendada): cuenta delegada + vault + pase de aula
@@ -121,9 +142,10 @@ Los pasos 1 y 2 están **scriptados en [`utilesAD/`](utilesAD/)**.
 Idempotente; con permisos de administrador del dominio: crea (si faltan) la
 OU `ComputersLinux` y la cuenta `svc-union-linux` **sin privilegios
 de administrador**, establece/resetea su contraseña y le delega sobre esa OU
-los permisos **mínimos** para unir equipos (crear objetos equipo + reset
-password/escrituras validadas sobre los equipos de la OU; sin borrado). Si la
-contraseña se filtrara, el daño se limita a dar de alta equipos en esa OU.
+los permisos **mínimos** para **unir y sacar** equipos (crear y **borrar**
+objetos equipo + reset password/escrituras validadas sobre los equipos de la
+OU). Tanto el alta como la baja quedan **acotadas a esa OU**: si la contraseña
+se filtrara, el daño se limita a dar de alta/baja equipos en `ComputersLinux`.
 Auditoría: `dsacls "OU=ComputersLinux,DC=iesmhp,DC=local"`.
 
 ### Paso 2 — En el equipo del profesor: `2-CreaVault.sh`

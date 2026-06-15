@@ -108,9 +108,10 @@ Todas se pueden pisar puntualmente con `-e` (extra-vars > include_vars).
 ## Scripts de apoyo (`utilesAD/`)
 | Script | Dónde se ejecuta | Qué hace |
 |--------|------------------|----------|
-| `1-CreaUsuarioUnionAD.ps1` | Controlador de dominio (admin del dominio) | OU `ComputersLinux` (si falta) + cuenta `svc-union-linux` (si falta; resetea contraseña si existe) + delegación mínima de unión sobre la OU (crear equipos, reset password, validated writes dNSHostName/SPN, property set Account Restrictions; **sin borrado**). Idempotente: comprueba ACE a ACE. Solo pregunta la contraseña. **Sin tildes a propósito** (PS 5.1 lee UTF-8 sin BOM como ANSI) |
+| `1-CreaUsuarioUnionAD.ps1` | Controlador de dominio (admin del dominio) | OU `ComputersLinux` (si falta) + cuenta `svc-union-linux` (si falta; resetea contraseña si existe) + delegación mínima sobre la OU para **unir Y sacar** equipos (crear equipos, **borrar equipos**, reset password, validated writes dNSHostName/SPN, property set Account Restrictions). El borrado (`DeleteChild` de la clase equipo) queda **acotado a esta OU**. Idempotente: comprueba ACE a ACE. Lee OU/usuario de `entornoAD.yml`; el dominio lo autodetecta con `Get-ADDomain`. Solo pregunta la contraseña. **Sin tildes a propósito** (PS 5.1 lee UTF-8 sin BOM como ANSI) |
 | `2-CreaVault.sh` | Equipo del profesor | Crea `Ubuntu/ansible/vault/preparaAD-vault.yml` (AES256, committeable) con las credenciales de unión. Rechaza contraseñas con comilla simple (limitación del rol) |
 | `3-UneAlDominio.sh` | El equipo a unir (root) | Rol preparaAD (prerequisitos) → si no unido: `realm discover` + pregunta la contraseña de `svc-union-linux` (**en blanco** = pide OTRO usuario del dominio con permisos de unión y su contraseña) + `realm join` a la OU → verifica → re-pase del rol (despliega el snippet SSSD) |
+| `4-SacaDelDominio.sh` | El equipo a sacar (root) | **Inverso de 3**. Comprueba si está unido (si no, termina) → pide confirmación → pregunta la contraseña de `svc-union-linux` (**en blanco** = OTRO usuario con permisos de borrado) + `realm leave -U` (borra la cuenta de equipo en AD y deshace la config local) → verifica → elimina el snippet SSSD huérfano. Deja krb5/split-DNS/nsswitch intactos (facilitan reunir) |
 
 ## Cómo unir el equipo (cuando se decida)
 
@@ -198,7 +199,8 @@ Verificar cada una por separado: `resolvectl query iesmhp.local` (resolved) y
   documentados 2026-05-17 son de `enabled:`/`daemon_reload:` — no se usan).
 - **Limitación**: `preparaad_password_union` no debe contener comillas simples
   (se interpola en una orden shell; la tarea va con `no_log`).
-- **Salir del dominio**: `realm leave` (borra sssd.conf y deshabilita sssd).
-  El snippet `conf.d/10-iac-ad.conf` quedaría huérfano — borrarlo a mano si se
-  abandona el dominio definitivamente (si no, sssd intentaría arrancar con un
-  dominio sin sección `[sssd]`).
+- **Salir del dominio**: `utilesAD/4-SacaDelDominio.sh` (borra la cuenta de
+  equipo de la OU con `realm leave -U`, deshace la config local y elimina el
+  snippet `conf.d/10-iac-ad.conf` huérfano). A mano: `realm leave` deshace solo
+  la config local (deja la cuenta en AD); en ese caso borrar el snippet a mano
+  (si no, sssd intentaría arrancar con un dominio sin sección `[sssd]`).

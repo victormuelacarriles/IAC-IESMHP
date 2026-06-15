@@ -15,13 +15,14 @@
          establece/resetea su contrasena — es el UNICO dato que pide el
          script.
       3. Delegacion MINIMA sobre la OU para que la cuenta pueda
-         EXCLUSIVAMENTE unir equipos al dominio dentro de esa OU:
-           - Crear objetos EQUIPO (en la OU y sub-OUs).
+         EXCLUSIVAMENTE unir y sacar equipos del dominio dentro de esa OU:
+           - Crear objetos EQUIPO (en la OU y sub-OUs)  -> unir equipos.
+           - Borrar objetos EQUIPO (en la OU y sub-OUs) -> sacar equipos
+             (4-SacaDelDominio.sh / realm leave). Acotado a ESTA OU: si la
+             cuenta se filtrara, solo podria dar de alta/baja equipos aqui.
            - Sobre los equipos descendientes: Reset Password, escritura
              validada de dNSHostName y servicePrincipalName, y
              lectura/escritura del property set "Account Restrictions".
-         NO se delega el borrado: re-unir un equipo reinstalado REUTILIZA su
-         cuenta via reset password, no necesita borrarla.
          Comprueba ACE a ACE y solo anade las que falten.
 
     Los valores por defecto (usuario de union y nombre de OU) se leen del
@@ -150,9 +151,15 @@ $herAll  = [System.DirectoryServices.ActiveDirectorySecurityInheritance]::All
 $herDesc = [System.DirectoryServices.ActiveDirectorySecurityInheritance]::Descendents
 
 $reglas = @(
-    # Crear objetos EQUIPO en la OU (y sub-OUs). Sin DeleteChild a proposito.
+    # Crear objetos EQUIPO en la OU (y sub-OUs) — unir equipos (3-UneAlDominio.sh).
     (New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
         $sid, [System.DirectoryServices.ActiveDirectoryRights]::CreateChild, $tipo, $guidEquipo, $herAll)),
+    # Borrar objetos EQUIPO de la OU (y sub-OUs) — sacar equipos del dominio
+    # (4-SacaDelDominio.sh / realm leave). Mismo patron que CreateChild: el
+    # permiso de borrado queda ACOTADO a los equipos de ESTA OU (delegacion
+    # estandar "crear/borrar cuentas de equipo"). No alcanza a otras OUs.
+    (New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+        $sid, [System.DirectoryServices.ActiveDirectoryRights]::DeleteChild, $tipo, $guidEquipo, $herAll)),
     # Sobre los objetos EQUIPO descendientes de la OU:
     (New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
         $sid, [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight, $tipo, $guidResetPwd, $herDesc, $guidEquipo)),
@@ -200,9 +207,9 @@ else {
 # ---------------------------------------------------------------------------
 Write-Host ""
 Write-Host "================================================================"
-Write-Host " Listo. '$nt' SOLO puede unir equipos al dominio en:"
+Write-Host " Listo. '$nt' SOLO puede unir y sacar equipos del dominio en:"
 Write-Host "   $dnOU"
-Write-Host " (crear equipos + reset password/validated writes; sin borrado,"
+Write-Host " (crear/borrar equipos + reset password/validated writes;"
 Write-Host "  sin grupos privilegiados, sin permisos fuera de la OU)."
 Write-Host ""
 Write-Host " Siguiente paso (en el equipo del profesor, Linux):"
