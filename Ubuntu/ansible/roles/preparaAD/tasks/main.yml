@@ -121,6 +121,16 @@
               {% for ntp in preparaad_ntp.split(',') %}
               server {{ ntp | trim }} iburst prefer trust
               {% endfor %}
+              # Los DC Windows (w32time) suelen anunciar una distancia de raíz
+              # alta (~10 s, dispersión del reloj CMOS si el DC no sincroniza
+              # con un NTP fiable). chrony, con su maxdistance por defecto de
+              # 3 s, marca la fuente '^?' (inutilizable) y NUNCA la selecciona:
+              # 'makestep'/'waitsync' se quedan sin fuente y el reloj jamás da
+              # el salto (NTPSynchronized=no). Para Kerberos basta < 5 min, así
+              # que relajamos maxdistance para aceptar el DC pese a su
+              # dispersión. (El arreglo de fondo es sincronizar el w32time del
+              # DC con un NTP fiable; ver CLAUDE.md del rol.)
+              maxdistance 16.0
           register: preparaad_chrony_conf
 
         # restart NO cuelga el primer arranque (los que cuelgan son

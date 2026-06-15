@@ -28,11 +28,20 @@ Cumple el TODO `predominio` de `roles.yaml`. Sigue la doc oficial de Ubuntu:
    la espera, la unión posterior pillaba el reloj aún desfasado → *"join a
    medias"*, ver Estado/Notas). Prioridad a chrony:
    - **chrony** (Mint/Debian; no traen timesyncd): añade `server <ntp> iburst
-     prefer trust` a `chrony.conf` (bloque marcado, idempotente), reinicia el
-     servicio, **arma el salto** (`chronyc makestep 0.1 3` — step, no slew, en
-     las próximas muestras) y **espera** (`chronyc waitsync 30 0.05 0 1`, máx
-     ~30 s). OJO: un `chronyc makestep` lanzado al instante tras el restart es
-     un **no-op** (chrony aún no tiene muestras del NTP); de ahí el armar+esperar.
+     prefer trust` **+ `maxdistance 16.0`** a `chrony.conf` (bloque marcado,
+     idempotente), reinicia el servicio, **arma el salto** (`chronyc makestep
+     0.1 3` — step, no slew, en las próximas muestras) y **espera** (`chronyc
+     waitsync 30 0.05 0 1`, máx ~30 s). OJO: un `chronyc makestep` lanzado al
+     instante tras el restart es un **no-op** (chrony aún no tiene muestras del
+     NTP); de ahí el armar+esperar. **El `maxdistance` es imprescindible con DC
+     Windows**: w32time anuncia una *distancia de raíz* alta (~10 s) y el
+     `maxdistance` por defecto de chrony (3 s) marca la fuente `^?`
+     (inutilizable) → chrony **nunca la selecciona** y `makestep`/`waitsync` se
+     quedan sin fuente (síntoma: `chronyc sources -v` con `^? <DC> ... 377 ...
+     +/- 10s` pese a `Reach 377`). Relajarlo a 16 s acepta el DC; para Kerberos
+     basta < 5 min. El arreglo de fondo es sincronizar el w32time del DC con un
+     NTP fiable (si el DC va muy desfasado, su reloj CMOS deriva y la dispersión
+     crece).
    - **systemd-timesyncd** (Ubuntu Desktop por defecto): escribe
      `/etc/systemd/timesyncd.conf.d/50-iac-ad.conf`, lo reinicia y **sondea**
      `timedatectl … NTPSynchronized` hasta `yes` o ~30 s.
