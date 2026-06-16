@@ -515,12 +515,16 @@ LOCAL_AUTORIZADOS="$RAIZSCRIPTS/Autorizados.txt"
 cp "$LOCAL_AUTORIZADOS" /root/.ssh/authorized_keys
 ok "authorized_keys copiado"
 
-EQUIPOENMACS=$DISTRO
+# Nombre por defecto si la MAC no está en macs.csv: 'ld' + fecha de instalación
+# (AAAAMMDDHHMM). Se genera UNA sola vez aquí (momento de la instalación) y
+# NombreIP.sh lo conserva en el primer arranque, de modo que cada equipo sin
+# entrada en macs.csv obtiene un hostname único y trazable (p. ej. ld202606160934).
+EQUIPOENMACS="ld$(date +%Y%m%d%H%M)"
 if [ ! -f "$LOCAL_MACS" ]; then
-    err "No se encontró $LOCAL_MACS — el equipo quedará con nombre '$DISTRO'"
+    err "No se encontró $LOCAL_MACS — el equipo quedará con nombre '$EQUIPOENMACS'"
 else
     if ! grep -q -i "$MAC" "$LOCAL_MACS"; then
-        err "MAC $MAC no encontrada en macs.csv — nombre por defecto '$DISTRO'"
+        err "MAC $MAC no encontrada en macs.csv — nombre por defecto '$EQUIPOENMACS'"
     else
         INFO_MACS=$(grep -i "$MAC" "$LOCAL_MACS")
         info "Entrada en macs.csv: $INFO_MACS"

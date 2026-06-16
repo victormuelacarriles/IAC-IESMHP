@@ -47,8 +47,15 @@ LOCAL_MACS="$RAIZLOGS/macs.csv"
 echo "2-variales cargadas / descargando archivos desde GitHub"
 wget --header="Cache-Control: no-cache" -O $LOCAL_MACS $URL_MACS
 
-# Compruebo si la MAC está en el repositorio: si no está, se queda el nombre del equipo por defecto "mint"
-EQUIPOENMACS="mint"
+# Compruebo si la MAC está en el repositorio. Si NO está, se conserva el nombre
+# que asignó la instalación en 2-SetupSOdesdeLiveCD.sh (ld+fecha, p. ej.
+# ld202606160934), de modo que el hostname único por equipo no cambia en cada
+# arranque. Si el equipo aún tiene un nombre genérico (residuo del Live CD o de
+# versiones antiguas), se genera uno nuevo ld+AAAAMMDDHHMM.
+EQUIPOENMACS="$(hostname)"
+case "$EQUIPOENMACS" in
+    ubuntu|Ubuntu|mint|Mint|localhost|"") EQUIPOENMACS="ld$(date +%Y%m%d%H%M)" ;;
+esac
 if [ ! -f $LOCAL_MACS ]; then
     echorojo "No se ha encontrado el archivo de MACs: $LOCAL_MACS"
     echo "Por favor, compruebe la conexión a Internet y que el archivo está disponible en el repositorio."
