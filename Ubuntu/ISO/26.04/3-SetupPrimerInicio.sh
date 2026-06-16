@@ -161,10 +161,48 @@ mostrar_mensaje "Actualizando: (SSH no disponible)"
 echoverde "Ejecutando actualización del sistema en primer arranque en 5sg.." 
 sleep 5 # Espera 5 segundos para asegurar que el sistema esté completamente arrancado
 
-echoverde "Ajustadando la hora del sistema..."
-timedatectl set-timezone Europe/Madrid
-timedatectl set-ntp true
-
+echoverde "Ajustando la hora del sistema..."
+timedatectl set-timezone Europe/Madrid 2>/dev/null \
+    || echoamarillo "No se pudo fijar la zona horaria con timedatectl."
+# Servidores NTP por defecto (NTP= vacío → FallbackNTP de timesyncd).
+timedatectl set-ntp true 2>/dev/null || true
+systemctl restart systemd-timesyncd 2>/dev/null || true
+# Esperar a que NTP confirme sincronización (máx ~30 s) antes de continuar.
+for i in $(seq 1 15); do
+    [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = "yes" ] && break
+    sleep 2
+done
+if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = "yes" ]; then
+    echoverde "Hora sincronizada por NTP: $(date)"
+else
+    # Fallback HTTP: en las aulas el UDP 123 (NTP) suele estar filtrado, pero el
+    # TCP 443 (HTTPS) no. Leemos la hora de la cabecera «Date:» de una petición
+    # HTTPS: viene en GMT, así que `date -s` la interpreta y la convierte sola a
+    # Europe/Madrid (zona ya fijada). `hwclock --systohc` propaga al RTC.
+    echoamarillo "NTP no confirmó sincronización (¿UDP 123 bloqueado?); intento por HTTP..."
+    HORA_HTTP=""
+    for url in https://www.google.com https://github.com https://www.cloudflare.com; do
+        if command -v curl >/dev/null 2>&1; then
+            HORA_HTTP="$(curl -sI --max-time 10 "$url" 2>/dev/null \
+                | grep -i '^[[:space:]]*date:' | head -n1 \
+                | sed -E 's/^[[:space:]]*[Dd]ate:[[:space:]]*//; s/\r$//' || true)"
+        else
+            HORA_HTTP="$(wget -SqO /dev/null --timeout=10 "$url" 2>&1 \
+                | grep -i '^[[:space:]]*date:' | head -n1 \
+                | sed -E 's/^[[:space:]]*[Dd]ate:[[:space:]]*//; s/\r$//' || true)"
+        fi
+        if [ -n "$HORA_HTTP" ] && date -s "$HORA_HTTP" >/dev/null 2>&1; then
+            hwclock --systohc 2>/dev/null || true
+            echoverde "Hora sincronizada por HTTP ($url): $(date)"
+            break
+        fi
+        HORA_HTTP=""
+    done
+    [ -n "$HORA_HTTP" ] || echoamarillo "Tampoco se pudo sincronizar por HTTP; se continúa con: $(date)"
+fi
+# La corrección de hora PERSISTENTE en cada arranque (necesaria porque NTP está
+# filtrado y, en VMware con host Windows, el RTC se desajusta tras cada reinicio)
+# la instala el rol Ansible 'horaHTTP' (service + timer). Ver Ubuntu/ansible/roles/horaHTTP.
 
 echoverde "=== $SCRIPT3 detenido: $(date) ==="
 

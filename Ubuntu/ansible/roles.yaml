@@ -20,7 +20,8 @@
       apt:
         update_cache: yes
   roles:
-     - basicos       #cosas que debieras estar desde el livecd pero que recomprobamos #[python, pip, pipx, ansible] 
+     - basicos       #cosas que debieras estar desde el livecd pero que recomprobamos #[python, pip, pipx, ansible]
+     - horaHTTP      #Sincroniza la hora en CADA arranque (NTP y, si está filtrado el UDP 123, fallback HTTP). service+timer. Ver roles/horaHTTP/CLAUDE.md
      - nvidia
      - flatpak       #Instala el soporte de flatpak y el repositorio de Flathub
      # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml

@@ -19,6 +19,7 @@ Esta carpeta contiene la **configuración automática del equipo ya instalado**,
 | Rol | Estado en `roles.yaml` | Qué hace (resumen) |
 |-----|------------------------|--------------------|
 | [`basicos`](roles/basicos/CLAUDE.md) | ✅ activo (1º) | python3, pip, pipx, ansible |
+| [`horaHTTP`](roles/horaHTTP/CLAUDE.md) | ✅ activo (2º) | Sincroniza la hora en **cada arranque** (NTP y, si el UDP 123 está filtrado, **fallback HTTP** vía cabecera `Date:`). Instala script + `iac-sincroniza-hora.service` + `.timer`. Corrige el desajuste del RTC en VMware/host Windows tras reinicios |
 | [`clienteNAS`](roles/clienteNAS/CLAUDE.md) | ⛔ comentado | Cliente NFS del NAS del depto.: autodescubre exports (`showmount`) y los monta RO en `/mnt/nasDepInfo/` |
 | [`DirtyFrag`](roles/DirtyFrag/CLAUDE.md) | ✅ activo | Evalúa/mitiga la vuln. "Dirty Frag" (CVE-2026-43284 ESP/IPsec + CVE-2026-43500 RxRPC): bloquea `esp4`/`esp6`/`rxrpc` si no está protegido |
 | [`comparteaula`](roles/comparteaula/CLAUDE.md) | ⛔ no listado (en pruebas) | NFS unificado: detecta aula por IP, servidor/cliente |

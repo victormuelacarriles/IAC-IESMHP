@@ -200,8 +200,10 @@ parte vive en `Ubuntu/ansible/` y está **documentada con sus propios CLAUDE.md*
   por IP, equipo `-00` = servidor).
 - **`Ubuntu/ansible/roles/<rol>/CLAUDE.md`** — un fichero por rol con sus tareas,
   variables (`defaults/`) e issues conocidos. Roles documentados: `basicos`,
-  `certificados`, `clienteNAS` (cliente NFS del NAS del departamento; comentado
-  en `roles.yaml`), `comparteaula` (+ legacy `comparteaula32`/`comparteaula72`),
+  `horaHTTP` (sincroniza la hora en cada arranque por NTP y, si está filtrado el
+  UDP 123, por HTTP), `certificados`, `clienteNAS` (cliente NFS del NAS del
+  departamento; comentado en `roles.yaml`), `comparteaula` (+ legacy
+  `comparteaula32`/`comparteaula72`),
   `DirtyFrag` (mitiga CVE-2026-43284/43500), `flatpak` (soporte Flatpak + Flathub),
   `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al
   antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `Docker`
