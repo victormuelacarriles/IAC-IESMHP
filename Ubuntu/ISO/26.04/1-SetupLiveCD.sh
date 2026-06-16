@@ -84,7 +84,30 @@ done
 if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = "yes" ]; then
     echoverde "Hora sincronizada por NTP: $(date)"
 else
-    echoamarillo "NTP no confirmó sincronización (¿UDP 123 bloqueado?); se continúa con: $(date)"
+    # Fallback HTTP: en las aulas el UDP 123 (NTP) suele estar filtrado, pero el
+    # TCP 443 (HTTPS) no — de hecho 0b-Github.sh ya clonó el repo por ahí. Leemos
+    # la hora de la cabecera «Date:» de una petición HTTPS: viene en GMT, así que
+    # `date -s` la interpreta y la convierte sola a Europe/Madrid (zona ya fijada).
+    echoamarillo "NTP no confirmó sincronización (¿UDP 123 bloqueado?); intento por HTTP..."
+    HORA_HTTP=""
+    for url in https://www.google.com https://github.com https://www.cloudflare.com; do
+        if command -v curl >/dev/null 2>&1; then
+            HORA_HTTP="$(curl -sI --max-time 10 "$url" 2>/dev/null \
+                | grep -i '^[[:space:]]*date:' | head -n1 \
+                | sed -E 's/^[[:space:]]*[Dd]ate:[[:space:]]*//; s/\r$//' || true)"
+        else
+            HORA_HTTP="$(wget -SqO /dev/null --timeout=10 "$url" 2>&1 \
+                | grep -i '^[[:space:]]*date:' | head -n1 \
+                | sed -E 's/^[[:space:]]*[Dd]ate:[[:space:]]*//; s/\r$//' || true)"
+        fi
+        if [ -n "$HORA_HTTP" ] && date -s "$HORA_HTTP" >/dev/null 2>&1; then
+            hwclock --systohc 2>/dev/null || true
+            echoverde "Hora sincronizada por HTTP ($url): $(date)"
+            break
+        fi
+        HORA_HTTP=""
+    done
+    [ -n "$HORA_HTTP" ] || echoamarillo "Tampoco se pudo sincronizar por HTTP; se continúa con: $(date)"
 fi
 
 # ─────────────── Detectar discos ───────

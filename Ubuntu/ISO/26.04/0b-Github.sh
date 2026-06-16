@@ -74,7 +74,32 @@ done
 if [[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" == "yes" ]]; then
     log "Hora sincronizada por NTP: $(date)"
 else
-    warn "NTP no confirmó sincronización (¿UDP 123 bloqueado?); se continúa con: $(date)"
+    # Fallback HTTP: en las aulas el UDP 123 (NTP) suele estar filtrado, pero el
+    # TCP 443 (HTTPS) no — el clonado del repo de más abajo va por ahí. Leemos la
+    # hora de la cabecera «Date:» de una petición HTTPS: viene en GMT, así que
+    # `date -s` la interpreta y la convierte sola a Europe/Madrid (zona ya fijada).
+    # Con `set -euo pipefail` cada pipeline lleva `|| true` para que un grep sin
+    # coincidencia no aborte el script.
+    warn "NTP no confirmó sincronización (¿UDP 123 bloqueado?); intento por HTTP..."
+    HORA_HTTP=""
+    for url in https://www.google.com https://github.com https://www.cloudflare.com; do
+        if command -v curl >/dev/null 2>&1; then
+            HORA_HTTP="$(curl -sI --max-time 10 "$url" 2>/dev/null \
+                | grep -i '^[[:space:]]*date:' | head -n1 \
+                | sed -E 's/^[[:space:]]*[Dd]ate:[[:space:]]*//; s/\r$//' || true)"
+        else
+            HORA_HTTP="$(wget -SqO /dev/null --timeout=10 "$url" 2>&1 \
+                | grep -i '^[[:space:]]*date:' | head -n1 \
+                | sed -E 's/^[[:space:]]*[Dd]ate:[[:space:]]*//; s/\r$//' || true)"
+        fi
+        if [[ -n "$HORA_HTTP" ]] && date -s "$HORA_HTTP" >/dev/null 2>&1; then
+            hwclock --systohc 2>/dev/null || true
+            log "Hora sincronizada por HTTP ($url): $(date)"
+            break
+        fi
+        HORA_HTTP=""
+    done
+    [[ -n "$HORA_HTTP" ]] || warn "Tampoco se pudo sincronizar por HTTP; se continúa con: $(date)"
 fi
 
 # ─────────────── git ───────────────────
