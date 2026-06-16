@@ -252,6 +252,23 @@ echoverde "Instalando servidor SSH+ansible y limpiando..."
 apt-get install -y -o Dpkg::Options::="--force-confold" ssh ansible
 # Configurar SSH para permitir el acceso root
 sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+# Login por SSH de usuarios del DOMINIO (Active Directory): su contraseña vive
+# en AD y se valida por PAM->pam_sss, NO en /etc/shadow. El default COMPILADO de
+# OpenSSH es "UsePAM no", con el que sshd valida contra el shadow local -> un
+# usuario de dominio (sin entrada en shadow) falla SIEMPRE con "Could not get
+# shadow information for <user>" + "Failed password", aunque GDM/RDP sí entren
+# (esos pasan por PAM). El sshd_config de Ubuntu 26.04 viene SIN línea UsePAM, así
+# que cae al default "no". Drop-in que lo fuerza a "yes" (mismo fichero/contenido
+# que despliega el rol Ansible preparaAD — mantener en sync):
+mkdir -p /etc/ssh/sshd_config.d
+cat > /etc/ssh/sshd_config.d/60-iac-ad.conf <<'EOF'
+# Desplegado por 3-SetupPrimerInicio.sh y por el rol Ansible preparaAD (mismo
+# contenido; mantener en sync). Permite el login SSH de usuarios del dominio AD
+# vía PAM->pam_sss (sin esto: "Could not get shadow information for <user>").
+UsePAM yes
+PasswordAuthentication yes
+KbdInteractiveAuthentication yes
+EOF
 # Reiniciar el servicio SSH para aplicar los cambios
 service ssh restart
 

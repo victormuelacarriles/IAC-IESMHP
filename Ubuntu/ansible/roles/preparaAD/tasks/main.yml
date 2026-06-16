@@ -78,6 +78,46 @@
   tags: [preparaad, ad]
 
 # ---------------------------------------------------------------------------
+# 2b. SSH — login de usuarios del dominio (UsePAM en sshd)
+# ---------------------------------------------------------------------------
+# Los usuarios del DOMINIO autentican por PAM->pam_sss: su contraseña vive en
+# AD, NO en /etc/shadow. El default COMPILADO de OpenSSH es `UsePAM no`, con el
+# que sshd valida la contraseña contra el shadow local -> para un usuario de
+# dominio (sin entrada en shadow) falla SIEMPRE con "Could not get shadow
+# information for <user>" + "Failed password", aunque GDM y RDP sí entren (esos
+# pasan por PAM). El sshd_config de Ubuntu 26.04 viene SIN línea UsePAM, así que
+# cae al default `no`. El drop-in lo fuerza a `yes`. MISMO fichero y contenido
+# que escribe 3-SetupPrimerInicio.sh en el primer arranque (mantener en sync).
+# Se aplica SIEMPRE (no solo con el equipo unido): `UsePAM yes` es además el
+# valor por defecto y seguro de Ubuntu, e idempotente entre el script y el rol.
+- name: Permitir el login SSH de usuarios del dominio (UsePAM en sshd)
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/60-iac-ad.conf
+    content: |
+      # Desplegado por Ansible (rol preparaAD) y por 3-SetupPrimerInicio.sh
+      # (mismo contenido; mantener en sync). Permite el login SSH de usuarios
+      # del dominio AD vía PAM->pam_sss (sin esto: "Could not get shadow
+      # information for <user>" + "Failed password" pese a que GDM/RDP van).
+      UsePAM yes
+      PasswordAuthentication yes
+      KbdInteractiveAuthentication yes
+    owner: root
+    group: root
+    mode: "0644"
+  register: preparaad_ssh_dropin
+  tags: [preparaad, ad]
+
+# restart NO cuelga el primer arranque (bugs 2026-05-17: cuelgan
+# enabled:/daemon_reload:). sshd relee la config al reiniciar; las conexiones
+# SSH ya establecidas SOBREVIVEN al restart del daemon (no corta el pase de aula).
+- name: Reiniciar ssh para aplicar UsePAM
+  ansible.builtin.systemd:
+    name: ssh
+    state: restarted
+  when: preparaad_ssh_dropin is changed
+  tags: [preparaad, ad]
+
+# ---------------------------------------------------------------------------
 # 3. Reloj (Kerberos) y hostname (NetBIOS)
 # ---------------------------------------------------------------------------
 # Kerberos exige desfase < 5 min con el DC. Se apunta el cliente NTP del equipo

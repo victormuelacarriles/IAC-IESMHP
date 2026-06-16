@@ -22,6 +22,14 @@ Cumple el TODO `predominio` de `roles.yaml`. Sigue la doc oficial de Ubuntu:
    en el primer login de un usuario del dominio (en Ubuntu no viene activo, a
    diferencia de RHEL). Idempotente: solo corre si `pam_mkhomedir.so` no está
    ya en `/etc/pam.d/common-session`.
+2b. **SSH `UsePAM yes`** (drop-in `/etc/ssh/sshd_config.d/60-iac-ad.conf` con
+   `UsePAM yes` + `PasswordAuthentication yes` + `KbdInteractiveAuthentication
+   yes`, 0644): sin esto **los usuarios del dominio no pueden entrar por SSH**
+   aunque GDM/RDP sí funcionen (ver Estado/Notas). Se aplica **siempre** (no solo
+   con el equipo unido; `UsePAM yes` es el valor seguro por defecto). El **mismo
+   fichero/contenido** lo escribe también `3-SetupPrimerInicio.sh` en el primer
+   arranque (mantener en sync entre script y rol). Reinicia `ssh` solo si el
+   drop-in cambió (las conexiones SSH activas sobreviven al restart).
 3. **Reloj**: Kerberos exige desfase < 5 min con el DC. Si `preparaad_ntp` se
    define (normalmente el propio DC), el rol **detecta el cliente NTP** del
    equipo, lo apunta al DC y **espera a que sincronice ANTES de continuar** (sin
@@ -286,6 +294,25 @@ Verificar cada una por separado: `resolvectl query iesmhp.local` (resolved) y
   preparaad` (o a mano `sudo pam-auth-update --enable sss` + reponer `sss` en
   `passwd`/`group` de `/etc/nsswitch.conf` + `sudo systemctl restart sssd
   gnome-remote-desktop`).
+- **Usuario del dominio entra por GDM/RDP pero NO por SSH** (visto 2026-06-16 en
+  `IABD-08`): `ssh victor@<ip>` rechaza la contraseña correcta. En el log de
+  sshd: `error: Could not get shadow information for victor` + `Failed password`.
+  `getent passwd victor` SÍ resuelve. **Causa raíz**: `sshd -T` muestra
+  **`usepam no`**. El `/etc/ssh/sshd_config` de Ubuntu 26.04 viene sin línea
+  `UsePAM`, así que cae al **default COMPILADO de OpenSSH, que es `no`** (Ubuntu
+  lo solía fijar a `yes` en su sshd_config, pero el de 26.04 quedó reducido a
+  `Include` + `#PasswordAuthentication`). Con `UsePAM no`, sshd valida la
+  contraseña contra el `/etc/shadow` local; el usuario de dominio no tiene
+  entrada en shadow (su contraseña está en AD, se comprueba vía PAM→`pam_sss`)
+  → falla siempre. GDM/RDP funcionan porque **sí** pasan por PAM. **No es** el
+  formato del usuario: con `use_fully_qualified_names=False` se entra como
+  `victor` a secas (no `MHPIES\victor` ni `victor@dominio`). **Solución**: drop-in
+  `/etc/ssh/sshd_config.d/60-iac-ad.conf` con `UsePAM yes` + `PasswordAuthentication
+  yes` + `KbdInteractiveAuthentication yes` y `systemctl restart ssh`. Lo
+  despliega el **rol (paso 2b)** y `3-SetupPrimerInicio.sh` en el primer arranque.
+  Diagnóstico: `sshd -T | grep -i usepam` (debe ser `yes`); ojo: si falta la
+  línea `Include /etc/ssh/sshd_config.d/*.conf` en `sshd_config`, el drop-in se
+  ignora.
 - **Salir del dominio**: `utilesAD/4-SacaDelDominio.sh` (borra la cuenta de
   equipo de la OU con `realm leave -U`, deshace la config local y elimina el
   snippet `conf.d/10-iac-ad.conf` huérfano). A mano: `realm leave` deshace solo
