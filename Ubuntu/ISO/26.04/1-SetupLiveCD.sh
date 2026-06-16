@@ -65,6 +65,28 @@ mkdir -p "$RAIZSCRIPTS"
 mkdir -p "$RAIZLOG"
 echoverde "Carpetas de trabajo: $RAIZSCRIPTSLIVE, $RAIZSCRIPTS, $RAIZLOG"
 
+# ─────────────── Hora correcta (zona + NTP) ─────
+# Misma comprobación que en 0b-Github.sh: en el Live CD (sobre todo en VMware con
+# host Windows) el reloj aparece 2 h adelantado (RTC en hora local interpretado
+# como UTC). En 0b a veces el NTP aún no ha confirmado sincronización; se repite
+# aquí porque para este punto la red lleva más tiempo lista y suele cuajar.
+echoverde "Fijando zona horaria Europe/Madrid y sincronizando hora por NTP..."
+timedatectl set-timezone Europe/Madrid 2>/dev/null \
+    || echoamarillo "No se pudo fijar la zona horaria con timedatectl."
+# Servidores NTP por defecto (NTP= vacío → FallbackNTP de timesyncd).
+timedatectl set-ntp true 2>/dev/null || true
+systemctl restart systemd-timesyncd 2>/dev/null || true
+# Esperar a que NTP confirme sincronización (máx ~30 s) antes de continuar.
+for i in $(seq 1 15); do
+    [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = "yes" ] && break
+    sleep 2
+done
+if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = "yes" ]; then
+    echoverde "Hora sincronizada por NTP: $(date)"
+else
+    echoamarillo "NTP no confirmó sincronización (¿UDP 123 bloqueado?); se continúa con: $(date)"
+fi
+
 # ─────────────── Detectar discos ───────
 # Ignoramos USB y loop
 DISCOS_M2=($(lsblk -dno NAME,SIZE,TRAN | grep -v loop0 | grep -v 'usb' | grep nvme | sort -h -k2 | awk '{print $1}'))
