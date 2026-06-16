@@ -53,12 +53,34 @@ for i in $(seq 1 12); do
 done
 ping -c1 -W2 github.com &>/dev/null || err "No hay conexión a Internet. Abortando."
 
+# ─────────────── Hora correcta (zona + NTP) ─────
+# En el Live CD (sobre todo en VMware con host Windows) el reloj suele aparecer
+# 2 h adelantado: el RTC lleva hora local de Madrid pero Linux lo interpreta
+# como UTC y le suma el desfase de la zona. Con red disponible, fijamos la zona
+# Europe/Madrid y forzamos sincronización NTP (servidores por defecto de
+# systemd-timesyncd) para que la hora —y por tanto los timestamps de logs y de
+# los ficheros que crean los scripts siguientes— sean correctos.
+log "Fijando zona horaria Europe/Madrid y sincronizando hora por NTP..."
+timedatectl set-timezone Europe/Madrid 2>/dev/null \
+    || warn "No se pudo fijar la zona horaria con timedatectl."
+# Servidores NTP por defecto (NTP= vacío → FallbackNTP de timesyncd).
+timedatectl set-ntp true 2>/dev/null || true
+systemctl restart systemd-timesyncd 2>/dev/null || true
+# Esperar a que NTP confirme sincronización (máx ~30 s) antes de continuar.
+for i in $(seq 1 15); do
+    [[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" == "yes" ]] && break
+    sleep 2
+done
+if [[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" == "yes" ]]; then
+    log "Hora sincronizada por NTP: $(date)"
+else
+    warn "NTP no confirmó sincronización (¿UDP 123 bloqueado?); se continúa con: $(date)"
+fi
+
 # ─────────────── git ───────────────────
 
 
 
-#####FALLA AQUí!    Se queda bloqueado y no avanza. 
-#                    PROBAR: rehacer 0a-CreaISO.sh para que abra un terminal sin mas. 
 
 # update-initramfs tarda 2-4 min reconstruyendo el initramfs del kernel.
 # En un live CD no sirve para nada; lo sustituimos por un no-op antes de
