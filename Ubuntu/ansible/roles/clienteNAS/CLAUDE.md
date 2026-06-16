@@ -58,7 +58,7 @@ Sobreescribir las variables (en `defaults/main.yml`, en el playbook o con
 `nas_base_mount` basta.
 
 ## Estado
-- ✅ **activo** en `roles.yaml` (2º rol, tras `basicos`).
+- ⛔ **comentado** en `roles.yaml` (activable a demanda; estaba pensado como 2º rol, tras `basicos`).
 - A diferencia de `comparteaula`/`comparteaula32` (NFS de **aula**, lista o
   ruta fija), este rol es **NAS de departamento** y **autodescubre** todos los
   exports. No detecta aula por IP.

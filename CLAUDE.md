@@ -200,11 +200,16 @@ parte vive en `Ubuntu/ansible/` y está **documentada con sus propios CLAUDE.md*
   por IP, equipo `-00` = servidor).
 - **`Ubuntu/ansible/roles/<rol>/CLAUDE.md`** — un fichero por rol con sus tareas,
   variables (`defaults/`) e issues conocidos. Roles documentados: `basicos`,
-  `certificados`, `comparteaula` (+ legacy `comparteaula32`/`comparteaula72`),
+  `certificados`, `clienteNAS` (cliente NFS del NAS del departamento; comentado
+  en `roles.yaml`), `comparteaula` (+ legacy `comparteaula32`/`comparteaula72`),
+  `DirtyFrag` (mitiga CVE-2026-43284/43500), `flatpak` (soporte Flatpak + Flathub),
   `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al
   antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `Docker`
   (instalación de sistema para uso rootless; sustituye al antiguo `contenedores`),
   `preparaAD` (prerequisitos de unión a dominio Active Directory; no une por defecto).
+
+  El estado vigente (activo / comentado / no listado) de cada rol está en la
+  tabla de `Ubuntu/ansible/CLAUDE.md`; la fuente de verdad es `roles.yaml`.
 - **`Ubuntu/ansible/rolesUsuario/CLAUDE.md`** — configuraciones e **instalaciones
   de software sin permisos root** que **todo usuario** debería tener en su perfil
   (`~/.ssh`, dotfiles…), ejecutadas **como el usuario** (no root). Carpeta nueva,
@@ -219,7 +224,7 @@ especial el de `Ubuntu/ansible/` para saber qué roles están activos en `roles.
 
 - `macs.csv` — en raíz del repo (`/opt/IAC-IESMHP/macs.csv`). Formato: `MAC,hostname`. Usado por `2-SetupSOdesdeLiveCD.sh` y `NombreIP.sh` para asignar nombre al equipo.
 - `Autorizados.txt` — claves SSH públicas autorizadas para `root` y `usuario`.
-- `FondoIES-Ubuntu-Gris.png` — fondo de escritorio embebido en el squashfs.
+- `FondoIES-Ubuntu-Gris.png` — fondo de escritorio embebido en el squashfs. Vive en `Ubuntu/ISO/26.04/imagenesIES/` (junto a los demás fondos y los logos Plymouth `bgrt-fallback.png`/`watermark.png`), **no** en la raíz del repo.
 
 ---
 
