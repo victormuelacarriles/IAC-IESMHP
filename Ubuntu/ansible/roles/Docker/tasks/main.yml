@@ -143,3 +143,71 @@
     creates: "/var/lib/systemd/linger/{{ item }}"
   loop: "{{ docker_users_present }}"
   tags: [docker, rootless]
+
+# ---------------------------------------------------------------------------
+# 6. Automatizar el Docker rootless POR USUARIO en cada login (local y dominio)
+# ---------------------------------------------------------------------------
+# El daemon de SISTEMA está desactivado (rootless), así que un usuario que nunca
+# configuró su daemon rootless ve "failed to connect to the docker API at
+# unix:///var/run/docker.sock". Esto lo dispara automáticamente en CADA login:
+#   - parte ROOT (subuid/subgid + lingering): hook pam_exec en common-session.
+#   - parte USUARIO (setuptool install + arrancar docker.service + contexto):
+#     servicio systemd de usuario global (systemctl --global enable).
+# Cubre a los usuarios del DOMINIO porque el helper ROOT escribe el subuid
+# DIRECTAMENTE a /etc/subuid|subgid (usermod solo conoce /etc/passwd y falla con
+# usuarios SSSD). Ver roles/Docker/CLAUDE.md.
+#
+# NOTA primer arranque: se usa `command` (systemctl --global / pam-auth-update),
+# NO el módulo systemd con enabled:/daemon_reload: (que cuelga 3-SetupPrimerInicio,
+# bugs 2026-05-17). `systemctl --global enable` solo escribe symlinks en
+# /etc/systemd/user/, no contacta con ningún gestor.
+- name: Automatización rootless por usuario (hook PAM + servicio de usuario global)
+  when: docker_rootless_auto | bool
+  tags: [docker, rootless]
+  block:
+    - name: Instalar el helper ROOT de preparación rootless (subuid + lingering)
+      ansible.builtin.template:
+        src: iac-docker-rootless-prep.sh.j2
+        dest: /usr/local/sbin/iac-docker-rootless-prep.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Instalar el helper de USUARIO de preparación rootless
+      ansible.builtin.template:
+        src: iac-docker-rootless-user.sh.j2
+        dest: /usr/local/bin/iac-docker-rootless-user.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Instalar el servicio systemd de usuario (global)
+      ansible.builtin.copy:
+        src: iac-docker-rootless.service
+        dest: /etc/systemd/user/iac-docker-rootless.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Habilitar el servicio de usuario para TODOS los usuarios (global)
+      ansible.builtin.command: systemctl --global enable iac-docker-rootless.service
+      args:
+        creates: /etc/systemd/user/default.target.wants/iac-docker-rootless.service
+
+    - name: Instalar el perfil pam-config del hook rootless (pam_exec)
+      ansible.builtin.copy:
+        src: iac-docker-rootless
+        dest: /usr/share/pam-configs/iac-docker-rootless
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Comprobar si el hook pam_exec ya está en common-session
+      ansible.builtin.command: grep -q iac-docker-rootless-prep /etc/pam.d/common-session
+      register: docker_pam_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: Activar el hook PAM (pam-auth-update --enable iac-docker-rootless)
+      ansible.builtin.command: pam-auth-update --enable iac-docker-rootless
+      when: docker_pam_enabled.rc != 0

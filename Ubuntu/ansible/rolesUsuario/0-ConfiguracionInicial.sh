@@ -17,8 +17,9 @@
 #     4. Da por hecha la parte de sistema (rol roles/Docker como root:
 #        paquetes, repo, daemon de sistema desactivado). Completa lo que
 #        cabe en permisos del usuario (equivale al rol DockerRootless):
-#        subuid/subgid + lingering (con sudo si faltan), instala el daemon
-#        rootless del usuario (dockerd-rootless-setuptool.sh install),
+#        subuid/subgid (escritos A FICHERO, válido también para usuarios del
+#        DOMINIO; delega en el helper del rol Docker si está) + lingering,
+#        instala el daemon rootless del usuario (dockerd-rootless-setuptool.sh install),
 #        exporta DOCKER_HOST en ~/.bashrc y arranca docker.service --user.
 #        Corrige el síntoma típico de un usuario NUEVO:
 #          "failed to connect to the docker API at unix:///var/run/docker.sock"
@@ -188,19 +189,60 @@ if ! command -v dockerd-rootless-setuptool.sh >/dev/null 2>&1; then
 fi
 
 # ---- 2.2 subuid/subgid del usuario ---------------------------------
+# Se asignan escribiéndolos A FICHERO (/etc/subuid|subgid), NO con
+# `usermod --add-subuids`: usermod solo conoce /etc/passwd y FALLA con
+# usuarios del DOMINIO (viven en SSSD). Si el rol roles/Docker dejó su helper
+# (/usr/local/sbin/iac-docker-rootless-prep.sh — idempotente, hace subuid A
+# FICHERO + lingering), se delega en él; si no, se hace inline aquí (subuid;
+# el lingering lo cubre el paso 2.3).
+PREP_HELPER=/usr/local/sbin/iac-docker-rootless-prep.sh
+
+# Fallback inline: calcula el siguiente rango libre (sin solapar) y lo añade a
+# ambos ficheros vía sudo. Mismo algoritmo que el helper del rol.
+asignar_subid_fichero() {
+    local maxend=100000 f s c end linea
+    for f in /etc/subuid /etc/subgid; do
+        [ -f "$f" ] || continue
+        while IFS=: read -r _ s c; do
+            [ -n "$s" ] && [ -n "$c" ] || continue
+            case "$s" in *[!0-9]*) continue ;; esac
+            case "$c" in *[!0-9]*) continue ;; esac
+            end=$(( s + c ))
+            [ "$end" -gt "$maxend" ] && maxend="$end"
+        done < "$f"
+    done
+    linea="$USUARIO:$maxend:65536"
+    for f in /etc/subuid /etc/subgid; do
+        grep -q "^$USUARIO:" "$f" 2>/dev/null && continue
+        printf '%s\n' "$linea" | sudo tee -a "$f" >/dev/null || return 1
+    done
+    return 0
+}
+
 NEED_SUBID=0
 grep -q "^$USUARIO:" /etc/subuid 2>/dev/null || NEED_SUBID=1
 grep -q "^$USUARIO:" /etc/subgid 2>/dev/null || NEED_SUBID=1
 if [ "$NEED_SUBID" -eq 1 ]; then
     warn "El usuario '$USUARIO' no tiene rango subuid/subgid (el daemon"
-    warn "rootless no arranca sin ellos). Asignándolo con sudo…"
-    if command -v sudo >/dev/null 2>&1 && \
-       sudo usermod --add-subuids 100000-165535 \
-                     --add-subgids 100000-165535 "$USUARIO"; then
-        ok "subuid/subgid 100000-165535 asignados a $USUARIO."
+    warn "rootless no arranca sin ellos). Asignándolo (a fichero, vía sudo)…"
+    if ! command -v sudo >/dev/null 2>&1; then
+        err "Falta 'sudo' para asignar subuid/subgid. Hazlo como admin:"
+        err "  echo '$USUARIO:100000:65536' | sudo tee -a /etc/subuid /etc/subgid"
+        exit 3
+    fi
+    if [ -x "$PREP_HELPER" ]; then
+        # Helper del rol Docker: subuid A FICHERO + lingering (cubre 2.3).
+        if sudo "$PREP_HELPER" "$USUARIO"; then
+            ok "subuid/subgid (+ lingering) asignados vía helper del rol Docker."
+        else
+            err "El helper $PREP_HELPER falló. Revisa /etc/subuid y /etc/subgid."
+            exit 3
+        fi
+    elif asignar_subid_fichero; then
+        ok "subuid/subgid asignados a $USUARIO (a fichero)."
     else
         err "No se pudieron asignar subuid/subgid. Hazlo como admin:"
-        err "  sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $USUARIO"
+        err "  echo '$USUARIO:100000:65536' | sudo tee -a /etc/subuid /etc/subgid"
         exit 3
     fi
 else

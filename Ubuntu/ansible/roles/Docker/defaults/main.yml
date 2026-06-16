@@ -53,3 +53,34 @@ docker_subid_range: "100000-165535"
 # Networking will not work." y la red de los contenedores no funciona. Se
 # escribe en /etc/sysctl.d/ (no en /etc/sysctl.conf) y se aplica en caliente.
 docker_enable_ip_forward: true
+
+# ---------------------------------------------------------------------------
+# Automatización del Docker rootless POR USUARIO (login de CUALQUIER usuario,
+# incluidos los del DOMINIO AD) — sección 6 de tasks/main.yml.
+# ---------------------------------------------------------------------------
+# Con el daemon de SISTEMA desactivado (rootless), un usuario que nunca configuró
+# su daemon rootless ve "failed to connect to the docker API at
+# unix:///var/run/docker.sock". Este bloque lo configura SOLO en cada login:
+#   - parte ROOT (subuid/subgid + lingering): hook pam_exec en common-session
+#     (/usr/local/sbin/iac-docker-rootless-prep.sh).
+#   - parte USUARIO (setuptool install + arrancar docker.service + contexto
+#     rootless): servicio systemd de usuario global (systemctl --global enable).
+# Cubre usuarios de dominio porque el subuid se escribe DIRECTAMENTE a fichero
+# (usermod no sirve: solo conoce /etc/passwd, no SSSD).
+
+# Interruptor maestro. A false: no se instala el hook PAM ni el servicio de
+# usuario global (se vuelve al flujo manual de rolesUsuario/DockerRootless).
+docker_rootless_auto: true
+
+# UID mínimo para preparar a un usuario automáticamente (salta cuentas de
+# sistema/root). Locales (>=1000) y de dominio (uid alto) entran; root y
+# servicios quedan fuera.
+docker_rootless_min_uid: 1000
+
+# Tamaño del bloque subuid/subgid asignado a cada usuario (65536 = recomendado).
+docker_subid_block_size: 65536
+
+# Primer subuid/subgid disponible. El hook asigna rangos consecutivos a partir
+# de aquí sin solaparse con los ya existentes (los de useradd y los de la
+# sección 5 de este rol).
+docker_subid_block_start: 100000

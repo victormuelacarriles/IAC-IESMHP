@@ -18,6 +18,40 @@ Se aplica desde [`../../roles.yaml`](../../roles.yaml) (play `hosts: all`,
 | Repo + paquetes, daemon de sistema, subuid/subgid, lingering | **`roles/Docker`** (este) | root |
 | `dockerd-rootless-setuptool.sh`, `DOCKER_HOST`, `systemctl --user` | `rolesUsuario/roles/DockerRootless` | el propio usuario |
 
+## Automatización por usuario en cada login (local **y dominio AD**)
+
+> **Novedad 2026-06-16.** Antes la parte de usuario (`DockerRootless` /
+> `0-ConfiguracionInicial.sh` PARTE 2) había que lanzarla **a mano** por cada
+> usuario, así que un usuario nuevo o del **dominio** veía
+> `failed to connect to the docker API at unix:///var/run/docker.sock` (el
+> daemon de sistema está desactivado a propósito y el cliente caía al socket
+> inexistente). La **sección 6** del rol lo automatiza para **cualquier** usuario
+> que abra sesión, sin intervención.
+
+Dos piezas que reproducen el mismo reparto root/usuario:
+
+| Pieza | Qué hace | Cómo se dispara |
+|-------|----------|-----------------|
+| `iac-docker-rootless-prep.sh` (root) | subuid/subgid **escritos directamente a `/etc/subuid` + `/etc/subgid`** (rango único por usuario) + `loginctl enable-linger` | **hook `pam_exec`** en `common-session` (perfil pam-config `iac-docker-rootless`, activado con `pam-auth-update`), en cada apertura de sesión |
+| `iac-docker-rootless-user.sh` (usuario) | `dockerd-rootless-setuptool.sh install` + `systemctl --user enable --now docker` + `docker context use rootless` | **servicio systemd de usuario global** `iac-docker-rootless.service` (`systemctl --global enable`) |
+
+- **Por qué subuid a fichero y no `usermod`**: `usermod --add-subuids` solo opera
+  sobre `/etc/passwd` → **falla con usuarios del dominio** (viven en SSSD). El
+  helper ROOT calcula el siguiente rango libre y lo **escribe directamente** a
+  `/etc/subuid`/`/etc/subgid` (válido para locales y de dominio; con `flock` para
+  serializar logins simultáneos).
+- **Por qué `docker context use rootless` y no `DOCKER_HOST` en `~/.bashrc`**: el
+  contexto vive en `~/.docker` y lo respeta el cliente en **cualquier** shell
+  (login, no-login, gnome-terminal) y en apps gráficas, sin depender de que se
+  cargue `~/.bashrc`. (Si un usuario ya tiene `DOCKER_HOST` exportado de una
+  ejecución previa, no estorba: apunta al mismo socket.)
+- **Race del primer login**: el servicio de usuario espera hasta ~15 s a que el
+  hook `pam_exec` haya escrito el subuid; si no, se reintenta en el siguiente
+  login (el lingering garantiza que en el próximo boot ya está todo).
+- **Seguridad**: NO se concede sudo a los usuarios; la parte root la hace el
+  hook PAM. El perfil usa `optional` + `quiet`, así que un fallo del helper
+  **nunca bloquea el login**.
+
 ## Pasos (tasks/main.yml)
 1. **Repo oficial de Docker**: keyring en `/etc/apt/keyrings/docker.asc` +
    entrada APT `download.docker.com/linux/ubuntu`.
@@ -36,6 +70,16 @@ Se aplica desde [`../../roles.yaml`](../../roles.yaml) (play `hosts: all`,
    asigna el rango si falta, y habilita `loginctl enable-linger` (el daemon de
    usuario arranca en el boot sin login gráfico). Los que no existan aún se
    omiten con un aviso.
+6. **Automatización rootless por usuario en cada login** (`docker_rootless_auto`,
+   por defecto `true`): instala el helper ROOT
+   (`/usr/local/sbin/iac-docker-rootless-prep.sh`), el helper de usuario
+   (`/usr/local/bin/iac-docker-rootless-user.sh`), el servicio de usuario
+   `/etc/systemd/user/iac-docker-rootless.service` (lo habilita con
+   `systemctl --global enable`) y el perfil pam-config
+   `/usr/share/pam-configs/iac-docker-rootless` (lo activa con
+   `pam-auth-update --enable`). Ver la sección "Automatización por usuario…"
+   arriba. Usa `command` (no el módulo `systemd` con `enabled:`/`daemon_reload:`,
+   que cuelga el primer arranque — bugs 2026-05-17).
 
 ## Variables (`defaults/`)
 | Variable | Por defecto | Para qué |
@@ -45,8 +89,12 @@ Se aplica desde [`../../roles.yaml`](../../roles.yaml) (play `hosts: all`,
 | `docker_packages` / `docker_rootless_prereqs` | listas | Paquetes a instalar |
 | `docker_disable_system_daemon` | `true` | Parar/deshabilitar el daemon de sistema |
 | `docker_enable_ip_forward` | `true` | Activar `net.ipv4.ip_forward` (fix del aviso de red de `docker compose`) |
-| `docker_rootless_users` | `[usuario]` | Usuarios a preparar (subuid/subgid + lingering) |
+| `docker_rootless_users` | `[usuario]` | Usuarios a preparar explícitamente en el rol (subuid/subgid + lingering) |
 | `docker_subid_range` | `100000-165535` | Rango subuid/subgid si falta (ver aviso) |
+| `docker_rootless_auto` | `true` | Sección 6: hook PAM + servicio de usuario global (automatiza el rootless en cada login, incl. dominio). `false` ⇒ flujo manual de `DockerRootless` |
+| `docker_rootless_min_uid` | `1000` | UID mínimo para preparar a un usuario automáticamente (salta root/sistema) |
+| `docker_subid_block_size` | `65536` | Tamaño del bloque subuid/subgid del helper ROOT |
+| `docker_subid_block_start` | `100000` | Primer subuid/subgid disponible (rangos consecutivos sin solape) |
 
 ## Uso
 ```bash
@@ -61,6 +109,18 @@ Después, **cada usuario** completa su Docker rootless con el rol
 `DockerRootless` (ver su CLAUDE.md).
 
 ## Issues conocidos
+- **Usuario nuevo o del dominio: `failed to connect to the docker API at
+  unix:///var/run/docker.sock` (2026-06-16)**: el daemon de SISTEMA está
+  desactivado (rootless) y el usuario nunca configuró su daemon rootless. **Fix**:
+  sección 6 (hook PAM `iac-docker-rootless-prep.sh` + servicio de usuario global
+  `iac-docker-rootless.service`) lo configura automáticamente en cada login,
+  **incluidos los usuarios del dominio** (el subuid se escribe a fichero, no con
+  `usermod`, que no conoce SSSD). Diagnóstico en el equipo:
+  `journalctl -t iac-docker-rootless-prep -t iac-docker-rootless-user`,
+  `grep iac-docker-rootless-prep /etc/pam.d/common-session`,
+  `getent subuid <usuario>`, `systemctl --global is-enabled iac-docker-rootless.service`.
+  Tras el **primer** login el daemon puede tardar una sesión en quedar listo
+  (race subuid); en la siguiente sesión `docker run hello-world` ya va.
 - **"IPv4 forwarding is disabled. Networking will not work." (2026-06-09)**: al
   levantar un `docker compose` la red de los contenedores no funcionaba porque
   el kernel tenía `net.ipv4.ip_forward=0`. **Fix**: paso 3 del rol que fija

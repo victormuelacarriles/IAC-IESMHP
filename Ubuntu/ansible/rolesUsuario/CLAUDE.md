@@ -70,8 +70,12 @@ en permisos del usuario, resolviendo lo que falta con `sudo`.
    `dockerd-rootless-setuptool.sh`, avisa (hay que aplicar `roles/Docker` como
    root antes) y sale `2`.
 7. **subuid/subgid**: si el usuario no tiene rango en `/etc/subuid`+`/etc/subgid`
-   (sin ellos el daemon rootless no arranca), lo asigna con
-   `sudo usermod --add-subuids/--add-subgids 100000-165535`.
+   (sin ellos el daemon rootless no arranca), lo asigna **escribiéndolo a
+   fichero** (rango único, sin solape) — **NO** con `usermod --add-subuids`, que
+   solo conoce `/etc/passwd` y **falla con usuarios del dominio** (SSSD). Si el
+   rol `roles/Docker` dejó su helper `/usr/local/sbin/iac-docker-rootless-prep.sh`
+   (subuid a fichero + lingering, ver [`../roles/Docker`](../roles/Docker/CLAUDE.md)),
+   delega en él; si no, lo hace inline (vía `sudo tee`).
 8. **Lingering**: `sudo loginctl enable-linger <usuario>` para que el daemon de
    usuario arranque en el boot sin sesión gráfica (y exista `/run/user/<uid>`).
    Luego espera (hasta 10 s) a que el gestor systemd de usuario monte
