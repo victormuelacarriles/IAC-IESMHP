@@ -28,6 +28,10 @@
 # Los prerequisitos del rol (krb5.conf, split-DNS, reorden mDNS de nsswitch) se
 # DEJAN intactos: son inofensivos y facilitan una reunión posterior con
 # 3-UneAlDominio.sh.
+#
+# NO borra el RASTRO de los usuarios del dominio (sus /home, subuid/subgid,
+# lingering, daemon rootless, AccountsService): eso es DESTRUCTIVO y va aparte,
+# en 5-LimpiaUsuariosDominio.sh (se ejecuta después, con confirmación).
 # ===========================================================================
 #  Util: para sacar un equipo del dominio AD (rol preparaAD de IAC-IESMHP).
 #  Limpieza manual de un objeto huérfano (join a medias por reloj desfasado):
@@ -146,5 +150,9 @@ echo
 echo "================================================================"
 echo " Correcto: $(hostname) ya NO está unido a $UNIDO."
 echo " (La cuenta de equipo se ha borrado de la OU en AD.)"
-echo " Para volver a unirlo:  sudo $_DIR/3-UneAlDominio.sh"
+echo
+echo " Los HOMES y el rastro de los usuarios del dominio SIGUEN aquí."
+echo " Para borrarlos (DESTRUCTIVO):  sudo $_DIR/5-LimpiaUsuariosDominio.sh"
+echo "                  ver primero:  sudo $_DIR/5-LimpiaUsuariosDominio.sh --dry-run"
+echo " Para volver a unirlo:          sudo $_DIR/3-UneAlDominio.sh"
 echo "================================================================"
