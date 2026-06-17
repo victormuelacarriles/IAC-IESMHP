@@ -269,8 +269,23 @@ UsePAM yes
 PasswordAuthentication yes
 KbdInteractiveAuthentication yes
 EOF
+# El drop-in SOLO surte efecto si /etc/ssh/sshd_config tiene la directiva
+# `Include /etc/ssh/sshd_config.d/*.conf`. En instalaciones desde squashfs con
+# --force-confold puede conservarse un sshd_config viejo SIN esa línea: entonces
+# sshd IGNORA sshd_config.d/* y cae al UsePAM=no compilado de OpenSSH -> los
+# usuarios del DOMINIO no entran por SSH (su contraseña se valida contra el
+# shadow local, donde no existen). La garantizamos al PRINCIPIO del fichero
+# (en sshd_config gana la 1ª aparición de cada opción, así que el Include debe
+# ir arriba para que los drop-ins manden). Idempotente.
+if ! grep -qE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf' /etc/ssh/sshd_config; then
+    echoamarillo "sshd_config SIN 'Include sshd_config.d/*.conf'; lo añado (si no, el drop-in UsePAM se ignora)"
+    sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
+fi
 # Reiniciar el servicio SSH para aplicar los cambios
 service ssh restart
+# Verificación en el log: UsePAM DEBE quedar en 'yes' (si no, el login por SSH
+# de usuarios del dominio seguirá fallando con "Could not get shadow information").
+echoverde "sshd efectivo -> $(sshd -T 2>/dev/null | grep -iE '^(usepam|passwordauthentication|kbdinteractiveauthentication) ' | tr '\n' ' ')"
 
 #Obtener la IP de la máquina
 IP=$(hostname -I | awk '{print $1}')

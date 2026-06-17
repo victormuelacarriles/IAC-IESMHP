@@ -80,6 +80,13 @@ en permisos del usuario, resolviendo lo que falta con `sudo`.
    usuario arranque en el boot sin sesión gráfica (y exista `/run/user/<uid>`).
    Luego espera (hasta 10 s) a que el gestor systemd de usuario monte
    `XDG_RUNTIME_DIR`.
+8b. **`nf_tables`** (paso 2.3b, añadido 2026-06-17): si el módulo no está
+   cargado (`lsmod`), lo carga vía `sudo modprobe nf_tables`. Sin él, el
+   `dockerd-rootless-setuptool.sh install` del paso siguiente aborta con
+   *"Missing system requirements … modprobe nf_tables"*. En el flujo automático
+   lo deja cargado el rol [`../roles/Docker`](../roles/Docker/CLAUDE.md) (paso
+   3b: modules-load.d + hook PAM); aquí es la red de seguridad del lanzamiento
+   manual en un equipo recién instalado.
 9. **Instala el daemon rootless del usuario**: `dockerd-rootless-setuptool.sh
    install` (idempotente: se salta si ya existe
    `~/.config/systemd/user/docker.service`).

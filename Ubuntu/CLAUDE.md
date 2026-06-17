@@ -373,6 +373,7 @@ Antes de modificar un script, consulta ese directorio para evitar repetir correc
 - **`Auto-Ansible.sh` línea 38**: `ssh-keygen -F $HOSTNAME` falla. Pendiente de corrección.
 - **snapd en Live CD**: si en futuras ISOs snapd vuelve a arrancar, los síntomas son arranque lento (~3 min) y bloqueo de `ubuntu-desktop-bootstrap` antes del autostart.
 - **Wayland en VMware sin 3D**: si la sesión Wayland sigue fallando en la VM (GDM vuelve al login sin mensaje de error), verificar **Habilitar aceleración 3D** en Display → Accelerate 3D graphics de VMware. Con eso y `open-vm-tools-desktop`, Wayland funciona sin necesidad de `LIBGL_ALWAYS_SOFTWARE`.
+- **Hora en VMware**: en una máquina virtual VMware, activar **Settings → Options → VMware Tools → "Synchronize guest time with host"**. El UDP 123 (NTP) suele estar filtrado en las aulas y en VMware con host Windows el RTC se reinterpreta en cada arranque, así que el reloj del guest deriva entre reinicios. Con esta opción el host mantiene la hora correcta (complementa al rol `horaHTTP`; imprescindible si el equipo se une a un dominio AD, donde Kerberos exige <5 min de desfase con el DC).
 
 ### Bugs corregidos (historial para no repetirlos)
 

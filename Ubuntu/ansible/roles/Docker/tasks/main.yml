@@ -79,6 +79,38 @@
   tags: [docker, rootless]
 
 # ---------------------------------------------------------------------------
+# 3b. Módulo nf_tables (prerequisito de dockerd-rootless-setuptool.sh)
+# ---------------------------------------------------------------------------
+# Sin nf_tables cargado, `dockerd-rootless-setuptool.sh install` ABORTA con
+# "Missing system requirements ... modprobe nf_tables" (iptables-nft lo necesita
+# para el port-mapping), así que el daemon rootless del usuario NO se instala —
+# ni el servicio de usuario de la sección 6, ni el script manual
+# rolesUsuario/0-ConfiguracionInicial.sh. Ubuntu 26.04 NO carga nf_tables de
+# serie en una instalación desde squashfs. Lo dejamos cargado:
+#   - PERSISTENTE (/etc/modules-load.d) para todos los reinicios.
+#   - EN CALIENTE (modprobe) para el primer arranque en curso, sin esperar a
+#     reiniciar (el rol corre en 3-SetupPrimerInicio y el usuario entra por RDP
+#     en la MISMA sesión de arranque).
+- name: Cargar nf_tables de forma persistente (prerequisito de Docker rootless)
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/iac-docker-rootless.conf
+    content: |
+      # Desplegado por Ansible (rol Docker). nf_tables es prerequisito de
+      # dockerd-rootless-setuptool.sh (iptables-nft). Sin él, el daemon
+      # rootless del usuario no se instala ("Missing system requirements").
+      nf_tables
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [docker, rootless]
+
+- name: Cargar nf_tables en caliente (sin esperar al próximo reinicio)
+  ansible.builtin.command: modprobe nf_tables
+  changed_when: false
+  failed_when: false
+  tags: [docker, rootless]
+
+# ---------------------------------------------------------------------------
 # 4. Desactivar el daemon de Docker de SISTEMA (recomendado para rootless)
 # ---------------------------------------------------------------------------
 - name: Desactivar el daemon de Docker de sistema

@@ -28,8 +28,12 @@ Cumple el TODO `predominio` de `roles.yaml`. Sigue la doc oficial de Ubuntu:
    aunque GDM/RDP sí funcionen (ver Estado/Notas). Se aplica **siempre** (no solo
    con el equipo unido; `UsePAM yes` es el valor seguro por defecto). El **mismo
    fichero/contenido** lo escribe también `3-SetupPrimerInicio.sh` en el primer
-   arranque (mantener en sync entre script y rol). Reinicia `ssh` solo si el
-   drop-in cambió (las conexiones SSH activas sobreviven al restart).
+   arranque (mantener en sync entre script y rol). **Además garantiza la
+   directiva `Include /etc/ssh/sshd_config.d/*.conf`** en `sshd_config`
+   (`lineinfile`, al principio del fichero): sin ella sshd **ignora** el drop-in
+   y todo lo anterior es inútil (síntoma 2026-06-17, ver Estado/Notas). Reinicia
+   `ssh` solo si el drop-in **o** el Include cambiaron (las conexiones SSH activas
+   sobreviven al restart).
 3. **Reloj**: Kerberos exige desfase < 5 min con el DC. Si `preparaad_ntp` se
    define (normalmente el propio DC), el rol **detecta el cliente NTP** del
    equipo, lo apunta al DC y **espera a que sincronice ANTES de continuar** (sin
@@ -251,6 +255,15 @@ Verificar cada una por separado: `resolvectl query iesmhp.local` (resolved) y
   (chrony `waitsync` / sondeo de timesyncd) y `3-UneAlDominio.sh` aborta si el
   reloj no está OK. Limpiar un objeto huérfano: `adcli delete-computer
   --domain=DOMINIO --login-user=svc-union-linux HOSTNAME`.
+- **VMware — sincronizar la hora con el host (recomendado)**: en una máquina
+  virtual VMware, activar **Settings → Options → VMware Tools → "Synchronize
+  guest time with host"**. En las aulas el **UDP 123 (NTP)** suele estar filtrado
+  y en VMware con host Windows el RTC se reinterpreta en cada arranque, así que el
+  reloj del guest deriva entre reinicios y Kerberos puede fallar por desfase >5
+  min con el DC. Con esta opción el host mantiene la hora del guest correcta sin
+  depender del NTP del aula (complementa al rol `horaHTTP` y al NTP del dominio,
+  no los sustituye). Requiere `open-vm-tools` instalado (lo pone el rol `vmware`
+  / `3-SetupPrimerInicio.sh` en VMware).
 - **DC Samba — `Message stream modified` al fijar la contraseña de máquina**
   (visto 2026-06-15 en pruebas `mhpies.local` / `dcfake`): con el motor por
   defecto (adcli), `realm join`/`adcli join` autentica OK, crea la cuenta de
@@ -314,6 +327,19 @@ Verificar cada una por separado: `resolvectl query iesmhp.local` (resolved) y
   Diagnóstico: `sshd -T | grep -i usepam` (debe ser `yes`); ojo: si falta la
   línea `Include /etc/ssh/sshd_config.d/*.conf` en `sshd_config`, el drop-in se
   ignora.
+- **El drop-in NO bastaba en instalación desde squashfs — faltaba el `Include`**
+  (visto 2026-06-17 en VM recién instalada y unida al dominio): pese a que el rol
+  y `3-SetupPrimerInicio.sh` SÍ escribían `60-iac-ad.conf` con `UsePAM yes`,
+  `ssh victor@<ip>` seguía rechazando la contraseña mientras `su victor` (PAM)
+  funcionaba — prueba de que **sshd no usaba PAM** (`UsePAM no` efectivo). Causa:
+  el `/etc/ssh/sshd_config` conservado de la instalación squashfs (`apt-get
+  install ssh` con `--force-confold`) **no tenía** `Include
+  /etc/ssh/sshd_config.d/*.conf`, así que sshd ignoraba el drop-in. **Fix
+  2026-06-17**: el rol (paso 2b, `lineinfile`) y `3-SetupPrimerInicio.sh` (`sed
+  1i`) **garantizan ahora el Include** al principio de `sshd_config`. El script
+  además registra en el log `sshd -T | grep usepam` para verlo. En equipos ya
+  rotos: añadir esa línea a mano (arriba del fichero) + `systemctl restart ssh`,
+  o reaplicar el rol (`--tags preparaad`).
 - **Salir del dominio**: `utilesAD/4-SacaDelDominio.sh` (borra la cuenta de
   equipo de la OU con `realm leave -U`, deshace la config local y elimina el
   snippet `conf.d/10-iac-ad.conf` huérfano). A mano: `realm leave` deshace solo

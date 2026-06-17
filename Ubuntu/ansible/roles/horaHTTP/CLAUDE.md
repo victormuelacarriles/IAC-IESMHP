@@ -40,6 +40,14 @@ puede tardar hasta ~30 s si NTP está bloqueado, por la espera previa al HTTP).
 - `templates/` — `iac-sincroniza-hora.sh.j2`, `iac-sincroniza-hora.service.j2`, `iac-sincroniza-hora.timer.j2`.
 
 ## Notas
+- **En máquinas virtuales VMware: activar "Synchronize guest time with host"**
+  (Settings → Options → VMware Tools). Hace que el host mantenga la hora del guest
+  correcta sin depender del NTP del aula (UDP 123 filtrado) y evita la deriva del
+  RTC entre reinicios. **Complementa** a este rol (no lo sustituye): el rol cubre
+  los equipos físicos y los arranques donde el host no ajusta la hora. Requiere
+  `open-vm-tools` instalado. Relevante sobre todo si el equipo se une a un dominio
+  AD (Kerberos exige <5 min de desfase con el DC — ver
+  [`../preparaAD/CLAUDE.md`](../preparaAD/CLAUDE.md)).
 - **Idempotente** salvo el `state: started` del service (re-lanza el oneshot en
   cada ejecución del playbook para garantizar hora correcta; no marca el sistema
   como roto si falla, el script termina siempre con `exit 0`).

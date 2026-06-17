@@ -32,7 +32,7 @@ Dos piezas que reproducen el mismo reparto root/usuario:
 
 | Pieza | Qué hace | Cómo se dispara |
 |-------|----------|-----------------|
-| `iac-docker-rootless-prep.sh` (root) | subuid/subgid **escritos directamente a `/etc/subuid` + `/etc/subgid`** (rango único por usuario) + `loginctl enable-linger` | **hook `pam_exec`** en `common-session` (perfil pam-config `iac-docker-rootless`, activado con `pam-auth-update`), en cada apertura de sesión |
+| `iac-docker-rootless-prep.sh` (root) | `modprobe nf_tables` + subuid/subgid **escritos directamente a `/etc/subuid` + `/etc/subgid`** (rango único por usuario) + `loginctl enable-linger` | **hook `pam_exec`** en `common-session` (perfil pam-config `iac-docker-rootless`, activado con `pam-auth-update`), en cada apertura de sesión |
 | `iac-docker-rootless-user.sh` (usuario) | `dockerd-rootless-setuptool.sh install` + `systemctl --user enable --now docker` + `docker context use rootless` | **servicio systemd de usuario global** `iac-docker-rootless.service` (`systemctl --global enable`) |
 
 - **Por qué subuid a fichero y no `usermod`**: `usermod --add-subuids` solo opera
@@ -63,6 +63,11 @@ Dos piezas que reproducen el mismo reparto root/usuario:
    `/etc/sysctl.d/99-iac-docker.conf` y lo aplica en caliente. Sin esto,
    `docker compose` falla con *"IPv4 forwarding is disabled. Networking will not
    work."* (configurable, `docker_enable_ip_forward`).
+3b. **Carga `nf_tables`** (prerequisito de `dockerd-rootless-setuptool.sh`):
+   persistente en `/etc/modules-load.d/iac-docker-rootless.conf` y en caliente
+   con `modprobe`. Sin él, la instalación del daemon rootless del usuario aborta
+   con *"Missing system requirements … modprobe nf_tables"* (ver Issues). Ubuntu
+   26.04 no lo carga de serie en una instalación desde squashfs.
 4. **Desactiva el daemon de sistema** (`docker.service`/`docker.socket`) para
    que no compita con el rootless (configurable, `docker_disable_system_daemon`).
 5. **subuid/subgid + lingering por usuario**: para cada usuario de
@@ -109,6 +114,18 @@ Después, **cada usuario** completa su Docker rootless con el rol
 `DockerRootless` (ver su CLAUDE.md).
 
 ## Issues conocidos
+- **`Missing system requirements … modprobe nf_tables` al instalar el daemon
+  rootless (2026-06-17)**: `dockerd-rootless-setuptool.sh install` aborta si el
+  módulo `nf_tables` no está cargado (iptables-nft lo necesita para el
+  port-mapping). Ubuntu 26.04 NO lo carga de serie en una instalación desde
+  squashfs, así que tanto el servicio de usuario (sección 6) como el script
+  manual `0-ConfiguracionInicial.sh` fallaban en silencio y el usuario se
+  quedaba SIN Docker rootless. **Fix**: paso **3b** del rol (modules-load.d +
+  `modprobe`) y, como red de seguridad por sesión, `modprobe nf_tables` en el
+  hook ROOT `iac-docker-rootless-prep.sh`. El script manual también lo carga
+  (vía `sudo`) antes del setuptool. En equipos ya instalados: reaplicar el rol
+  (`--tags docker`) o `sudo modprobe nf_tables` + reabrir sesión. Comprobar:
+  `lsmod | grep nf_tables`.
 - **Usuario nuevo o del dominio: `failed to connect to the docker API at
   unix:///var/run/docker.sock` (2026-06-16)**: el daemon de SISTEMA está
   desactivado (rootless) y el usuario nunca configuró su daemon rootless. **Fix**:

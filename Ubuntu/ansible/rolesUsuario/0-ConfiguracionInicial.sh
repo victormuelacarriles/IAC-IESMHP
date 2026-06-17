@@ -275,6 +275,24 @@ if [ ! -d "$XDG_RUNTIME_DIR" ]; then
     warn "esta ejecución. Suele resolverse al abrir una sesión nueva."
 fi
 
+# ---- 2.3b Módulo nf_tables (prerequisito de dockerd-rootless-setuptool.sh) --
+# Sin nf_tables cargado, el setuptool de abajo ABORTA con "Missing system
+# requirements ... modprobe nf_tables" (iptables-nft lo necesita). Lo deja
+# cargado el rol Docker (modules-load.d) en el primer arranque, pero al lanzar
+# este script a mano en un equipo recién instalado puede no estarlo todavía.
+# Lo cargamos vía sudo (idempotente; modprobe no falla si ya está cargado).
+if ! lsmod 2>/dev/null | grep -qw nf_tables; then
+    log "Cargando el módulo nf_tables (prerequisito de Docker rootless)…"
+    if command -v sudo >/dev/null 2>&1 && sudo modprobe nf_tables 2>/dev/null; then
+        ok "Módulo nf_tables cargado."
+    else
+        warn "No se pudo cargar nf_tables; 'dockerd-rootless-setuptool.sh"
+        warn "install' puede fallar con 'Missing system requirements'."
+    fi
+else
+    ok "El módulo nf_tables ya está cargado."
+fi
+
 # ---- 2.4 Instalar el daemon rootless del usuario (idempotente) -----
 USER_UNIT="$HOME_DIR/.config/systemd/user/docker.service"
 if [ -f "$USER_UNIT" ]; then

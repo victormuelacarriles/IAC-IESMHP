@@ -107,6 +107,25 @@
   register: preparaad_ssh_dropin
   tags: [preparaad, ad]
 
+# El drop-in SOLO surte efecto si sshd_config tiene `Include
+# /etc/ssh/sshd_config.d/*.conf`. En instalaciones desde squashfs con
+# --force-confold puede conservarse un sshd_config viejo SIN esa línea: entonces
+# sshd IGNORA sshd_config.d/* y cae al UsePAM=no compilado -> el usuario del
+# dominio entra por GDM/RDP pero NO por SSH (síntoma 2026-06-17). Se garantiza al
+# PRINCIPIO del fichero (en sshd_config gana la 1ª aparición de cada opción).
+# lineinfile idempotente: si el Include ya está (regexp casa) no toca nada.
+- name: Garantizar la directiva Include en sshd_config (si no, el drop-in se ignora)
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    line: Include /etc/ssh/sshd_config.d/*.conf
+    regexp: '^\s*Include\s+/etc/ssh/sshd_config\.d/\*\.conf\s*$'
+    insertbefore: BOF
+    owner: root
+    group: root
+    mode: "0644"
+  register: preparaad_ssh_include
+  tags: [preparaad, ad]
+
 # restart NO cuelga el primer arranque (bugs 2026-05-17: cuelgan
 # enabled:/daemon_reload:). sshd relee la config al reiniciar; las conexiones
 # SSH ya establecidas SOBREVIVEN al restart del daemon (no corta el pase de aula).
@@ -114,7 +133,7 @@
   ansible.builtin.systemd:
     name: ssh
     state: restarted
-  when: preparaad_ssh_dropin is changed
+  when: preparaad_ssh_dropin is changed or preparaad_ssh_include is changed
   tags: [preparaad, ad]
 
 # ---------------------------------------------------------------------------
