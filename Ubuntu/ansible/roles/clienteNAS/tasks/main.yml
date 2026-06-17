@@ -4,7 +4,7 @@
 # `showmount -e`. Cada export se monta en {{ nas_base_mount }}/<nombre>.
 # Parametrizado en defaults/main.yml.
 
-#Antes de instalar el cliente NFS, comprobamos "dpkg --configure -a" para evitar que se quede a medias por un paquete roto (p.ej. virtualbox) y no instale el cliente NFS.
+#Antes de instalar el cliente NFS, comprobamos "dpkg --configure -a" para evitar que se quede a medias por un paquete roto y no instale el cliente NFS.
 - name: Asegurar que no hay paquetes a medio configurar 
   command: dpkg --configure -a
 

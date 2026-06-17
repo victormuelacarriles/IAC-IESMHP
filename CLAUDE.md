@@ -206,7 +206,7 @@ parte vive en `Ubuntu/ansible/` y está **documentada con sus propios CLAUDE.md*
   `comparteaula32`/`comparteaula72`),
   `DirtyFrag` (mitiga CVE-2026-43284/43500), `flatpak` (soporte Flatpak + Flathub),
   `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al
-  antiguo `xrdp`), `virtualbox`, `virtualboxFUERA`, `vmware`, `Docker`
+  antiguo `xrdp`), `vmware`, `Docker`
   (instalación de sistema para uso rootless; sustituye al antiguo `contenedores`),
   `preparaAD` (prerequisitos de unión a dominio Active Directory; no une por defecto).
 

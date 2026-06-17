@@ -31,8 +31,6 @@ Esta carpeta contiene la **configuración automática del equipo ya instalado**,
 | [`obs`](roles/obs/CLAUDE.md) | ✅ activo | OBS Studio |
 | [`rdp`](roles/rdp/CLAUDE.md) | ✅ activo | Servidor RDP **nativo de GNOME** (`grdctl --system`); sustituye a `xrdp` |
 | [`vscode`](roles/vscode/CLAUDE.md) | ✅ activo | VS Code desde .deb oficial |
-| [`virtualbox`](roles/virtualbox/CLAUDE.md) | ⛔ comentado (TODO versión) | VirtualBox desde repo Oracle |
-| [`virtualboxFUERA`](roles/virtualboxFUERA/CLAUDE.md) | no listado | Desinstala VirtualBox y limpia repos |
 | [`vmware`](roles/vmware/CLAUDE.md) | ⛔ comentado (falla compilación en 1er arranque) | VMware Workstation desde .bundle |
 | [`Docker`](roles/Docker/CLAUDE.md) | ✅ activo | Instalación de **sistema** de Docker para uso **rootless** (repo, paquetes, subuid/subgid, lingering). La parte por usuario la hace [`rolesUsuario/DockerRootless`](rolesUsuario/roles/DockerRootless/CLAUDE.md). Sustituye al antiguo `contenedores` |
 | [`preparaAD`](roles/preparaAD/CLAUDE.md) | ✅ activo | Prerequisitos de unión a dominio **Active Directory** `iesmhp.local` (realmd, SSSD, adcli, Kerberos, pam_mkhomedir) y comprobación de si el equipo ya está unido. **NO une al dominio** por defecto: la unión es bajo demanda con `preparaad_unir=true` + vault. Scripts de apoyo en `roles/preparaAD/utilesAD/` (cuenta delegada en el DC, vault, unión de un equipo). Cumple el TODO `predominio` |
