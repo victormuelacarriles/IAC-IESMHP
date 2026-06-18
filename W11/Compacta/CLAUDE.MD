@@ -43,8 +43,17 @@ Tareas previstas (13 bloques, por orden de ejecución):
 | 11 | Event logs | Limpiar todos los registros de eventos con `RecordCount > 0` |
 | 12 | Puntos de restauración | Eliminar todos salvo el más reciente (o todos si se indica) |
 | 13 | Cleanmgr | Ejecutar `cleanmgr /sagerun:1` en modo silencioso para limpieza adicional |
-| — | Defrag de consolidación | `defrag C: /X /H /U /V` consolida el espacio libre al final del volumen antes del zero-fill |
-| — | SDelete / zero-fill | `sdelete64.exe -accepteula -z C:` rellena el espacio libre con ceros (imprescindible para que VMware compacte). **Fallback**: si no hay `sdelete64.exe`, zero-fill por bucle de PowerShell |
+| — | Defrag + zero-fill **de todas las unidades de disco fijo** | Para **cada** unidad de disco fijo local (no USB, no red): `defrag X: /X /H /U /V` (consolida el hueco) seguido de `sdelete64.exe -accepteula -z X:` (rellena de ceros). **Fallback**: si no hay `sdelete64.exe`, zero-fill por bucle de PowerShell. La detección de unidades usa `Win32_LogicalDisk DriveType=3` y descarta los discos cuyo `BusType` es `USB` |
+
+**Detección de unidades**: solo se procesan unidades de **disco fijo local**
+(`DriveType=3`), excluyendo USB (incl. discos fijos conectados por bus USB),
+unidades de red y CD/DVD. La limpieza de los bloques 1–13 sigue siendo específica
+del sistema (`C:`); el defrag+zero-fill se aplica a **todas** las unidades fijas.
+
+**Log**: cada ejecución abre un `Start-Transcript` en
+`LimpiaW11.YYYYMMDD-HHMMSS.log` (marca de tiempo de inicio en el nombre, junto al
+script) que registra toda la salida. El resumen final muestra espacio
+inicial/final por unidad.
 
 **Requisito externo**: `sdelete64.exe` de Sysinternals (descargado manualmente o con
 `winget install Microsoft.Sysinternals.SDelete`). Si no está disponible, el script
@@ -64,7 +73,8 @@ Tareas previstas (por orden de ejecución):
 
 | Bloque | Acción |
 |--------|--------|
-| Localizar VM | El script recibe como argumento la ruta al `.vmx` (o la busca con `find` bajo un directorio indicado) |
+| Localizar VM | El script recibe como argumento la ruta al `.vmx` (o la busca con `find` bajo un directorio indicado). En modo directorio también localiza las `.iso` |
+| Analizar ISOs | Las imágenes `.iso` (ISO 9660/UDF) son de solo lectura: el script informa de su tamaño, indica que **no son comprimibles** y continúa sin tocarlas |
 | Verificar estado | `vmrun list` para confirmar que la VM está **apagada**; abortar si está corriendo o suspendida |
 | Localizar VMDKs | Extraer las rutas de los `.vmdk` declarados en el `.vmx` (solo discos, no snapshots intermedios) |
 | Espacio previo | Mostrar tamaño real de cada VMDK en el host antes de la operación |
@@ -81,9 +91,16 @@ Tareas previstas (por orden de ejecución):
 # Compactar una VM concreta
 bash CompactaW11.sh /ruta/a/MiVM.vmx
 
-# Buscar y compactar todas las VMs bajo un directorio
+# Analizar una ISO (informa de que no es comprimible)
+bash CompactaW11.sh /ruta/a/imagen.iso
+
+# Buscar y compactar todas las VMs (y analizar ISOs) bajo un directorio
 bash CompactaW11.sh /ruta/a/carpeta-de-vms/
 ```
+
+**Log**: cada ejecución redirige stdout/stderr (vía `tee`) a
+`CompactaW11.YYYYMMDD-HHMMSS.log` (marca de tiempo de inicio en el nombre, junto al
+script), conservando la salida en pantalla.
 
 ---
 

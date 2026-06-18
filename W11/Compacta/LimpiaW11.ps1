@@ -20,6 +20,20 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'   # continuar aunque falle un bloque individual
 
 # --------------------------------------------------------------------------
+# Log: todo lo que hace el script se vuelca a LimpiaW11.YYYYMMDD-HHMMSS.log
+# (marca de tiempo de inicio en el nombre) junto al propio script.
+# --------------------------------------------------------------------------
+$logStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$logDir   = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+$logFile  = Join-Path $logDir "LimpiaW11.$logStamp.log"
+try {
+    Start-Transcript -Path $logFile | Out-Null
+    Write-Host "Log: $logFile" -ForegroundColor DarkGray
+} catch {
+    Write-Host "No se pudo iniciar el log en $logFile : $_" -ForegroundColor Yellow
+}
+
+# --------------------------------------------------------------------------
 # Funciones auxiliares
 # --------------------------------------------------------------------------
 
@@ -99,6 +113,67 @@ function Invoke-ZeroFillFallback {
     }
 }
 
+function Get-DiscosFijos {
+    <#
+    Devuelve las letras (ej. 'C:') de TODAS las unidades de disco fijo locales,
+    excluyendo USB, unidades de red, CD/DVD y disquetes. Asi el zero-fill cubre
+    todos los discos del Windows, no solo C:.
+    #>
+    $letras = @()
+    # DriveType=3 => disco fijo local (excluye removibles, red y CD-ROM)
+    $volumenes = Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType=3' -ErrorAction SilentlyContinue
+    foreach ($v in $volumenes) {
+        $letra = $v.DeviceID            # 'C:'
+        $esUSB = $false
+        # Un disco fijo puede estar conectado por USB (DriveType sigue siendo 3):
+        # se descarta consultando el bus del disco fisico subyacente.
+        try {
+            $part = Get-Partition -DriveLetter ($letra.TrimEnd(':')) -ErrorAction SilentlyContinue
+            if ($part) {
+                $disk = Get-Disk -Number $part.DiskNumber -ErrorAction SilentlyContinue
+                if ($disk -and $disk.BusType -eq 'USB') { $esUSB = $true }
+            }
+        } catch { }
+        if ($esUSB) {
+            Write-Resultado "Omitida $letra (disco conectado por USB)" 'Gray'
+        } else {
+            $letras += $letra
+        }
+    }
+    return $letras
+}
+
+function Invoke-ZeroFillDrive {
+    <#
+    Defragmenta (consolidacion) y rellena de ceros el espacio libre de una unidad.
+    Usa sdelete64 si esta disponible ($script:sdeleteExe); si no, el fallback nativo.
+    #>
+    param([string]$Drive)
+
+    Write-Host ""
+    Write-Host "--- $Drive  defrag de consolidacion (defrag $Drive /X) ---" -ForegroundColor Magenta
+    try {
+        & defrag.exe $Drive /X /H /U /V
+        Write-Resultado "Defrag de consolidacion de $Drive completado"
+    } catch {
+        Write-Resultado "Aviso ejecutando defrag en $Drive : $_" 'Yellow'
+    }
+
+    Write-Host "--- $Drive  zero-fill del espacio libre ---" -ForegroundColor Magenta
+    if ($script:sdeleteExe) {
+        Write-Host "    Ejecutando: $($script:sdeleteExe) -accepteula -z $Drive (puede tardar)" -ForegroundColor Gray
+        try {
+            & $script:sdeleteExe -accepteula -z $Drive
+            Write-Resultado "Zero-fill de $Drive completado."
+        } catch {
+            Write-Resultado "Error ejecutando sdelete64 en $Drive : $_" 'Red'
+        }
+    } else {
+        Write-Host "    sdelete64 no disponible; usando fallback de PowerShell en $Drive..." -ForegroundColor Yellow
+        Invoke-ZeroFillFallback -Drive $Drive
+    }
+}
+
 # --------------------------------------------------------------------------
 # Inicio
 # --------------------------------------------------------------------------
@@ -111,6 +186,13 @@ Write-Host "================================================" -ForegroundColor Y
 $espacioInicial = Get-FreeSpaceGB -Drive 'C:'
 Write-Host ""
 Write-Host "Espacio libre inicial en C:  $espacioInicial GB" -ForegroundColor White
+
+# Detectar TODAS las unidades de disco fijo (no USB, no red) para el zero-fill final.
+# La limpieza de bloques 1-13 es especifica del sistema (C:); el zero-fill cubre todos.
+$discosFijos = @(Get-DiscosFijos)
+$espacioInicialPorDisco = @{}
+foreach ($d in $discosFijos) { $espacioInicialPorDisco[$d] = Get-FreeSpaceGB -Drive $d }
+Write-Host "Unidades de disco fijo detectadas: $($discosFijos -join ', ')" -ForegroundColor White
 
 # --------------------------------------------------------------------------
 # BLOQUE 1: Temporales de usuario y sistema
@@ -423,27 +505,13 @@ try {
 }
 
 # --------------------------------------------------------------------------
-# PASO PREVIO AL ZERO-FILL: Defrag de consolidacion del espacio libre
+# LOCALIZAR sdelete64.exe (una sola vez; se reutiliza para todas las unidades)
 # --------------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== DEFRAG de consolidacion (defrag C: /X) ===" -ForegroundColor Magenta
-Write-Host "    Consolida el espacio libre al final del volumen para que el zero-fill" -ForegroundColor Gray
-Write-Host "    y la posterior compactacion liberen el maximo posible..." -ForegroundColor Gray
-try {
-    & defrag.exe C: /X /H /U /V
-    Write-Resultado "Defrag de consolidacion completado"
-} catch {
-    Write-Resultado "Aviso ejecutando defrag: $_" 'Yellow'
-}
-
-# --------------------------------------------------------------------------
-# BLOQUE FINAL: SDelete zero-fill (imprescindible para compactacion VMware)
-# --------------------------------------------------------------------------
-Write-Host ""
-Write-Host "=== ZERO-FILL con SDelete (puede tardar mucho; proporcional al espacio libre) ===" -ForegroundColor Magenta
+Write-Host "=== Localizando sdelete64.exe ===" -ForegroundColor Magenta
 
 # Buscar sdelete64.exe en PATH, carpeta del script y rutas comunes
-$sdeleteExe = $null
+$script:sdeleteExe = $null
 $candidatos = @(
     'sdelete64.exe',
     "$PSScriptRoot\sdelete64.exe",
@@ -452,51 +520,59 @@ $candidatos = @(
     'C:\Sysinternals\sdelete64.exe'
 )
 foreach ($c in $candidatos) {
-    if (Get-Command $c -ErrorAction SilentlyContinue) { $sdeleteExe = $c; break }
-    if (Test-Path $c) { $sdeleteExe = $c; break }
+    if (Get-Command $c -ErrorAction SilentlyContinue) { $script:sdeleteExe = $c; break }
+    if (Test-Path $c) { $script:sdeleteExe = $c; break }
 }
 
-if (-not $sdeleteExe) {
-    Write-Host ""
+if (-not $script:sdeleteExe) {
     Write-Host "  AVISO: sdelete64.exe NO encontrado." -ForegroundColor Red
     Write-Host "  Para mejores resultados instalalo:  winget install Microsoft.Sysinternals.SDelete" -ForegroundColor Yellow
     Write-Host "  O descargalo de: https://learn.microsoft.com/en-us/sysinternals/downloads/sdelete" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "  Usando metodo de respaldo (zero-fill por bucle de PowerShell)..." -ForegroundColor Yellow
-    Invoke-ZeroFillFallback -Drive 'C:'
+    Write-Host "  Se usara el metodo de respaldo (zero-fill por bucle de PowerShell)." -ForegroundColor Yellow
 } else {
-    Write-Host "    sdelete64 encontrado en: $sdeleteExe" -ForegroundColor Gray
-    Write-Host "    Ejecutando: sdelete64 -accepteula -z C:  (esto puede tardar 10-30 min)" -ForegroundColor Gray
-    Write-Host "    El progreso lo muestra el propio sdelete64..." -ForegroundColor Gray
-    Write-Host ""
-    try {
-        & $sdeleteExe -accepteula -z C:
+    Write-Resultado "sdelete64 encontrado en: $($script:sdeleteExe)"
+}
+
+# --------------------------------------------------------------------------
+# BLOQUE FINAL: DEFRAG + ZERO-FILL de TODAS las unidades de disco fijo
+# (imprescindible para que VMware compacte; proporcional al espacio libre)
+# --------------------------------------------------------------------------
+Write-Host ""
+Write-Host "=== ZERO-FILL de todas las unidades de disco fijo (no USB, no red) ===" -ForegroundColor Magenta
+
+if ($discosFijos.Count -eq 0) {
+    Write-Resultado "No se detectaron unidades de disco fijo que procesar." 'Yellow'
+} else {
+    Write-Resultado "Unidades a procesar: $($discosFijos -join ', ')"
+    foreach ($drive in $discosFijos) {
         Write-Host ""
-        Write-Resultado "Zero-fill completado."
-    } catch {
-        Write-Resultado "Error ejecutando sdelete64: $_" 'Red'
+        Write-Host "############### Unidad $drive ###############" -ForegroundColor Cyan
+        Invoke-ZeroFillDrive -Drive $drive
     }
 }
 
 # --------------------------------------------------------------------------
 # Resumen final
 # --------------------------------------------------------------------------
-$espacioFinal = Get-FreeSpaceGB -Drive 'C:'
-$liberado      = [math]::Round($espacioFinal - $espacioInicial, 2)
-
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Yellow
-Write-Host "  RESUMEN" -ForegroundColor Yellow
+Write-Host "  RESUMEN (por unidad de disco fijo)" -ForegroundColor Yellow
 Write-Host "================================================" -ForegroundColor Yellow
-Write-Host "  Espacio libre inicial : $espacioInicial GB" -ForegroundColor White
-Write-Host "  Espacio libre final   : $espacioFinal GB"   -ForegroundColor White
-if ($liberado -ge 0) {
-    Write-Host "  Espacio liberado      : +$liberado GB"  -ForegroundColor Green
-} else {
-    Write-Host "  Espacio ocupado (diferencia): $liberado GB (normal si el zero-fill lleno el disco)" -ForegroundColor Yellow
+foreach ($d in $discosFijos) {
+    $ini = if ($espacioInicialPorDisco.ContainsKey($d)) { $espacioInicialPorDisco[$d] } else { 0 }
+    $fin = Get-FreeSpaceGB -Drive $d
+    $dif = [math]::Round($fin - $ini, 2)
+    $linea = "  {0}  inicial: {1} GB   final: {2} GB   diferencia: {3} GB" -f $d, $ini, $fin, $dif
+    if ($dif -ge 0) {
+        Write-Host $linea -ForegroundColor Green
+    } else {
+        Write-Host "$linea (normal si el zero-fill lleno el disco)" -ForegroundColor Yellow
+    }
 }
 Write-Host ""
 Write-Host "  Siguiente paso: APAGAR la VM (shutdown completo, NO suspender)" -ForegroundColor Cyan
 Write-Host "  Luego desde el host Linux: bash CompactaW11.sh <ruta/a/VM.vmx>" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Yellow
 Write-Host ""
+
+try { Stop-Transcript | Out-Null } catch { }

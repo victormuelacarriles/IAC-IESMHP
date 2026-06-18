@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 # CompactaW11.sh — Defrag y compactacion de VMDKs VMware
-# Uso: CompactaW11.sh <archivo.vmx> | <directorio>
+# Uso: CompactaW11.sh <archivo.vmx> | <archivo.iso> | <directorio>
 # Requiere: vmrun, vmware-vdiskmanager
 set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Log: todo lo que hace el script se vuelca a CompactaW11.YYYYMMDD-HHMMSS.log
+# (marca de tiempo de inicio en el nombre) junto al propio script.
+# ---------------------------------------------------------------------------
+LOG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_STAMP="$(date +%Y%m%d-%H%M%S)"
+LOG_FILE="$LOG_DIR/CompactaW11.$LOG_STAMP.log"
+# Duplicar stdout y stderr al fichero de log conservando la salida en pantalla.
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "=== CompactaW11.sh — inicio $(date '+%Y-%m-%d %H:%M:%S') ==="
+echo "=== Log: $LOG_FILE ==="
 
 # ---------------------------------------------------------------------------
 # Colores ANSI
@@ -311,6 +323,33 @@ procesar_vm() {
 }
 
 # ---------------------------------------------------------------------------
+# Analisis de una ISO
+# Las imagenes ISO (ISO 9660 / UDF) son de solo lectura y NO son comprimibles
+# con vmware-vdiskmanager. Se analizan (tamano) para informar y se continua.
+# ---------------------------------------------------------------------------
+procesar_iso() {
+    local iso="$1"
+    if [[ ! -f "$iso" ]]; then
+        error "No existe el fichero: $iso"
+        return 1
+    fi
+    iso="$(realpath "$iso")"
+
+    titulo "ISO: $(basename "$iso")"
+    local bytes
+    bytes="$(du -b "$iso" 2>/dev/null | awk '{print $1}')"
+    bytes="${bytes:-0}"
+    local human
+    human="$(bytes_a_human "$bytes")"
+    info "Tamano: $human  ($bytes bytes)"
+    info "Ubicacion: $iso"
+    warn "Las imagenes ISO son de solo lectura (ISO 9660/UDF) y NO son comprimibles."
+    warn "Se omite la compactacion de esta ISO y se continua."
+
+    TABLA_RESUMEN+=("$(printf '  %-45s  %8s  %8s  %8s' "$(basename "$iso") [ISO]" "$human" "$human" "n/a")")
+}
+
+# ---------------------------------------------------------------------------
 # Tabla resumen final
 # ---------------------------------------------------------------------------
 mostrar_resumen() {
@@ -341,10 +380,11 @@ mostrar_resumen() {
 # Entrada principal
 # ---------------------------------------------------------------------------
 if (( $# != 1 )); then
-    echo -e "${C_NEGRITA}Uso:${C_RESET}  $(basename "$0") <archivo.vmx> | <directorio>"
+    echo -e "${C_NEGRITA}Uso:${C_RESET}  $(basename "$0") <archivo.vmx> | <archivo.iso> | <directorio>"
     echo ""
     echo "  <archivo.vmx>   Compacta la VM especificada."
-    echo "  <directorio>    Busca todos los .vmx bajo el directorio y los procesa."
+    echo "  <archivo.iso>   Analiza la ISO (informa de que NO es comprimible)."
+    echo "  <directorio>    Busca todos los .vmx (y .iso) bajo el directorio y los procesa."
     exit 1
 fi
 
@@ -354,20 +394,30 @@ if [[ -f "$OBJETIVO" && "$OBJETIVO" == *.vmx ]]; then
     # Un solo .vmx
     procesar_vm "$OBJETIVO"
     mostrar_resumen
+elif [[ -f "$OBJETIVO" && "${OBJETIVO,,}" == *.iso ]]; then
+    # Una sola ISO: informativo (no comprimible)
+    procesar_iso "$OBJETIVO"
+    mostrar_resumen
 elif [[ -d "$OBJETIVO" ]]; then
-    # Directorio: buscar todos los .vmx
-    info "Modo directorio: buscando .vmx en '$OBJETIVO'..."
+    # Directorio: buscar todos los .vmx y todas las .iso
+    info "Modo directorio: buscando .vmx e .iso en '$OBJETIVO'..."
     vmx_encontrados=()
     while IFS= read -r f; do
         vmx_encontrados+=("$f")
     done < <(find "$OBJETIVO" -maxdepth 4 -name "*.vmx" | sort)
 
-    if (( ${#vmx_encontrados[@]} == 0 )); then
-        warn "No se encontraron ficheros .vmx en: $OBJETIVO"
+    iso_encontradas=()
+    while IFS= read -r f; do
+        iso_encontradas+=("$f")
+    done < <(find "$OBJETIVO" -maxdepth 4 -iname "*.iso" | sort)
+
+    if (( ${#vmx_encontrados[@]} == 0 && ${#iso_encontradas[@]} == 0 )); then
+        warn "No se encontraron ficheros .vmx ni .iso en: $OBJETIVO"
         exit 0
     fi
 
-    info "VMs encontradas: ${#vmx_encontrados[@]}"
+    info "VMs encontradas:  ${#vmx_encontrados[@]}"
+    info "ISOs encontradas: ${#iso_encontradas[@]} (se analizan pero NO se comprimen)"
 
     errores=0
     for vmx in "${vmx_encontrados[@]}"; do
@@ -377,6 +427,11 @@ elif [[ -d "$OBJETIVO" ]]; then
         fi
     done
 
+    # ISOs: solo analisis informativo, nunca abortan el proceso
+    for iso in "${iso_encontradas[@]}"; do
+        procesar_iso "$iso" || true
+    done
+
     mostrar_resumen
 
     if (( errores > 0 )); then
@@ -384,6 +439,6 @@ elif [[ -d "$OBJETIVO" ]]; then
         exit 2
     fi
 else
-    error "El argumento '$OBJETIVO' no es un fichero .vmx ni un directorio valido."
+    error "El argumento '$OBJETIVO' no es un fichero .vmx/.iso ni un directorio valido."
     exit 1
 fi
