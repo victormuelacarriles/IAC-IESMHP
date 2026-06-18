@@ -10,3 +10,21 @@
         #   /usr/lib/vmware/bin/vmware-setup-helper -e -o -u no -c no
         #   /usr/bin/vmware-modconfig --console --install-all 
 
+
+
+->Guia de máquinas
+
+10.0.72.140 ->Definitiva de victor. en proceso de formateo
+                        ->quiero meterla al dominio
+                        ->loguearme con mi usuario del dominio 
+                        ->empezar a prepararla
+
+10.0.72.134 ->  contiene la mv de windows 11 de victor (10.0.72.160)
+
+
+10.0.72.128 ->  contiene fake.mhpies.local  (dominio de pruebas)
+                w11 25H2 instalando
+                
+                
+
+                
