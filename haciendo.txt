@@ -23,7 +23,7 @@
 
 
 10.0.72.128 ->  contiene fake.mhpies.local  (dominio de pruebas)
-                w11 25H2 instalando
+                w11 25H2 instalando ->(Sobre workstation 25H2u1)
                 
                 
 

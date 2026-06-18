@@ -59,6 +59,46 @@ function Write-Resultado {
     Write-Host "    $Texto" -ForegroundColor $Color
 }
 
+function Invoke-ZeroFillFallback {
+    <#
+    Zero-fill sin sdelete: escribe ceros en un fichero temporal hasta llenar
+    el disco y luego lo borra. Menos eficiente que sdelete (no procesa
+    clusters ya liberados de la MFT) pero suficiente como red de seguridad.
+    #>
+    param([string]$Drive = 'C:')
+
+    $folderPath = "$Drive\LimpiezaTemp"
+    $zeroPath   = "$folderPath\zero.tmp"
+    $stream     = $null
+
+    if (-not (Test-Path $folderPath)) {
+        New-Item -ItemType Directory -Path $folderPath -Force | Out-Null
+    }
+
+    try {
+        Write-Host "    Escribiendo ceros en el espacio libre de $Drive ..." -ForegroundColor Yellow
+        Write-Host "    El sistema parecera detenerse al llenarse el disco; es lo esperado." -ForegroundColor Gray
+        $stream = [System.IO.File]::OpenWrite($zeroPath)
+        $buffer = New-Object byte[] (64KB)
+        while ($true) {
+            $stream.Write($buffer, 0, $buffer.Length)
+        }
+    } catch {
+        $msg = $_.Exception.Message
+        if ($msg -match 'space|espacio|disk full|disco') {
+            Write-Resultado "Zero-fill (fallback) completado: disco lleno de ceros."
+        } else {
+            Write-Resultado "Zero-fill (fallback) detenido: $msg" 'Yellow'
+        }
+    } finally {
+        if ($stream) {
+            try { $stream.Close(); $stream.Dispose() } catch { }
+        }
+        if (Test-Path $zeroPath)   { Remove-Item $zeroPath -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $folderPath) { Remove-Item $folderPath -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+}
+
 # --------------------------------------------------------------------------
 # Inicio
 # --------------------------------------------------------------------------
@@ -103,10 +143,13 @@ Write-Resultado "Elementos procesados en carpetas Temp: $borrados"
 # --------------------------------------------------------------------------
 # BLOQUE 2: Cache de Windows Update (SoftwareDistribution\Download)
 # --------------------------------------------------------------------------
-Write-Bloque "2/12  Cache de Windows Update"
+Write-Bloque "2/13  Cache de Windows Update y Delivery Optimization"
 
-Write-Resultado "Deteniendo wuauserv..." 'Gray'
+# Detener wuauserv Y bits: BITS gestiona las descargas y puede mantener
+# ficheros abiertos en SoftwareDistribution que impedirian su borrado.
+Write-Resultado "Deteniendo wuauserv y bits..." 'Gray'
 Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
+Stop-Service -Name bits -Force -ErrorAction SilentlyContinue
 
 $wuDir = 'C:\Windows\SoftwareDistribution\Download'
 if (Test-Path $wuDir) {
@@ -120,13 +163,27 @@ if (Test-Path $wuDir) {
     Write-Resultado "Directorio no encontrado: $wuDir" 'Yellow'
 }
 
-Write-Resultado "Reiniciando wuauserv..." 'Gray'
+# Cache de Delivery Optimization (descargas P2P de actualizaciones): puede
+# ocupar varios GB. El cmdlet solo existe en algunas ediciones de Windows.
+if (Get-Command Delete-DeliveryOptimizationCache -ErrorAction SilentlyContinue) {
+    try {
+        Delete-DeliveryOptimizationCache -Force -ErrorAction SilentlyContinue
+        Write-Resultado "Cache de Delivery Optimization eliminada"
+    } catch {
+        Write-Resultado "Aviso al limpiar Delivery Optimization: $_" 'Yellow'
+    }
+} else {
+    Write-Resultado "Cmdlet Delete-DeliveryOptimizationCache no disponible (omitido)" 'Gray'
+}
+
+Write-Resultado "Reiniciando wuauserv y bits..." 'Gray'
 Start-Service -Name wuauserv -ErrorAction SilentlyContinue
+Start-Service -Name bits -ErrorAction SilentlyContinue
 
 # --------------------------------------------------------------------------
 # BLOQUE 3: WinSxS / Component Store (DISM)
 # --------------------------------------------------------------------------
-Write-Bloque "3/12  WinSxS / Component Store (DISM - puede tardar varios minutos)"
+Write-Bloque "3/13  WinSxS / Component Store (DISM - puede tardar varios minutos)"
 Write-Host "    AVISO: /ResetBase es IRREVERSIBLE. Desinstalar actualizaciones no sera posible despues." -ForegroundColor Red
 Write-Host "    Ejecutando DISM /StartComponentCleanup /ResetBase ..." -ForegroundColor Gray
 
@@ -134,18 +191,51 @@ try {
     $dismOutput = & DISM.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase 2>&1
     $exitCode = $LASTEXITCODE
     if ($exitCode -eq 0) {
-        Write-Resultado "DISM completado correctamente (exit 0)"
+        Write-Resultado "DISM /ResetBase completado correctamente (exit 0)"
     } else {
-        Write-Resultado "DISM termino con codigo $exitCode (puede ser normal si no hay nada que limpiar)" 'Yellow'
+        Write-Resultado "DISM /ResetBase termino con codigo $exitCode (puede ser normal si no hay nada que limpiar)" 'Yellow'
     }
 } catch {
-    Write-Resultado "Error ejecutando DISM: $_" 'Red'
+    Write-Resultado "Error ejecutando DISM /ResetBase: $_" 'Red'
+}
+
+# /SPSuperseded: elimina componentes de service packs reemplazados (espacio extra)
+Write-Host "    Ejecutando DISM /SPSuperseded ..." -ForegroundColor Gray
+try {
+    $null = & DISM.exe /Online /Cleanup-Image /SPSuperseded 2>&1
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -eq 0) {
+        Write-Resultado "DISM /SPSuperseded completado correctamente (exit 0)"
+    } else {
+        Write-Resultado "DISM /SPSuperseded termino con codigo $exitCode (normal si no hay service pack que limpiar)" 'Yellow'
+    }
+} catch {
+    Write-Resultado "Error ejecutando DISM /SPSuperseded: $_" 'Yellow'
 }
 
 # --------------------------------------------------------------------------
-# BLOQUE 4: Papelera de reciclaje
+# BLOQUE 4: Compresion CompactOS de los ficheros del sistema operativo
 # --------------------------------------------------------------------------
-Write-Bloque "4/12  Papelera de reciclaje (todos los perfiles)"
+Write-Bloque "4/13  Compresion CompactOS del sistema operativo"
+
+# compact /compactos:always comprime los binarios del SO con XPRESS4K.
+# Ahorro permanente de ~1-2 GB con impacto minimo en rendimiento en una VM.
+Write-Host "    Ejecutando compact /compactos:always (puede tardar unos minutos)..." -ForegroundColor Gray
+try {
+    & compact.exe /compactos:always 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Resultado "CompactOS activado (ficheros del SO comprimidos)"
+    } else {
+        Write-Resultado "compact termino con codigo $LASTEXITCODE" 'Yellow'
+    }
+} catch {
+    Write-Resultado "Error ejecutando compact: $_" 'Yellow'
+}
+
+# --------------------------------------------------------------------------
+# BLOQUE 5: Papelera de reciclaje
+# --------------------------------------------------------------------------
+Write-Bloque "5/13  Papelera de reciclaje (todos los perfiles)"
 
 try {
     Clear-RecycleBin -Force -ErrorAction SilentlyContinue
@@ -157,7 +247,7 @@ try {
 # --------------------------------------------------------------------------
 # BLOQUE 5: Prefetch
 # --------------------------------------------------------------------------
-Write-Bloque "5/12  Prefetch"
+Write-Bloque "6/13  Prefetch"
 
 $prefetchDir = 'C:\Windows\Prefetch'
 if (Test-Path $prefetchDir) {
@@ -174,7 +264,7 @@ if (Test-Path $prefetchDir) {
 # --------------------------------------------------------------------------
 # BLOQUE 6: Minidumps y memory.dmp
 # --------------------------------------------------------------------------
-Write-Bloque "6/12  Minidumps y volcados de memoria"
+Write-Bloque "7/13  Minidumps y volcados de memoria"
 
 $dumpPaths = @(
     'C:\Windows\Minidump',
@@ -201,7 +291,7 @@ Write-Resultado "Volcados de memoria eliminados: $totalDumps"
 # --------------------------------------------------------------------------
 # BLOQUE 7: Thumbnails e Icon cache de todos los perfiles
 # --------------------------------------------------------------------------
-Write-Bloque "7/12  Thumbnails e Icon cache"
+Write-Bloque "8/13  Thumbnails e Icon cache"
 
 # Detener Explorer para liberar el iconcache
 Write-Resultado "Deteniendo explorer.exe para liberar caches..." 'Gray'
@@ -232,7 +322,7 @@ Write-Resultado "Caches de miniaturas/iconos eliminados: $totalThumb"
 # --------------------------------------------------------------------------
 # BLOQUE 8: Hibernacion (hiberfil.sys)
 # --------------------------------------------------------------------------
-Write-Bloque "8/12  Hibernacion"
+Write-Bloque "9/13  Hibernacion"
 
 try {
     & powercfg.exe /h off 2>&1 | Out-Null
@@ -244,7 +334,7 @@ try {
 # --------------------------------------------------------------------------
 # BLOQUE 9: Fichero de paginacion (pagefile.sys)
 # --------------------------------------------------------------------------
-Write-Bloque "9/12  Fichero de paginacion"
+Write-Bloque "10/13 Fichero de paginacion"
 
 # Solo se reporta el tamano actual; no se elimina automaticamente para
 # evitar inestabilidad. El usuario puede decidir reducirlo manualmente.
@@ -269,7 +359,7 @@ try {
 # --------------------------------------------------------------------------
 # BLOQUE 10: Registros de eventos de Windows
 # --------------------------------------------------------------------------
-Write-Bloque "10/12 Registros de eventos de Windows"
+Write-Bloque "11/13 Registros de eventos de Windows"
 
 try {
     $logs = Get-WinEvent -ListLog * -ErrorAction SilentlyContinue | Where-Object { $_.RecordCount -gt 0 }
@@ -288,7 +378,7 @@ try {
 # --------------------------------------------------------------------------
 # BLOQUE 11: Puntos de restauracion del sistema
 # --------------------------------------------------------------------------
-Write-Bloque "11/12 Puntos de restauracion del sistema"
+Write-Bloque "12/13 Puntos de restauracion del sistema"
 
 try {
     # Eliminar todos los puntos de restauracion excepto el mas reciente
@@ -309,7 +399,7 @@ try {
 # --------------------------------------------------------------------------
 # BLOQUE 12: Cleanmgr (Liberador de espacio en disco)
 # --------------------------------------------------------------------------
-Write-Bloque "12/12 Cleanmgr (Liberador de espacio en disco)"
+Write-Bloque "13/13 Cleanmgr (Liberador de espacio en disco)"
 
 # Configurar la clave de registro para sagerun:1 (seleccionar todo)
 try {
@@ -330,6 +420,20 @@ try {
     }
 } catch {
     Write-Resultado "Error ejecutando cleanmgr: $_" 'Yellow'
+}
+
+# --------------------------------------------------------------------------
+# PASO PREVIO AL ZERO-FILL: Defrag de consolidacion del espacio libre
+# --------------------------------------------------------------------------
+Write-Host ""
+Write-Host "=== DEFRAG de consolidacion (defrag C: /X) ===" -ForegroundColor Magenta
+Write-Host "    Consolida el espacio libre al final del volumen para que el zero-fill" -ForegroundColor Gray
+Write-Host "    y la posterior compactacion liberen el maximo posible..." -ForegroundColor Gray
+try {
+    & defrag.exe C: /X /H /U /V
+    Write-Resultado "Defrag de consolidacion completado"
+} catch {
+    Write-Resultado "Aviso ejecutando defrag: $_" 'Yellow'
 }
 
 # --------------------------------------------------------------------------
@@ -355,10 +459,11 @@ foreach ($c in $candidatos) {
 if (-not $sdeleteExe) {
     Write-Host ""
     Write-Host "  AVISO: sdelete64.exe NO encontrado." -ForegroundColor Red
-    Write-Host "  Sin zero-fill, vmware-vdiskmanager -k no podra liberar espacio." -ForegroundColor Red
-    Write-Host "  Instalar con:  winget install Microsoft.Sysinternals.SDelete" -ForegroundColor Yellow
-    Write-Host "  O descargar de: https://learn.microsoft.com/en-us/sysinternals/downloads/sdelete" -ForegroundColor Yellow
-    Write-Host "  Despues ejecutar manualmente: sdelete64.exe -z C:" -ForegroundColor Yellow
+    Write-Host "  Para mejores resultados instalalo:  winget install Microsoft.Sysinternals.SDelete" -ForegroundColor Yellow
+    Write-Host "  O descargalo de: https://learn.microsoft.com/en-us/sysinternals/downloads/sdelete" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Usando metodo de respaldo (zero-fill por bucle de PowerShell)..." -ForegroundColor Yellow
+    Invoke-ZeroFillFallback -Drive 'C:'
 } else {
     Write-Host "    sdelete64 encontrado en: $sdeleteExe" -ForegroundColor Gray
     Write-Host "    Ejecutando: sdelete64 -accepteula -z C:  (esto puede tardar 10-30 min)" -ForegroundColor Gray

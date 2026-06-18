@@ -26,26 +26,29 @@ Estos dos pasos los cubren los dos scripts de esta carpeta.
 **Entorno**: PowerShell como Administrador dentro de la propia VM Windows 11.
 **Objetivo**: maximizar el espacio libre del disco virtual antes de la compactación.
 
-Tareas previstas (por orden de ejecución):
+Tareas previstas (13 bloques, por orden de ejecución):
 
-| Bloque | Acción |
-|--------|--------|
-| Limpieza de temp | `%TEMP%`, `C:\Windows\Temp`, `C:\Windows\SoftwareDistribution\Download` |
-| Windows Update | Vaciar caché de actualizaciones descargadas (`SoftwareDistribution\Download`) |
-| WinSxS / Component Store | `DISM /Online /Cleanup-Image /StartComponentCleanup /ResetBase` |
-| Papelera | Vaciar todas las papeleras de todos los perfiles |
-| Prefetch | `C:\Windows\Prefetch\*` |
-| Minidumps | `C:\Windows\Minidump\*` y `C:\Windows\memory.dmp` |
-| Thumbnails / Icon cache | Bases de datos de miniaturas de todos los perfiles |
-| Hibernación | `powercfg /h off` (elimina `hiberfil.sys`) |
-| Pagefile | Opcional: reducir o eliminar temporalmente el fichero de paginación |
-| Event logs | Limpiar todos los registros de eventos de Windows |
-| Puntos de restauración | Eliminar todos salvo el más reciente (o todos si se indica) |
-| Cleanmgr | Ejecutar `cleanmgr /sagerun:1` en modo silencioso para limpieza adicional |
-| SDelete / zero-fill | Ejecutar `sdelete64.exe -z C:` para rellenar el espacio libre con ceros (imprescindible para que VMware compacte eficientemente) |
+| # | Bloque | Acción |
+|---|--------|--------|
+| 1 | Limpieza de temp | `%TEMP%`/`%TMP%`, `C:\Windows\Temp` y `AppData\Local\Temp` de todos los perfiles |
+| 2 | Windows Update + Delivery Optimization | Para `wuauserv` **y `bits`**, vacía `SoftwareDistribution\Download` y `Delete-DeliveryOptimizationCache`, reinicia ambos servicios |
+| 3 | WinSxS / Component Store | `DISM /Online /Cleanup-Image /StartComponentCleanup /ResetBase` **+ `/SPSuperseded`** |
+| 4 | CompactOS | `compact /compactos:always` (comprime los binarios del SO con XPRESS4K; ahorro permanente ~1–2 GB) |
+| 5 | Papelera | Vaciar todas las papeleras de todos los perfiles |
+| 6 | Prefetch | `C:\Windows\Prefetch\*` |
+| 7 | Minidumps | `C:\Windows\Minidump\*`, `LiveKernelReports` y `memory.dmp` |
+| 8 | Thumbnails / Icon cache | Bases de datos de miniaturas e iconos de todos los perfiles (detiene/reinicia Explorer) |
+| 9 | Hibernación | `powercfg /h off` (elimina `hiberfil.sys`) |
+| 10 | Pagefile | Informa del tamaño actual; sugiere desactivarlo manualmente (no lo elimina por seguridad) |
+| 11 | Event logs | Limpiar todos los registros de eventos con `RecordCount > 0` |
+| 12 | Puntos de restauración | Eliminar todos salvo el más reciente (o todos si se indica) |
+| 13 | Cleanmgr | Ejecutar `cleanmgr /sagerun:1` en modo silencioso para limpieza adicional |
+| — | Defrag de consolidación | `defrag C: /X /H /U /V` consolida el espacio libre al final del volumen antes del zero-fill |
+| — | SDelete / zero-fill | `sdelete64.exe -accepteula -z C:` rellena el espacio libre con ceros (imprescindible para que VMware compacte). **Fallback**: si no hay `sdelete64.exe`, zero-fill por bucle de PowerShell |
 
-**Requisito externo**: `sdelete64.exe` de Sysinternals debe estar disponible
-(descargado manualmente o con `winget install Microsoft.Sysinternals.SDelete`).
+**Requisito externo**: `sdelete64.exe` de Sysinternals (descargado manualmente o con
+`winget install Microsoft.Sysinternals.SDelete`). Si no está disponible, el script
+usa un zero-fill de respaldo por bucle de PowerShell (menos eficiente, pero funcional).
 
 **Salida**: resumen por pantalla del espacio liberado en cada bloque y espacio libre
 total antes/después.
@@ -100,19 +103,32 @@ bash CompactaW11.sh /ruta/a/carpeta-de-vms/
 
 - **Zero-fill obligatorio**: sin rellenar con ceros el espacio libre (paso `sdelete -z`),
   `vmware-vdiskmanager -k` no puede distinguir bloques vacíos de bloques usados y no
-  libera nada. Por eso `LimpiaW11.ps1` termina siempre con ese paso.
-- **Defrag antes de compactar**: `vmware-vdiskmanager -d` consolida los datos hacia el
-  principio del disco antes de que `-k` recorte la cola vacía; omitirlo reduce el
-  ahorro obtenido.
+  libera nada. Por eso `LimpiaW11.ps1` termina siempre con ese paso. **Fallback**: si
+  `sdelete64.exe` no está disponible, el script hace el zero-fill con un bucle de
+  PowerShell (escribe un fichero de ceros hasta llenar el disco y lo borra); es menos
+  eficiente que sdelete (no toca clusters ya liberados de la MFT) pero garantiza que
+  el paso no se omita.
+- **Defrag dentro de la VM antes del zero-fill**: `LimpiaW11.ps1` ejecuta
+  `defrag C: /X` (consolidación del espacio libre) justo antes del zero-fill para
+  agrupar el hueco al final del volumen y maximizar lo que luego recorta
+  `vmware-vdiskmanager -k`.
+- **CompactOS**: `compact /compactos:always` comprime los binarios del SO con XPRESS4K
+  (ahorro permanente ~1–2 GB, impacto de rendimiento despreciable en una VM). Se hace
+  antes del defrag/zero-fill para que el hueco liberado entre en la compactación.
+- **Defrag antes de compactar (en el host)**: `vmware-vdiskmanager -d` consolida los
+  datos hacia el principio del disco antes de que `-k` recorte la cola vacía; omitirlo
+  reduce el ahorro obtenido.
 - **Comprobación de estado de la VM**: operar sobre un VMDK mientras la VM corre
   puede corromper el disco; la comprobación con `vmrun list` es obligatoria y el
   script aborta si la VM aparece en la lista.
 - **Sin snapshots durante la compactación**: si la VM tiene snapshots activos,
   `vmware-vdiskmanager` rechaza la operación. El script avisará de esta situación
   y dará instrucciones.
-- **PowerShell sin dependencias externas (salvo sdelete)**: `LimpiaW11.ps1` usa solo
-  cmdlets nativos de PowerShell 5+; la única dependencia externa es `sdelete64.exe`
-  para el zero-fill, sin el cual la compactación sería ineficaz.
+- **PowerShell sin dependencias externas obligatorias**: `LimpiaW11.ps1` usa solo
+  cmdlets y herramientas nativas de Windows (PowerShell 5+, DISM, compact, defrag,
+  cleanmgr, vssadmin). `sdelete64.exe` es la única dependencia externa *recomendada*
+  para el zero-fill, pero ya no es imprescindible: el script tiene un fallback nativo
+  si no la encuentra.
 
 ---
 
