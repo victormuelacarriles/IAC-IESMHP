@@ -340,6 +340,20 @@ Verificar cada una por separado: `resolvectl query iesmhp.local` (resolved) y
   además registra en el log `sshd -T | grep usepam` para verlo. En equipos ya
   rotos: añadir esa línea a mano (arriba del fichero) + `systemctl restart ssh`,
   o reaplicar el rol (`--tags preparaad`).
+- **`sftp`/`scp`/`sftp://` fallan: falta el subsistema SFTP** (visto 2026-06-19;
+  mismo patrón que el bug `UsePAM`/`Include`): el `sshd_config` reducido de Ubuntu
+  26.04 (instalación squashfs + `--force-confold`) puede quedarse **sin la línea
+  `Subsystem sftp`**, y el binario `/usr/lib/openssh/sftp-server` vive en el
+  paquete **aparte** `openssh-sftp-server` (solo *Recommends* de `openssh-server`,
+  puede faltar en una instalación mínima). Sin ambos, `sftp://` en GNOME Files
+  (sesión Wayland), `sftp` y `scp` (OpenSSH ≥ 9 transfiere por SFTP) fallan con
+  *"subsystem request failed on channel 0"*. **Solución** (paso **2c** del rol y
+  `3-SetupPrimerInicio.sh`, mantener en sync): instalar `openssh-sftp-server` y
+  añadir `Subsystem sftp /usr/lib/openssh/sftp-server` a `sshd_config` **solo si
+  no hay ya uno activo** (OpenSSH **aborta** si `Subsystem sftp` se define dos
+  veces). Diagnóstico: `sshd -T | grep -i subsystem` (debe dar
+  `subsystem-sftp /usr/lib/openssh/sftp-server`) + `dpkg -l openssh-sftp-server`.
+  En equipos ya rotos: reaplicar el rol con `--tags sftp`.
 - **Salir del dominio**: `utilesAD/4-SacaDelDominio.sh` (borra la cuenta de
   equipo de la OU con `realm leave -U`, deshace la config local y elimina el
   snippet `conf.d/10-iac-ad.conf` huérfano). A mano: `realm leave` deshace solo

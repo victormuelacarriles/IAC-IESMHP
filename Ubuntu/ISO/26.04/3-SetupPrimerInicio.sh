@@ -249,7 +249,11 @@ apt-get update --fix-missing
 
 #Instalado SSH server
 echoverde "Instalando servidor SSH+ansible y limpiando..."
-apt-get install -y -o Dpkg::Options::="--force-confold" ssh ansible
+# openssh-sftp-server: paquete APARTE (solo "Recommends" de openssh-server) que
+# trae el binario /usr/lib/openssh/sftp-server. Sin él, sftp:// en GNOME Files
+# (sesión Wayland), 'sftp' y 'scp' (OpenSSH >=9 usa el protocolo SFTP) fallan
+# con "subsystem request failed on channel 0".
+apt-get install -y -o Dpkg::Options::="--force-confold" ssh openssh-sftp-server ansible
 # Configurar SSH para permitir el acceso root
 sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
 # Login por SSH de usuarios del DOMINIO (Active Directory): su contraseña vive
@@ -281,11 +285,22 @@ if ! grep -qE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf'
     echoamarillo "sshd_config SIN 'Include sshd_config.d/*.conf'; lo añado (si no, el drop-in UsePAM se ignora)"
     sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
 fi
+# Subsistema SFTP: el sshd_config reducido de Ubuntu 26.04 (instalación squashfs
+# + --force-confold) puede quedarse SIN la línea 'Subsystem sftp', de modo que
+# sftp:// en GNOME Files (Wayland), 'sftp' y 'scp' fallan aunque el binario esté
+# instalado. OpenSSH ABORTA si 'Subsystem sftp' se define dos veces (sshd_config
+# + drop-in), así que solo lo añadimos si NO hay ya uno ACTIVO en ningún sitio.
+# Idempotente. MISMO arreglo que el rol Ansible preparaAD (mantener en sync).
+if ! grep -rqsE '^[[:space:]]*Subsystem[[:space:]]+sftp' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/ 2>/dev/null; then
+    echoamarillo "sshd SIN 'Subsystem sftp' activo; lo añado (si no, sftp:// y scp fallan)"
+    echo 'Subsystem sftp /usr/lib/openssh/sftp-server' >> /etc/ssh/sshd_config
+fi
 # Reiniciar el servicio SSH para aplicar los cambios
 service ssh restart
 # Verificación en el log: UsePAM DEBE quedar en 'yes' (si no, el login por SSH
 # de usuarios del dominio seguirá fallando con "Could not get shadow information").
-echoverde "sshd efectivo -> $(sshd -T 2>/dev/null | grep -iE '^(usepam|passwordauthentication|kbdinteractiveauthentication) ' | tr '\n' ' ')"
+# 'subsystem-sftp' DEBE apuntar a /usr/lib/openssh/sftp-server (si no, sftp/scp fallan).
+echoverde "sshd efectivo -> $(sshd -T 2>/dev/null | grep -iE '^(usepam|passwordauthentication|kbdinteractiveauthentication|subsystem)' | tr '\n' ' ')"
 
 #Obtener la IP de la máquina
 IP=$(hostname -I | awk '{print $1}')

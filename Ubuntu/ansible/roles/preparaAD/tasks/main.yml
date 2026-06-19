@@ -126,14 +126,56 @@
   register: preparaad_ssh_include
   tags: [preparaad, ad]
 
+# ---------------------------------------------------------------------------
+# 2c. SSH — subsistema SFTP (sftp:// en GNOME Files Wayland, 'sftp', 'scp')
+# ---------------------------------------------------------------------------
+# El binario /usr/lib/openssh/sftp-server vive en el paquete APARTE
+# openssh-sftp-server (solo "Recommends" de openssh-server) y la directiva
+# 'Subsystem sftp' falta en el sshd_config reducido de Ubuntu 26.04 (instalación
+# squashfs + --force-confold). Sin ambos, sftp:// en GNOME Files, 'sftp' y 'scp'
+# (OpenSSH >=9 transfiere por el protocolo SFTP) fallan con "subsystem request
+# failed on channel 0". No es específico de AD, pero vive aquí junto al resto de
+# la config de sshd. MISMO arreglo que 3-SetupPrimerInicio.sh (mantener en sync).
+- name: Instalar el servidor SFTP de OpenSSH (binario /usr/lib/openssh/sftp-server)
+  ansible.builtin.apt:
+    name: openssh-sftp-server
+    state: present
+    update_cache: false
+  register: preparaad_sftp_pkg
+  tags: [preparaad, ad, sftp]
+
+# OpenSSH ABORTA si 'Subsystem sftp' se define dos veces (sshd_config + drop-in),
+# así que solo lo añadimos si NO hay ya uno ACTIVO en ningún sitio.
+- name: Detectar si ya hay un 'Subsystem sftp' activo en la config de sshd
+  ansible.builtin.command:
+    cmd: grep -rqsE '^[[:space:]]*Subsystem[[:space:]]+sftp' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/
+  register: preparaad_sftp_presente
+  changed_when: false
+  failed_when: false
+  tags: [preparaad, ad, sftp]
+
+- name: Añadir 'Subsystem sftp' a sshd_config si falta (si no, sftp:// y scp fallan)
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    line: Subsystem sftp /usr/lib/openssh/sftp-server
+    insertafter: EOF
+    owner: root
+    group: root
+    mode: "0644"
+  when: preparaad_sftp_presente.rc != 0
+  register: preparaad_sftp_dropin
+  tags: [preparaad, ad, sftp]
+
 # restart NO cuelga el primer arranque (bugs 2026-05-17: cuelgan
 # enabled:/daemon_reload:). sshd relee la config al reiniciar; las conexiones
 # SSH ya establecidas SOBREVIVEN al restart del daemon (no corta el pase de aula).
-- name: Reiniciar ssh para aplicar UsePAM
+- name: Reiniciar ssh para aplicar UsePAM y el subsistema SFTP
   ansible.builtin.systemd:
     name: ssh
     state: restarted
-  when: preparaad_ssh_dropin is changed or preparaad_ssh_include is changed
+  when: >
+    preparaad_ssh_dropin is changed or preparaad_ssh_include is changed
+    or preparaad_sftp_pkg is changed or preparaad_sftp_dropin is changed
   tags: [preparaad, ad]
 
 # ---------------------------------------------------------------------------
