@@ -1,0 +1,309 @@
+﻿**********************
+Inicio de la transcripción de Windows PowerShell
+Hora de inicio: 20260619104833
+Nombre de usuario: W11-00-VMUELA\adminvictor
+Usuario RunAs: W11-00-VMUELA\adminvictor
+Nombre de la configuración: 
+Máquina: W11-00-VMUELA (Microsoft Windows NT 10.0.26200.0)
+Aplicación host: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Id. de proceso: 4112
+PSVersion: 5.1.26100.8655
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8655
+BuildVersion: 10.0.26100.8655
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Log: E:\Usuarios\vmuela\OneDrive - Educantabria\_20FP25-26\Dep\IAC-IESMHP\W11\Compacta\LimpiaW11.20260619-104833.log
+
+================================================
+  LimpiaW11.ps1 - Preparacion para compactacion
+================================================
+
+Espacio libre inicial en C:  95.62 GB
+Unidades de disco fijo detectadas: C:, E:
+
+=== 1/12  Temporales de usuario y sistema ===
+    Elementos procesados en carpetas Temp: 69
+
+=== 2/13  Cache de Windows Update y Delivery Optimization ===
+    Deteniendo wuauserv y bits...
+    Elementos procesados en SoftwareDistribution\Download: 3
+Deleting...
+Successfully deleted Delivery Optimization cache
+    Cache de Delivery Optimization eliminada
+    Reiniciando wuauserv y bits...
+ADVERTENCIA: Esperando a que se inicie el servicio 'Servicio de transferencia inteligente en segundo plano (BITS) (bits)'...
+
+=== 3/13  WinSxS / Component Store (DISM - puede tardar varios minutos) ===
+    AVISO: /ResetBase es IRREVERSIBLE. Desinstalar actualizaciones no sera posible despues.
+    Ejecutando DISM /StartComponentCleanup /ResetBase ...
+    DISM /ResetBase completado correctamente (exit 0)
+    Ejecutando DISM /SPSuperseded ...
+    DISM /SPSuperseded completado correctamente (exit 0)
+
+=== 4/13  Compresion CompactOS del sistema operativo ===
+    Ejecutando compact /compactos:always (puede tardar unos minutos)...
+    CompactOS activado (ficheros del SO comprimidos)
+
+=== 5/13  Papelera de reciclaje (todos los perfiles) ===
+    Papelera vaciada
+
+=== 6/13  Prefetch ===
+    Elementos procesados en Prefetch: 198
+
+=== 7/13  Minidumps y volcados de memoria ===
+    Volcados de memoria eliminados: 0
+
+=== 8/13  Thumbnails e Icon cache ===
+    Deteniendo explorer.exe para liberar caches...
+    Reiniciando explorer.exe...
+    Caches de miniaturas/iconos eliminados: 16
+
+=== 9/13  Hibernacion ===
+    Hibernacion desactivada (hiberfil.sys eliminado)
+
+=== 10/13 Fichero de paginacion ===
+    Pagefile gestionado automaticamente por Windows (tamano variable)
+    NOTA: Eliminar el pagefile antes del zero-fill libera espacio adicional.
+          Para hacerlo: Panel de control > Sistema > Configuracion avanzada > Rendimiento > Memoria virtual
+
+=== 11/13 Registros de eventos de Windows ===
+    Registros de eventos vaciados: 101
+
+=== 12/13 Puntos de restauracion del sistema ===
+    Error gestionando puntos de restauracion: No se encuentra la propiedad 'Count' en este objeto. Compruebe que existe.
+
+=== 13/13 Cleanmgr (Liberador de espacio en disco) ===
+    Ejecutando cleanmgr /sagerun:1 (en segundo plano, esperar hasta 2 min)...
+    cleanmgr completado (exit 0)
+
+=== Localizando sdelete64.exe ===
+    sdelete64 encontrado en: sdelete64.exe
+
+=== ZERO-FILL de todas las unidades de disco fijo (no USB, no red) ===
+    Unidades a procesar: C:, E:
+
+############### Unidad C: ###############
+
+--- C:  defrag de consolidacion (defrag C: /X) ---
+
+Invocando a consolidación de espacio disponible en (C:)...
+
+        Análisis: 100% completado.
+
+Informe de optimización previa:
+
+        Información de volumen:
+                Tamaño del volumen                 = 159,07 GB
+                Tamaño de clúster                = 4 KB
+                Espacio usado                  = 63,49 GB
+                Espacio disponible                  = 95,58 GB
+
+        Fragmentación:
+                Espacio total fragmentado      = 3%
+                Promedio de fragmentos por archivo  = 1,02
+
+                Archivos y carpetas que pueden moverse   = 319265
+                Archivos y carpetas que no pueden moverse = 15
+
+        Archivos:
+                Archivos fragmentados            = 1984
+                Cantidad de fragmentos de archivo        = 6040
+
+        Carpetas:
+                Cantidad de carpetas               = 30241
+                Carpetas fragmentadas          = 38
+                Cantidad de fragmentos de carpeta      = 177
+
+        Espacio disponible:
+                Cantidad de espacio disponible            = 18870
+                Promedio de tamaño de espacio disponible     = 5,46 MB
+                Tamaño más grande de espacio disponible     = 55,10 GB
+
+        Tabla maestra de archivos (MFT):
+                Tamaño de MFT                    = 688,25 MB
+                Cuenta de registros de MFT            = 704767
+                Uso de MFT                   = 100%
+                Cantidad de fragmentos de MFT         = 0
+
+        Nota: los fragmentos de archivo con tamaño superior a 64 MB no se incluirán en las estadísticas de fragmentación.
+        Operación desconocida:  0% completado...
+Realizando el paso 1:
+        Consolidación de espacio disponible: 100% completado.
+
+Realizando el paso 2:
+        Consolidación de espacio disponible: 100% completado.
+
+Realizando el paso 3:
+        Consolidación de espacio disponible: 100% completado.  .
+
+La operación se completó correctamente.
+
+Post Defragmentation Report:
+
+        Información de volumen:
+                Tamaño del volumen                 = 159,07 GB
+                Tamaño de clúster                = 4 KB
+                Espacio usado                  = 63,49 GB
+                Espacio disponible                  = 95,58 GB
+
+        Fragmentación:
+                Espacio total fragmentado      = 3%
+                Promedio de fragmentos por archivo  = 1,02
+
+                Archivos y carpetas que pueden moverse   = 319261
+                Archivos y carpetas que no pueden moverse = 15
+
+        Archivos:
+                Archivos fragmentados            = 2165
+                Cantidad de fragmentos de archivo        = 6332
+
+        Carpetas:
+                Cantidad de carpetas               = 30240
+                Carpetas fragmentadas          = 39
+                Cantidad de fragmentos de carpeta      = 178
+
+        Espacio disponible:
+                Cantidad de espacio disponible            = 17230
+                Promedio de tamaño de espacio disponible     = 1,43 GB
+                Tamaño más grande de espacio disponible     = 55,10 GB
+
+        Tabla maestra de archivos (MFT):
+                Tamaño de MFT                    = 688,25 MB
+                Cuenta de registros de MFT            = 704767
+                Uso de MFT                   = 100%
+                Cantidad de fragmentos de MFT         = 0
+
+        Nota: los fragmentos de archivo con tamaño superior a 64 MB no se incluirán en las estadísticas de fragmentación.
+    Defrag de consolidacion de C: completado
+--- C:  zero-fill del espacio libre ---
+    Ejecutando: sdelete64.exe -accepteula -z C: (puede tardar)
+
+SDelete v2.06 - Secure file delete
+Copyright (C) 1999-2026 Mark Russinovich
+Sysinternals - www.sysinternals.com
+
+SDelete is set for 1 pass.
+Free space cleaned on C:\
+1 drive cleaned.
+    Zero-fill de C: completado.
+
+############### Unidad E: ###############
+
+--- E:  defrag de consolidacion (defrag E: /X) ---
+
+Invocando a consolidación de espacio disponible en DatosVictor (E:)...
+
+        Análisis: 100% completado.
+
+Informe de optimización previa:
+
+        Información de volumen:
+                Tamaño del volumen                 = 299,98 GB
+                Tamaño de clúster                = 4 KB
+                Espacio usado                  = 3,80 GB
+                Espacio disponible                  = 296,17 GB
+
+        Fragmentación:
+                Espacio total fragmentado      = 0%
+                Promedio de fragmentos por archivo  = 1,00
+
+                Archivos y carpetas que pueden moverse   = 64030
+                Archivos y carpetas que no pueden moverse = 8
+
+        Archivos:
+                Archivos fragmentados            = 9
+                Cantidad de fragmentos de archivo        = 21
+
+        Carpetas:
+                Cantidad de carpetas               = 35799
+                Carpetas fragmentadas          = 1
+                Cantidad de fragmentos de carpeta      = 1
+
+        Espacio disponible:
+                Cantidad de espacio disponible            = 347
+                Promedio de tamaño de espacio disponible     = 873,50 MB
+                Tamaño más grande de espacio disponible     = 252,13 GB
+
+        Tabla maestra de archivos (MFT):
+                Tamaño de MFT                    = 333,00 MB
+                Cuenta de registros de MFT            = 340991
+                Uso de MFT                   = 100%
+                Cantidad de fragmentos de MFT         = 0
+
+        Nota: los fragmentos de archivo con tamaño superior a 64 MB no se incluirán en las estadísticas de fragmentación.
+        Operación desconocida:  0% completado...
+Realizando el paso 1:
+        Consolidación de espacio disponible: 100% completado.
+
+Realizando el paso 2:
+        Consolidación de espacio disponible: 100% completado.
+
+La operación se completó correctamente.
+
+Post Defragmentation Report:
+
+        Información de volumen:
+                Tamaño del volumen                 = 299,98 GB
+                Tamaño de clúster                = 4 KB
+                Espacio usado                  = 3,80 GB
+                Espacio disponible                  = 296,17 GB
+
+        Fragmentación:
+                Espacio total fragmentado      = 0%
+                Promedio de fragmentos por archivo  = 1,00
+
+                Archivos y carpetas que pueden moverse   = 64029
+                Archivos y carpetas que no pueden moverse = 8
+
+        Archivos:
+                Archivos fragmentados            = 9
+                Cantidad de fragmentos de archivo        = 21
+
+        Carpetas:
+                Cantidad de carpetas               = 35798
+                Carpetas fragmentadas          = 0
+                Cantidad de fragmentos de carpeta      = 0
+
+        Espacio disponible:
+                Cantidad de espacio disponible            = 17
+                Promedio de tamaño de espacio disponible     = 34,82 GB
+                Tamaño más grande de espacio disponible     = 252,13 GB
+
+        Tabla maestra de archivos (MFT):
+                Tamaño de MFT                    = 333,00 MB
+                Cuenta de registros de MFT            = 340991
+                Uso de MFT                   = 100%
+                Cantidad de fragmentos de MFT         = 0
+
+        Nota: los fragmentos de archivo con tamaño superior a 64 MB no se incluirán en las estadísticas de fragmentación.
+    Defrag de consolidacion de E: completado
+--- E:  zero-fill del espacio libre ---
+    Ejecutando: sdelete64.exe -accepteula -z E: (puede tardar)
+
+SDelete v2.06 - Secure file delete
+Copyright (C) 1999-2026 Mark Russinovich
+Sysinternals - www.sysinternals.com
+
+SDelete is set for 1 pass.
+Free space cleaned on E:\
+1 drive cleaned.
+    Zero-fill de E: completado.
+
+================================================
+  RESUMEN (por unidad de disco fijo)
+================================================
+  C:  inicial: 95,61 GB   final: 94,85 GB   diferencia: -0,76 GB (normal si el zero-fill lleno el disco)
+  E:  inicial: 296,18 GB   final: 296,18 GB   diferencia: 0 GB
+
+  Siguiente paso: APAGAR la VM (shutdown completo, NO suspender)
+  Luego desde el host Linux: bash CompactaW11.sh <ruta/a/VM.vmx>
+================================================
+
+**********************
+Fin de la transcripción de Windows PowerShell
+Hora de finalización: 20260619110055
+**********************
