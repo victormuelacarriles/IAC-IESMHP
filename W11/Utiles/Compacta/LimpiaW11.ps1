@@ -11,7 +11,10 @@
     vmware-vdiskmanager -k pueda compactar eficientemente.
 
 .NOTES
-    Dependencia externa: sdelete64.exe (Sysinternals).
+    Dependencia OBLIGATORIA: sdelete64.exe (Sysinternals).
+    El script comprueba al inicio que sdelete64.exe esta disponible y, si no lo
+    encuentra, avisa de como instalarlo y ABORTA sin tocar el sistema (no hay
+    metodo de respaldo: el zero-fill se hace exclusivamente con sdelete64).
     Instalar con: winget install Microsoft.Sysinternals.SDelete
     O descargar desde: https://learn.microsoft.com/en-us/sysinternals/downloads/sdelete
 #>
@@ -73,46 +76,6 @@ function Write-Resultado {
     Write-Host "    $Texto" -ForegroundColor $Color
 }
 
-function Invoke-ZeroFillFallback {
-    <#
-    Zero-fill sin sdelete: escribe ceros en un fichero temporal hasta llenar
-    el disco y luego lo borra. Menos eficiente que sdelete (no procesa
-    clusters ya liberados de la MFT) pero suficiente como red de seguridad.
-    #>
-    param([string]$Drive = 'C:')
-
-    $folderPath = "$Drive\LimpiezaTemp"
-    $zeroPath   = "$folderPath\zero.tmp"
-    $stream     = $null
-
-    if (-not (Test-Path $folderPath)) {
-        New-Item -ItemType Directory -Path $folderPath -Force | Out-Null
-    }
-
-    try {
-        Write-Host "    Escribiendo ceros en el espacio libre de $Drive ..." -ForegroundColor Yellow
-        Write-Host "    El sistema parecera detenerse al llenarse el disco; es lo esperado." -ForegroundColor Gray
-        $stream = [System.IO.File]::OpenWrite($zeroPath)
-        $buffer = New-Object byte[] (64KB)
-        while ($true) {
-            $stream.Write($buffer, 0, $buffer.Length)
-        }
-    } catch {
-        $msg = $_.Exception.Message
-        if ($msg -match 'space|espacio|disk full|disco') {
-            Write-Resultado "Zero-fill (fallback) completado: disco lleno de ceros."
-        } else {
-            Write-Resultado "Zero-fill (fallback) detenido: $msg" 'Yellow'
-        }
-    } finally {
-        if ($stream) {
-            try { $stream.Close(); $stream.Dispose() } catch { }
-        }
-        if (Test-Path $zeroPath)   { Remove-Item $zeroPath -Force -ErrorAction SilentlyContinue }
-        if (Test-Path $folderPath) { Remove-Item $folderPath -Recurse -Force -ErrorAction SilentlyContinue }
-    }
-}
-
 function Get-DiscosFijos {
     <#
     Devuelve las letras (ej. 'C:') de TODAS las unidades de disco fijo locales,
@@ -145,8 +108,8 @@ function Get-DiscosFijos {
 
 function Invoke-ZeroFillDrive {
     <#
-    Defragmenta (consolidacion) y rellena de ceros el espacio libre de una unidad.
-    Usa sdelete64 si esta disponible ($script:sdeleteExe); si no, el fallback nativo.
+    Defragmenta (consolidacion) y rellena de ceros el espacio libre de una unidad
+    usando exclusivamente sdelete64 ($script:sdeleteExe, garantizado al inicio).
     #>
     param([string]$Drive)
 
@@ -160,17 +123,12 @@ function Invoke-ZeroFillDrive {
     }
 
     Write-Host "--- $Drive  zero-fill del espacio libre ---" -ForegroundColor Magenta
-    if ($script:sdeleteExe) {
-        Write-Host "    Ejecutando: $($script:sdeleteExe) -accepteula -z $Drive (puede tardar)" -ForegroundColor Gray
-        try {
-            & $script:sdeleteExe -accepteula -z $Drive
-            Write-Resultado "Zero-fill de $Drive completado."
-        } catch {
-            Write-Resultado "Error ejecutando sdelete64 en $Drive : $_" 'Red'
-        }
-    } else {
-        Write-Host "    sdelete64 no disponible; usando fallback de PowerShell en $Drive..." -ForegroundColor Yellow
-        Invoke-ZeroFillFallback -Drive $Drive
+    Write-Host "    Ejecutando: $($script:sdeleteExe) -accepteula -z $Drive (puede tardar)" -ForegroundColor Gray
+    try {
+        & $script:sdeleteExe -accepteula -z $Drive
+        Write-Resultado "Zero-fill de $Drive completado."
+    } catch {
+        Write-Resultado "Error ejecutando sdelete64 en $Drive : $_" 'Red'
     }
 }
 
@@ -182,6 +140,47 @@ Write-Host ""
 Write-Host "================================================" -ForegroundColor Yellow
 Write-Host "  LimpiaW11.ps1 - Preparacion para compactacion" -ForegroundColor Yellow
 Write-Host "================================================" -ForegroundColor Yellow
+
+# --------------------------------------------------------------------------
+# REQUISITO OBLIGATORIO: sdelete64.exe (Sysinternals)
+# El zero-fill se hace SOLO con sdelete64 (no hay metodo de respaldo). Se
+# comprueba ANTES de cualquier limpieza: si no esta, se avisa de como
+# instalarlo y se aborta sin tocar el sistema.
+# --------------------------------------------------------------------------
+Write-Host ""
+Write-Host "=== Comprobando requisito: sdelete64.exe ===" -ForegroundColor Magenta
+
+$script:sdeleteExe = $null
+$candidatos = @(
+    'sdelete64.exe',
+    "$PSScriptRoot\sdelete64.exe",
+    "$env:USERPROFILE\Downloads\sdelete64.exe",
+    'C:\Tools\sdelete64.exe',
+    'C:\Sysinternals\sdelete64.exe'
+)
+foreach ($c in $candidatos) {
+    if (Get-Command $c -ErrorAction SilentlyContinue) { $script:sdeleteExe = $c; break }
+    if (Test-Path $c) { $script:sdeleteExe = $c; break }
+}
+
+if (-not $script:sdeleteExe) {
+    Write-Host ""
+    Write-Host "  ERROR: sdelete64.exe NO encontrado." -ForegroundColor Red
+    Write-Host "  Este script necesita sdelete64.exe para rellenar de ceros el espacio" -ForegroundColor Red
+    Write-Host "  libre; sin ese paso, vmware-vdiskmanager -k no podra compactar el VMDK." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Instalalo con winget:" -ForegroundColor Yellow
+    Write-Host "      winget install Microsoft.Sysinternals.SDelete" -ForegroundColor Cyan
+    Write-Host "  O descargalo manualmente desde Sysinternals:" -ForegroundColor Yellow
+    Write-Host "      https://learn.microsoft.com/en-us/sysinternals/downloads/sdelete" -ForegroundColor Cyan
+    Write-Host "  (descomprime SDelete.zip y deja sdelete64.exe junto a este script," -ForegroundColor Yellow
+    Write-Host "   en el PATH, en C:\Tools o en C:\Sysinternals) y vuelve a ejecutar." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  PROCESO DETENIDO. No se ha realizado ninguna limpieza." -ForegroundColor Red
+    try { Stop-Transcript | Out-Null } catch { }
+    exit 1
+}
+Write-Resultado "sdelete64 encontrado en: $($script:sdeleteExe)"
 
 $espacioInicial = Get-FreeSpaceGB -Drive 'C:'
 Write-Host ""
@@ -502,35 +501,6 @@ try {
     }
 } catch {
     Write-Resultado "Error ejecutando cleanmgr: $_" 'Yellow'
-}
-
-# --------------------------------------------------------------------------
-# LOCALIZAR sdelete64.exe (una sola vez; se reutiliza para todas las unidades)
-# --------------------------------------------------------------------------
-Write-Host ""
-Write-Host "=== Localizando sdelete64.exe ===" -ForegroundColor Magenta
-
-# Buscar sdelete64.exe en PATH, carpeta del script y rutas comunes
-$script:sdeleteExe = $null
-$candidatos = @(
-    'sdelete64.exe',
-    "$PSScriptRoot\sdelete64.exe",
-    "$env:USERPROFILE\Downloads\sdelete64.exe",
-    'C:\Tools\sdelete64.exe',
-    'C:\Sysinternals\sdelete64.exe'
-)
-foreach ($c in $candidatos) {
-    if (Get-Command $c -ErrorAction SilentlyContinue) { $script:sdeleteExe = $c; break }
-    if (Test-Path $c) { $script:sdeleteExe = $c; break }
-}
-
-if (-not $script:sdeleteExe) {
-    Write-Host "  AVISO: sdelete64.exe NO encontrado." -ForegroundColor Red
-    Write-Host "  Para mejores resultados instalalo:  winget install Microsoft.Sysinternals.SDelete" -ForegroundColor Yellow
-    Write-Host "  O descargalo de: https://learn.microsoft.com/en-us/sysinternals/downloads/sdelete" -ForegroundColor Yellow
-    Write-Host "  Se usara el metodo de respaldo (zero-fill por bucle de PowerShell)." -ForegroundColor Yellow
-} else {
-    Write-Resultado "sdelete64 encontrado en: $($script:sdeleteExe)"
 }
 
 # --------------------------------------------------------------------------

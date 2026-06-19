@@ -43,7 +43,7 @@ Tareas previstas (13 bloques, por orden de ejecución):
 | 11 | Event logs | Limpiar todos los registros de eventos con `RecordCount > 0` |
 | 12 | Puntos de restauración | Eliminar todos salvo el más reciente (o todos si se indica) |
 | 13 | Cleanmgr | Ejecutar `cleanmgr /sagerun:1` en modo silencioso para limpieza adicional |
-| — | Defrag + zero-fill **de todas las unidades de disco fijo** | Para **cada** unidad de disco fijo local (no USB, no red): `defrag X: /X /H /U /V` (consolida el hueco) seguido de `sdelete64.exe -accepteula -z X:` (rellena de ceros). **Fallback**: si no hay `sdelete64.exe`, zero-fill por bucle de PowerShell. La detección de unidades usa `Win32_LogicalDisk DriveType=3` y descarta los discos cuyo `BusType` es `USB` |
+| — | Defrag + zero-fill **de todas las unidades de disco fijo** | Para **cada** unidad de disco fijo local (no USB, no red): `defrag X: /X /H /U /V` (consolida el hueco) seguido de `sdelete64.exe -accepteula -z X:` (rellena de ceros). **No hay fallback**: el zero-fill se hace exclusivamente con `sdelete64.exe`. La detección de unidades usa `Win32_LogicalDisk DriveType=3` y descarta los discos cuyo `BusType` es `USB` |
 
 **Detección de unidades**: solo se procesan unidades de **disco fijo local**
 (`DriveType=3`), excluyendo USB (incl. discos fijos conectados por bus USB),
@@ -55,9 +55,11 @@ del sistema (`C:`); el defrag+zero-fill se aplica a **todas** las unidades fijas
 script) que registra toda la salida. El resumen final muestra espacio
 inicial/final por unidad.
 
-**Requisito externo**: `sdelete64.exe` de Sysinternals (descargado manualmente o con
-`winget install Microsoft.Sysinternals.SDelete`). Si no está disponible, el script
-usa un zero-fill de respaldo por bucle de PowerShell (menos eficiente, pero funcional).
+**Requisito externo OBLIGATORIO**: `sdelete64.exe` de Sysinternals (descargado
+manualmente o con `winget install Microsoft.Sysinternals.SDelete`). El script lo
+comprueba **al inicio**, antes de cualquier limpieza: si no lo encuentra, avisa de
+cómo instalarlo y **aborta** (`exit 1`) sin tocar el sistema. No hay método de
+respaldo: el zero-fill se hace exclusivamente con `sdelete64.exe`.
 
 **Salida**: resumen por pantalla del espacio liberado en cada bloque y espacio libre
 total antes/después.
@@ -118,13 +120,13 @@ script), conservando la salida en pantalla.
 
 ## Decisiones de diseño
 
-- **Zero-fill obligatorio**: sin rellenar con ceros el espacio libre (paso `sdelete -z`),
-  `vmware-vdiskmanager -k` no puede distinguir bloques vacíos de bloques usados y no
-  libera nada. Por eso `LimpiaW11.ps1` termina siempre con ese paso. **Fallback**: si
-  `sdelete64.exe` no está disponible, el script hace el zero-fill con un bucle de
-  PowerShell (escribe un fichero de ceros hasta llenar el disco y lo borra); es menos
-  eficiente que sdelete (no toca clusters ya liberados de la MFT) pero garantiza que
-  el paso no se omita.
+- **Zero-fill obligatorio (solo sdelete)**: sin rellenar con ceros el espacio libre
+  (paso `sdelete -z`), `vmware-vdiskmanager -k` no puede distinguir bloques vacíos de
+  bloques usados y no libera nada. Por eso `LimpiaW11.ps1` termina siempre con ese
+  paso. El zero-fill se hace **exclusivamente con `sdelete64.exe`** (no hay fallback
+  nativo): si la herramienta no está instalada, el script aborta al inicio antes de
+  limpiar nada e indica cómo descargarla. Se eliminó el respaldo por bucle de
+  PowerShell porque era mucho más lento y no tocaba los clusters ya liberados de la MFT.
 - **Defrag dentro de la VM antes del zero-fill**: `LimpiaW11.ps1` ejecuta
   `defrag C: /X` (consolidación del espacio libre) justo antes del zero-fill para
   agrupar el hueco al final del volumen y maximizar lo que luego recorta
@@ -141,11 +143,11 @@ script), conservando la salida en pantalla.
 - **Sin snapshots durante la compactación**: si la VM tiene snapshots activos,
   `vmware-vdiskmanager` rechaza la operación. El script avisará de esta situación
   y dará instrucciones.
-- **PowerShell sin dependencias externas obligatorias**: `LimpiaW11.ps1` usa solo
+- **Una única dependencia externa, obligatoria**: la limpieza (bloques 1–13) usa solo
   cmdlets y herramientas nativas de Windows (PowerShell 5+, DISM, compact, defrag,
-  cleanmgr, vssadmin). `sdelete64.exe` es la única dependencia externa *recomendada*
-  para el zero-fill, pero ya no es imprescindible: el script tiene un fallback nativo
-  si no la encuentra.
+  cleanmgr, vssadmin). El zero-fill final requiere `sdelete64.exe` (Sysinternals), que
+  **sí es imprescindible**: el script lo comprueba al arrancar y aborta si no está,
+  porque sin el zero-fill la compactación posterior no recupera espacio.
 
 ---
 
