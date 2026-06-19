@@ -1,0 +1,56 @@
+---
+# =============================================================================
+#  Playbook maestro — Configuracion de equipos Windows 11 del IES Miguel Herrero
+#  Conexion: SSH -> PowerShell (shell por defecto), como usuario Administrador.
+#
+#  Requisitos (equipo de control, Linux/WSL):
+#    ansible-galaxy collection install -r requirements.yml
+#
+#  Ejecutar (en esta carpeta):
+#    ansible-playbook -i ./equiposW11.ini roles.yaml
+#    ansible-playbook -i ./equiposW11.ini roles.yaml -l W11-PRUEBA
+#    ansible-playbook -i ./equiposW11.ini roles.yaml --tags chrome    # un solo programa
+#
+#  Utiles:
+#    ansible all -i ./equiposW11.ini -m ansible.windows.win_ping
+#    ansible all -i ./equiposW11.ini -m ansible.windows.win_reboot -l 'all:!W11-PRUEBA'
+# =============================================================================
+
+- hosts: all
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Determinar aula por el tercer octeto de la IP (IABD=.72 / SMRD=.32)
+      ansible.builtin.set_fact:
+        iac_aula: >-
+          {{ 'IABD' if (ansible_facts.ip_addresses | default([]) | select('match', '^10\.0\.72\.') | list | length > 0)
+             else ('SMRD' if (ansible_facts.ip_addresses | default([]) | select('match', '^10\.0\.32\.') | list | length > 0)
+             else 'NINGUNA') }}
+
+    - name: Mostrar aula detectada
+      ansible.builtin.debug:
+        msg: "Equipo {{ inventory_hostname }} -> aula {{ iac_aula }}"
+
+  # Listado UNICO de roles a instalar (sin separar por profesor). Los primeros
+  # (chocolatey, basicos, openssh, escritorioRemoto) son base y conviene mantenerlos
+  # al principio; el resto pueden reordenarse libremente.
+  roles:
+    - chocolatey
+    - basicos
+    - openssh
+    - escritorioRemoto
+    - office365
+    - chrome
+    - virtualbox
+    - veyon
+    - obs
+    - openshot
+    - gimp
+    - zoomit
+    - vscode
+    - vagrant
+    - vmware
+    - notepadpp
+    - awscli
+    - vsCommunity
+    - basex

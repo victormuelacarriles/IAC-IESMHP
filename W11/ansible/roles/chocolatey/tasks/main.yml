@@ -1,0 +1,28 @@
+---
+# Rol chocolatey — instala/asegura Chocolatey y configura el proxy del aula.
+# Es el primer rol del playbook: el resto de roles usan win_chocolatey.
+
+- name: Comprobar si Chocolatey esta instalado
+  ansible.windows.win_stat:
+    path: C:\ProgramData\chocolatey\bin\choco.exe
+  register: choco_exe
+
+- name: Instalar Chocolatey
+  ansible.windows.win_shell: |
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+  when: not choco_exe.stat.exists
+
+- name: Configurar el proxy de Chocolatey segun el aula
+  chocolatey.chocolatey.win_chocolatey_config:
+    name: proxy
+    state: present
+    value: "{{ 'http://10.0.72.140:3128' if (iac_aula | default('NINGUNA')) == 'IABD' else 'http://10.0.32.119:3128' }}"
+  when: (iac_aula | default('NINGUNA')) in ['IABD', 'SMRD']
+
+- name: Quitar el proxy de Chocolatey si el equipo no esta en un aula con proxy
+  chocolatey.chocolatey.win_chocolatey_config:
+    name: proxy
+    state: absent
+  when: (iac_aula | default('NINGUNA')) not in ['IABD', 'SMRD']
