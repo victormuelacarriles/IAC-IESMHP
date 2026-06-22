@@ -69,6 +69,7 @@ ansible-galaxy collection install -r requirements.yml   # ansible.windows, choco
 | [`chocolatey`](roles/chocolatey/CLAUDE.md) | ✅ 1º | Instala Chocolatey + proxy de aula |
 | [`basicos`](roles/basicos/CLAUDE.md) | ✅ | NuGet + comprueba winget |
 | [`escritorioRemoto`](roles/escritorioRemoto/CLAUDE.md) | ✅ | Habilita RDP (registro + firewall) |
+| [`energiaAltoRendimiento`](roles/energiaAltoRendimiento/CLAUDE.md) | ✅ | Plan de energía "Alto rendimiento" + desactiva la suspensión (`powercfg`) |
 | [`office365`](roles/office365/CLAUDE.md) | ✅ | Microsoft 365 Apps (sin activar licencia) |
 | [`chrome`](roles/chrome/CLAUDE.md) | ✅ | Google Chrome |
 | [`virtualbox`](roles/virtualbox/CLAUDE.md) | ✅ | VirtualBox `7.2.10` |
