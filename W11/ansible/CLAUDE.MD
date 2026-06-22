@@ -126,16 +126,19 @@ ansible-playbook -i ./equiposW11.ini roles.yaml --tags obs -e obs_version=31.0.0
 
 ## Medir el tiempo de instalación
 
-El tiempo (total y por rol) se obtiene con **callbacks de Ansible**, activados en
-`ansible.cfg` (`callbacks_enabled = timer, ansible.posix.profile_roles`). No tocan el
-playbook ni los roles: imprimen un **resumen al final** de cada ejecución.
+El tiempo (total, por rol y por tarea) se obtiene con **callbacks de Ansible**,
+activados en `ansible.cfg`
+(`callbacks_enabled = timer, ansible.posix.profile_roles, ansible.posix.profile_tasks`).
+No tocan el playbook ni los roles: imprimen un **resumen al final** de cada ejecución.
 
 - **`timer`** (de serie): línea final con el tiempo **total** del playbook, p. ej.
   `Playbook run took 0 days, 0 hours, 6 minutes, 12 seconds`.
 - **`ansible.posix.profile_roles`** (colección `ansible.posix`, en `requirements.yml`):
   **desglose por rol** ordenado, para ver cuál es el más lento.
-- ¿Detalle por tarea? Añadir `ansible.posix.profile_tasks` a `callbacks_enabled`
-  (lista además las N tareas más lentas).
+- **`ansible.posix.profile_tasks`** (misma colección): tiempo de **cada tarea** (lo
+  muestra junto a cada `ok/changed`) y, al final, el ranking de las tareas **más
+  lentas**. Es el detalle más fino para optimizar (p. ej. ver qué `win_chocolatey`
+  tarda más).
 
 Los tiempos son **agregados de todos los equipos** del inventario; para medir uno
 solo, ejecutar con `-l W11-PRUEBA`. El `win_ping` previo de `rolesW11.sh` queda
