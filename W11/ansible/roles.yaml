@@ -37,7 +37,6 @@
   roles:
     - chocolatey
     - basicos
-    - openssh
     - escritorioRemoto
     - chrome
     - veyon
