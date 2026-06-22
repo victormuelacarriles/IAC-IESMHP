@@ -10,27 +10,30 @@ un rol por programa, `defaults/` para fijar versiones, un `CLAUDE.md` por rol y 
 `roles.yaml` maestro.
 
 > Software a instalar (**listado único**, sin separar por profesor): Office 365,
-> Chrome, VirtualBox, Veyon, OBS, OpenShot, GIMP, ZoomIt, VS Code, Vagrant, VMware
-> Workstation, Notepad++, AWS CLI, VS Community y BaseX, además de la base (OpenSSH,
-> Escritorio Remoto y Chocolatey).
+> Chrome, VirtualBox, Veyon, OBS, OpenShot, GIMP, ZoomIt, VS Code, Vagrant,
+> Notepad++, AWS CLI, VS Community y BaseX, además de la base (Escritorio Remoto y
+> Chocolatey). El servidor **OpenSSH** ya no es un rol: se instala una sola vez a
+> mano (es el canal de conexión de Ansible). **VMware Workstation** está
+> **comentado** en `roles.yaml`, pendiente de replantear (su paquete Choco falla).
 
 ---
 
 ## Cómo conecta Ansible con Windows
 
-- **Conexión SSH**, no WinRM. El servidor OpenSSH de Windows ya está montado a mano
-  (ver [`W11/Utiles/Openssh/ProcedimientoOpenss.txt`](../Utiles/Openssh/ProcedimientoOpenss.txt));
-  el rol `openssh` lo mantiene idempotente después.
+- **Conexión SSH**, no WinRM. El servidor OpenSSH de Windows se monta **a mano una
+  sola vez** (ver [`W11/Utiles/Openssh/ProcedimientoOpenss.txt`](../Utiles/Openssh/ProcedimientoOpenss.txt)).
+  **Ya no hay rol `openssh`**: al ser el canal por el que conecta Ansible, no tiene
+  sentido gestionarlo desde un playbook que llega por ese mismo canal.
 - En el inventario, cada equipo lleva (en `[all:vars]`):
   ```ini
   ansible_connection=ssh
   ansible_shell_type=powershell      # el DefaultShell del sshd es powershell.exe
   ansible_user=Administrador
   ```
-- Autenticación por **clave pública**: la pública del equipo de control debe estar
-  en `Autorizados.txt` (raíz del repo), que el rol `openssh` vuelca a
-  `%ProgramData%\ssh\administrators_authorized_keys` (con los permisos `icacls`
-  correctos, si no `sshd` lo ignora).
+- Autenticación por **clave pública**: la pública del equipo de control debe
+  colocarse **a mano** en `%ProgramData%\ssh\administrators_authorized_keys` del
+  equipo Windows (con los permisos `icacls` correctos, si no `sshd` la ignora;
+  ver el procedimiento de OpenSSH).
 - **No se usa `become`**: ya conectamos como Administrador.
 
 ### Requisitos en el equipo de control (Linux / WSL)
@@ -48,10 +51,16 @@ ansible-galaxy collection install -r requirements.yml   # ansible.windows, choco
 - **`pre_tasks`**: detecta el **aula** por el 3er octeto de la IP y lo guarda en
   `iac_aula` (`IABD` si `10.0.72.x`, `SMRD` si `10.0.32.x`, si no `NINGUNA`). Lo usa
   el rol `chocolatey` para fijar el proxy.
-- **`roles`**: **listado único** de roles (sin separar por profesor). Los roles
-  **base** (`chocolatey`, `basicos`, `openssh`, `escritorioRemoto`) van primero.
-  Cada rol lleva su **propio nombre como tag**, para instalar un solo programa con
+- **`vars.iac_roles`**: **listado único** de roles (sin separar por profesor). Los
+  roles **base** (`chocolatey`, `basicos`, `escritorioRemoto`) van primero. Cada rol
+  lleva su **propio nombre como tag**, para instalar un solo programa con
   `--tags <rol>`.
+- **Continúa aunque un rol falle**: en vez de la clave `roles:`, el play recorre
+  `iac_roles` en un bucle de `include_tasks: aplicar_rol.yml`, que envuelve cada rol
+  en un `block`/`rescue`. Si un rol falla, se **anota** (lista `iac_roles_fallidos`)
+  y se **sigue con el resto** en lugar de abortar; al final una tarea de resumen
+  lista los roles que fallaron por equipo. Sigue respetando el orden de la lista y
+  los `--tags`.
 
 ### Roles y su estado
 
@@ -59,7 +68,6 @@ ansible-galaxy collection install -r requirements.yml   # ansible.windows, choco
 |-----|--------|--------------------|
 | [`chocolatey`](roles/chocolatey/CLAUDE.md) | ✅ 1º | Instala Chocolatey + proxy de aula |
 | [`basicos`](roles/basicos/CLAUDE.md) | ✅ | NuGet + comprueba winget |
-| [`openssh`](roles/openssh/CLAUDE.md) | ✅ | sshd + PowerShell + `administrators_authorized_keys` |
 | [`escritorioRemoto`](roles/escritorioRemoto/CLAUDE.md) | ✅ | Habilita RDP (registro + firewall) |
 | [`office365`](roles/office365/CLAUDE.md) | ✅ | Microsoft 365 Apps (sin activar licencia) |
 | [`chrome`](roles/chrome/CLAUDE.md) | ✅ | Google Chrome |
@@ -71,7 +79,7 @@ ansible-galaxy collection install -r requirements.yml   # ansible.windows, choco
 | [`zoomit`](roles/zoomit/CLAUDE.md) | ✅ | ZoomIt (Sysinternals) |
 | [`vscode`](roles/vscode/CLAUDE.md) | ✅ | Visual Studio Code `1.125` |
 | [`vagrant`](roles/vagrant/CLAUDE.md) | ✅ | HashiCorp Vagrant |
-| [`vmware`](roles/vmware/CLAUDE.md) | ✅ (verificar id) | VMware Workstation Pro |
+| [`vmware`](roles/vmware/CLAUDE.md) | 💤 comentado | VMware Workstation Pro — el paquete Choco falla; pendiente de replantear (instalar desde el NAS) |
 | [`notepadpp`](roles/notepadpp/CLAUDE.md) | ✅ | Notepad++ `8.9.6.4` |
 | [`awscli`](roles/awscli/CLAUDE.md) | ✅ | AWS CLI v2 |
 | [`vsCommunity`](roles/vsCommunity/CLAUDE.md) | ✅ (id 2022→2026) | Visual Studio Community |
@@ -132,7 +140,10 @@ ansible-playbook -i ./equiposW11.ini roles.yaml --tags obs -e obs_version=31.0.0
   como **tag** (`--tags chrome`, `--tags vscode`…) para instalar uno o varios
   programas sueltos.
 - **Idempotencia**: `win_chocolatey` ya es idempotente; los roles de configuración
-  (openssh, escritorioRemoto) controlan `changed_when` a mano.
+  (p. ej. `escritorioRemoto`) controlan `changed_when` a mano.
+- **Tolerancia a fallos**: el playbook **no aborta** si un rol falla; lo anota y
+  sigue con el resto (`aplicar_rol.yml`, `block`/`rescue`). Revisar el resumen final
+  para ver qué roles fallaron.
 
 ---
 
@@ -141,8 +152,9 @@ ansible-playbook -i ./equiposW11.ini roles.yaml --tags obs -e obs_version=31.0.0
 1. **`veyon`** — instala Veyon en todos los equipos; falta definir la **configuración**
    Master (profesor) vs Client (alumnos) con `veyon-cli` y un grupo de inventario.
    Ver `roles/veyon/CLAUDE.md`.
-2. **`vmware`** — confirmar el id del paquete Choco (`vmware-workstation` vs
-   `vmwareworkstation`) y, si hace falta, el build "25 H2 U1".
+2. **`vmware`** — **comentado** en `roles.yaml` (el paquete Choco falla). Replantear:
+   probablemente descargar el instalador desde una carpeta del NAS e instalarlo en
+   silencio (en vez de `win_chocolatey`). El rol sigue en `roles/vmware/` como base.
 3. **`vsCommunity`** — cambiar a `visualstudio2026community` cuando exista (la lista
    pide "Community 26").
 4. **`basex`** — verificar la URL del ZIP (`files.basex.org/releases/12.4/BaseX124.zip`).

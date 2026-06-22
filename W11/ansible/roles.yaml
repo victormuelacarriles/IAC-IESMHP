@@ -19,6 +19,35 @@
 - hosts: all
   gather_facts: yes
 
+  vars:
+    # Listado UNICO de roles a instalar (sin separar por profesor). Los primeros
+    # (chocolatey, basicos, escritorioRemoto) son base y conviene mantenerlos al
+    # principio; el resto pueden reordenarse libremente.
+    #
+    # El servidor OpenSSH ya NO es un rol: se instala una sola vez a mano
+    # (ver W11/Utiles/Openssh/ProcedimientoOpenss.txt), porque es el canal por el
+    # que Ansible conecta.
+    iac_roles:
+      - chocolatey
+      - basicos
+      - escritorioRemoto
+      - chrome
+      - veyon
+      - obs
+      - openshot
+      - gimp
+      - zoomit
+      - vscode
+      - vagrant
+      - notepadpp
+      - awscli
+      - vsCommunity
+      - basex
+      # - vmware   # COMENTADO (pendiente de replantear): el paquete Choco falla;
+      #            # habra que descargar el instalador desde una carpeta del NAS.
+      - virtualbox
+      - office365
+
   pre_tasks:
     - name: Determinar aula por el tercer octeto de la IP (IABD=.72 / SMRD=.32)
       ansible.builtin.set_fact:
@@ -31,25 +60,20 @@
       ansible.builtin.debug:
         msg: "Equipo {{ inventory_hostname }} -> aula {{ iac_aula }}"
 
-  # Listado UNICO de roles a instalar (sin separar por profesor). Los primeros
-  # (chocolatey, basicos, openssh, escritorioRemoto) son base y conviene mantenerlos
-  # al principio; el resto pueden reordenarse libremente.
-  roles:
-    - chocolatey
-    - basicos
-    - escritorioRemoto
-    - chrome
-    - veyon
-    - obs
-    - openshot
-    - gimp
-    - zoomit
-    - vscode
-    - vagrant
-    - notepadpp
-    - awscli
-    - vsCommunity
-    - basex
-    #- vmware  : falla. Hay que hacer la descarga desde una carpeta del nas e instalar
-    - virtualbox
-    - office365
+  # Se aplican como tareas (no con la clave 'roles:') para poder envolver cada rol
+  # en un block/rescue: si un rol falla, se anota y se CONTINUA con el resto en vez
+  # de abortar el playbook. Ver aplicar_rol.yml.
+  tasks:
+    - name: Aplicar cada rol sin abortar si uno falla
+      ansible.builtin.include_tasks: aplicar_rol.yml
+      loop: "{{ iac_roles }}"
+      loop_control:
+        loop_var: rol
+        label: "{{ rol }}"
+
+    - name: "Resumen: roles que fallaron"
+      ansible.builtin.debug:
+        msg: >-
+          {{ ('Roles que fallaron en ' ~ inventory_hostname ~ ': ' ~ (iac_roles_fallidos | join(', ')))
+             if (iac_roles_fallidos | default([]) | length > 0)
+             else ('Todos los roles se aplicaron correctamente en ' ~ inventory_hostname) }}

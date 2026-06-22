@@ -28,5 +28,7 @@ echo "== Comprobando conectividad (win_ping) =="
 ansible all -m ansible.windows.win_ping || true
 
 # Aplicar el playbook. "$@" reenvia los argumentos extra (-l, --tags, --check...).
+# El playbook NO aborta si un rol falla (block/rescue en aplicar_rol.yml): anota el
+# rol fallido y sigue con el resto, y al final muestra un resumen de roles fallidos.
 echo "== Aplicando roles.yaml =="
 ansible-playbook roles.yaml "$@"
