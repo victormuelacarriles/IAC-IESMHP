@@ -7,16 +7,36 @@
     path: C:\ProgramData\chocolatey\bin\choco.exe
   register: choco_exe
 
+# --- Proxy del aula (con autodeteccion de alcanzabilidad) -----------------------
+# El aula puede salir a internet por un Squid (IABD 10.0.72.140 / SMRD 10.0.32.119,
+# los mismos que usa apt en Ubuntu). Pero no todos los equipos detectados por IP en
+# esa red lo tienen alcanzable (p.ej. una VM de pruebas con salida directa). Por eso
+# probamos el proxy y solo lo usamos si responde; si no, salida directa.
+- name: Determinar el proxy candidato segun el aula
+  ansible.builtin.set_fact:
+    choco_proxy_host: "{{ '10.0.72.140' if (iac_aula | default('NINGUNA')) == 'IABD' else ('10.0.32.119' if (iac_aula | default('NINGUNA')) == 'SMRD' else '') }}"
+
+- name: Comprobar si el proxy del aula es alcanzable
+  ansible.windows.win_shell: "Test-NetConnection {{ choco_proxy_host }} -Port 3128 -InformationLevel Quiet -WarningAction SilentlyContinue"
+  register: proxy_test
+  changed_when: false
+  failed_when: false
+  when: choco_proxy_host | length > 0
+
+- name: Fijar la URL de proxy efectiva (vacia = salida directa)
+  ansible.builtin.set_fact:
+    choco_proxy_url: "{{ 'http://' ~ choco_proxy_host ~ ':3128' if (choco_proxy_host | length > 0 and 'True' in (proxy_test.stdout | default(''))) else '' }}"
+
+# --- Instalacion ----------------------------------------------------------------
 # Microsoft Defender marca el patron clasico "iex (New-Object Net.WebClient).DownloadString(...)"
 # como Trojan:Win32/Goptaju.D (firma AMSI sobre la linea de comandos) y mata el proceso ->
 # "CreateProcessW Access denied (5)". Por eso NO usamos el download cradle en memoria: bajamos
-# install.ps1 a un fichero y lo ejecutamos. La firma va contra el cradle, no contra el contenido
-# del instalador. proxy_url solo se fija en aulas con proxy (mismo valor que win_chocolatey_config).
+# install.ps1 a un fichero y lo ejecutamos. La firma va contra el cradle, no contra el contenido.
 - name: Descargar el instalador oficial de Chocolatey
   ansible.windows.win_get_url:
     url: https://community.chocolatey.org/install.ps1
     dest: C:\Windows\Temp\choco-install.ps1
-    proxy_url: "{{ ('http://10.0.72.140:3128' if (iac_aula | default('NINGUNA')) == 'IABD' else 'http://10.0.32.119:3128') if (iac_aula | default('NINGUNA')) in ['IABD', 'SMRD'] else omit }}"
+    proxy_url: "{{ choco_proxy_url if choco_proxy_url | length > 0 else omit }}"
   when: not choco_exe.stat.exists
 
 - name: Instalar Chocolatey desde el script descargado
@@ -26,15 +46,16 @@
     & C:\Windows\Temp\choco-install.ps1
   when: not choco_exe.stat.exists
 
-- name: Configurar el proxy de Chocolatey segun el aula
+# --- Proxy de Chocolatey para las descargas de paquetes -------------------------
+- name: Configurar el proxy de Chocolatey
   chocolatey.chocolatey.win_chocolatey_config:
     name: proxy
     state: present
-    value: "{{ 'http://10.0.72.140:3128' if (iac_aula | default('NINGUNA')) == 'IABD' else 'http://10.0.32.119:3128' }}"
-  when: (iac_aula | default('NINGUNA')) in ['IABD', 'SMRD']
+    value: "{{ choco_proxy_url }}"
+  when: choco_proxy_url | length > 0
 
-- name: Quitar el proxy de Chocolatey si el equipo no esta en un aula con proxy
+- name: Quitar el proxy de Chocolatey si no hay proxy alcanzable
   chocolatey.chocolatey.win_chocolatey_config:
     name: proxy
     state: absent
-  when: (iac_aula | default('NINGUNA')) not in ['IABD', 'SMRD']
+  when: choco_proxy_url | length == 0
