@@ -7,11 +7,23 @@
     path: C:\ProgramData\chocolatey\bin\choco.exe
   register: choco_exe
 
-- name: Instalar Chocolatey
+# Microsoft Defender marca el patron clasico "iex (New-Object Net.WebClient).DownloadString(...)"
+# como Trojan:Win32/Goptaju.D (firma AMSI sobre la linea de comandos) y mata el proceso ->
+# "CreateProcessW Access denied (5)". Por eso NO usamos el download cradle en memoria: bajamos
+# install.ps1 a un fichero y lo ejecutamos. La firma va contra el cradle, no contra el contenido
+# del instalador. proxy_url solo se fija en aulas con proxy (mismo valor que win_chocolatey_config).
+- name: Descargar el instalador oficial de Chocolatey
+  ansible.windows.win_get_url:
+    url: https://community.chocolatey.org/install.ps1
+    dest: C:\Windows\Temp\choco-install.ps1
+    proxy_url: "{{ ('http://10.0.72.140:3128' if (iac_aula | default('NINGUNA')) == 'IABD' else 'http://10.0.32.119:3128') if (iac_aula | default('NINGUNA')) in ['IABD', 'SMRD'] else omit }}"
+  when: not choco_exe.stat.exists
+
+- name: Instalar Chocolatey desde el script descargado
   ansible.windows.win_shell: |
     Set-ExecutionPolicy Bypass -Scope Process -Force
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    & C:\Windows\Temp\choco-install.ps1
   when: not choco_exe.stat.exists
 
 - name: Configurar el proxy de Chocolatey segun el aula
