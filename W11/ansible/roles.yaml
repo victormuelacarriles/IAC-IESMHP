@@ -51,6 +51,6 @@
     - awscli
     - vsCommunity
     - basex
-    - vmware
+    #- vmware  : falla. Hay que hacer la descarga desde una carpeta del nas e instalar
     - virtualbox
     - office365
