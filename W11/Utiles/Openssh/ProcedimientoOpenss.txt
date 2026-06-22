@@ -57,3 +57,10 @@ foreach ($clave in $nuevasClaves) {
 }
 
 Write-Host "Proceso completado. Se han añadido $clavesAñadidas clave(s) nueva(s)." -ForegroundColor Green
+
+
+#Permisos:
+$authFile = "$env:ProgramData\ssh\administrators_authorized_keys"
+icacls $authFile /inheritance:r
+icacls $authFile /grant "*S-1-5-18:F"      # SYSTEM
+icacls $authFile /grant "*S-1-5-32-544:F"  # Administradores (cualquier idioma)
