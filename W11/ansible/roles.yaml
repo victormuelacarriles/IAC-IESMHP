@@ -39,9 +39,7 @@
     - basicos
     - openssh
     - escritorioRemoto
-    - office365
     - chrome
-    - virtualbox
     - veyon
     - obs
     - openshot
@@ -49,8 +47,10 @@
     - zoomit
     - vscode
     - vagrant
-    - vmware
     - notepadpp
     - awscli
     - vsCommunity
     - basex
+    - vmware
+    - virtualbox
+    - office365
