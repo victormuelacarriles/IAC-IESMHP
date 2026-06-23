@@ -166,13 +166,22 @@ try {
   Start-Service sshd -ErrorAction SilentlyContinue
   Log "OpenSSH: servicio sshd en automatico e iniciado."
 
-  # Regla de firewall (la crea el setup; verificar)
-  if (-not (Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue)) {
-    New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' `
-      -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 -ErrorAction SilentlyContinue | Out-Null
-    Log "OpenSSH: regla de firewall creada."
+  # Regla de firewall para sshd (puerto 22/TCP entrante).
+  # OJO: el instalador de la capacidad OpenSSH.Server suele crear la regla
+  # 'OpenSSH-Server-In-TCP', pero a veces queda DESHABILITADA o limitada a los
+  # perfiles Dominio/Privado mientras el equipo arranca en perfil PUBLICO ->
+  # SSH bloqueado. Por eso NO basta con comprobar que existe (eso dejaba la
+  # regla como estuviera): hay que FORZAR que este habilitada, en Allow y para
+  # TODOS los perfiles (Any). Si no existe, se crea.
+  $fwName = 'OpenSSH-Server-In-TCP'
+  if (Get-NetFirewallRule -Name $fwName -ErrorAction SilentlyContinue) {
+    Set-NetFirewallRule -Name $fwName -Enabled True -Action Allow -Profile Any -ErrorAction SilentlyContinue
+    Log "OpenSSH: regla de firewall '$fwName' existente -> habilitada (Allow, todos los perfiles)."
   } else {
-    Log "OpenSSH: regla de firewall ya existe."
+    New-NetFirewallRule -Name $fwName -DisplayName 'OpenSSH Server (sshd)' `
+      -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 -Profile Any `
+      -ErrorAction SilentlyContinue | Out-Null
+    Log "OpenSSH: regla de firewall '$fwName' creada (puerto 22, todos los perfiles)."
   }
 
   # Shell por defecto del sshd = PowerShell (lo exige Ansible W11)
