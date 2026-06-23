@@ -117,8 +117,12 @@ final). **Prueba SIEMPRE en una VM (UEFI + TPM) antes de hardware real.**
 ## TODO / pendientes
 
 1. **winget en el 1er logon**: en imágenes recién instaladas App Installer puede
-   tardar en registrarse; `0b-GitHub.ps1` reintenta localizar/instalar git como
-   red de seguridad, pero conviene confirmarlo en VM.
+   tardar en registrarse: en el primer logon el alias `winget.exe` de
+   `WindowsApps` aún no existe y `winget` "no se reconoce" (confirmado en VM
+   2026-06-23). `0b-GitHub.ps1` lo maneja: **espera** a que winget aparezca
+   (hasta ~60 s) y, si no, **descarga el instalador oficial de Git** desde
+   GitHub y lo instala en silencio (`/VERYSILENT`). El `winget install` del
+   `FirstLogonCommands` (Order 2) queda como vía rápida best-effort.
 3. **Edición de Windows**: `autounattend.xml` fija `Windows 11 Pro`; ajustar al
    nombre exacto del `install.wim` (`wiminfo sources/install.wim`).
 4. **Activación**: clave en blanco ⇒ sin activar (puede autoactivarse con clave
