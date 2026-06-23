@@ -83,8 +83,15 @@ $SUDO mount -o loop,ro -t udf "$ORIG" "$MNT" 2>/dev/null \
   || $SUDO mount -o loop,ro "$ORIG" "$MNT"
 
 # Volume ID original (Windows lo usa para detectar el medio igual que el original)
-VOLID="$(xorriso -indev "$ORIG" -toc 2>/dev/null | grep -m1 'Volume id' | sed "s/.*: *'//; s/'.*//")"
-[[ -n "$VOLID" ]] || VOLID="WIN_CUSTOM"
+# OJO: con 'set -euo pipefail' este pipeline puede ABORTAR el script en silencio:
+#  - xorriso emite el TOC por stderr en varias versiones -> con '2>/dev/null'
+#    grep se queda sin entrada y devuelve 1; y/o 'grep -m1' cierra la tuberia
+#    pronto y xorriso recibe SIGPIPE. En ambos casos pipefail propaga el fallo
+#    y, al estar en la asignacion VOLID="$(...)", set -e mata el script ANTES
+#    de poder aplicar el valor por defecto de la linea siguiente.
+# El '|| true' neutraliza ese fallo no critico (si no se detecta, hay fallback).
+VOLID="$(xorriso -indev "$ORIG" -toc 2>/dev/null | grep -m1 'Volume id' | sed "s/.*: *'//; s/'.*//" || true)"
+[[ -n "$VOLID" ]] || VOLID="CCCOMA_X64FRE_ES-ES_DV9"
 echo ">> Volume ID  : $VOLID"
 
 # autounattend.xml en la raiz de la ISO
