@@ -38,6 +38,13 @@ echo ">> ISO origen : $ORIG"
 echo ">> Answer file: $AUTO"
 echo ">> ISO salida : $OUT"
 
+# xorriso aborta con "-outdev ... media holds non-zero data" si el fichero de
+# salida ya existe (p. ej. de un intento anterior). El -outdev debe estar vacio.
+if [[ -e "$OUT" ]]; then
+  echo ">> Aviso: '$OUT' ya existia; lo elimino para empezar limpio."
+  rm -f "$OUT"
+fi
+
 # --- Comprobar tamano de install.wim dentro de la ISO -----------------------
 WIM_PATH=""
 for p in /sources/install.wim /sources/install.esd; do
@@ -61,10 +68,14 @@ if [[ "$SPLIT" -eq 0 || "$WIM_PATH" != "/sources/install.wim" || "$WIM_MB" -le 4
     echo "!! AVISO: install.wim supera 4 GB. Si la ISO resultante no arranca o"
     echo "          Setup no encuentra la imagen, relanza con --split." >&2
   fi
-  echo ">> Construyendo (metodo replay, sin extraer)..."
+  echo ">> Construyendo (metodo nativo 'keep', sin extraer)..."
+  # 'keep' conserva el El Torito cargado tal cual (catalogo + imagenes de
+  # arranque) sin re-resolverlas por ruta de fichero. Las ISOs de Win11
+  # 24H2/25H2 ocultan las imagenes El Torito (no son ficheros del arbol), por
+  # lo que 'replay' falla con "not a data file in the ISO filesystem".
   xorriso -indev "$ORIG" \
           -outdev "$OUT" \
-          -boot_image any replay \
+          -boot_image any keep \
           -map "$AUTO" /autounattend.xml \
           -commit
 
@@ -82,10 +93,10 @@ else
     MAPARGS+=(-map "$f" "/sources/$(basename "$f")")
   done
 
-  echo ">> Construyendo (replay + sustituyendo install.wim por .swm)..."
+  echo ">> Construyendo ('keep' + sustituyendo install.wim por .swm)..."
   xorriso -indev "$ORIG" \
           -outdev "$OUT" \
-          -boot_image any replay \
+          -boot_image any keep \
           -rm /sources/install.wim -- \
           "${MAPARGS[@]}" \
           -commit
@@ -101,3 +112,5 @@ xorriso -indev "$OUT" -find /autounattend.xml 2>/dev/null || echo "  (NO encontr
 echo
 echo ">> Listo: $OUT"
 echo ">> Pruebalo en una VM (UEFI + TPM) antes de usarlo en hardware real."
+echo ">> Si la VM NO arranca, usa el Metodo 2 (reconstruir con 'xorriso -as"
+echo ">> mkisofs'): ver Seccion 11 de tutorial-iso-windows11-autounattend.md."
