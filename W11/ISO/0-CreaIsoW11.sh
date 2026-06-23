@@ -1,29 +1,48 @@
 #!/usr/bin/env bash
 #
-# construir-iso-win11.sh
+# 0-CreaIsoW11.sh
 # Inserta un autounattend.xml en una ISO de Windows 11 desde Linux (Ubuntu)
-# usando xorriso, conservando el arranque BIOS + UEFI intacto.
+# reconstruyendo la ISO con xorriso (modo -as mkisofs), conservando el
+# arranque BIOS + UEFI. Ademas embebe 0b-GitHub.ps1 via $OEM$ para que acabe
+# en C:\Windows\Setup\Scripts\0b-GitHub.ps1 del sistema instalado (lo lanza el
+# FirstLogonCommands del autounattend.xml en el primer inicio de sesion).
 #
 # Dependencias:  sudo apt install xorriso wimtools
 #
 # Uso:
-#   ./construir-iso-win11.sh -i ORIGINAL.iso -a autounattend.xml -o SALIDA.iso [--split]
+#   ./0-CreaIsoW11.sh -i ORIGINAL.iso -a autounattend.xml -o SALIDA.iso \
+#                     [-s 0b-GitHub.ps1] [--split]
 #
-#   --split   Si install.wim supera 4 GB, lo trocea en .swm (<4 GB) y lo
-#             sustituye en la ISO. Solo necesario para imagenes grandes.
+#   -s        Ruta al script PowerShell de bootstrap a embeber via $OEM$.
+#             Por defecto 0b-GitHub.ps1 junto a este script. Si no existe se
+#             avisa y se continua sin embeberlo.
+#   --split   Fuerza el troceo de install.wim en .swm (<4 GB) aunque no supere
+#             los 4 GiB. Por defecto solo se trocea si install.wim > 4 GiB
+#             (limite de tamano de fichero de ISO 9660).
+#
+# Por que NO el metodo nativo ("replay"/"keep"):
+#   Las ISOs de Win11 24H2/25H2 ocultan las imagenes de arranque El Torito (no
+#   son ficheros del arbol). Con 'replay' xorriso falla ("not a data file in the
+#   ISO filesystem"). Con 'keep' conserva el arranque, pero el modo nativo
+#   -indev/-outdev hacia un fichero DISTINTO escribe solo una sesion incremental
+#   (te queda una ISO de pocos KB sin los datos). Por eso este script monta la
+#   ISO en solo-lectura y la RECONSTRUYE con -as mkisofs.
 #
 # NOTA: prueba SIEMPRE la ISO resultante en una maquina virtual antes de
 #       usarla en hardware real.
 #
 set -euo pipefail
 
-ORIG=""; AUTO=""; OUT=""; SPLIT=0
+# Script de bootstrap por defecto: 0b-GitHub.ps1 junto a este script.
+SELFDIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+ORIG=""; AUTO=""; OUT=""; SPLIT=0; PS1SCRIPT="$SELFDIR/0b-GitHub.ps1"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -i) ORIG="$2"; shift 2 ;;
     -a) AUTO="$2"; shift 2 ;;
     -o) OUT="$2";  shift 2 ;;
+    -s) PS1SCRIPT="$2"; shift 2 ;;
     --split) SPLIT=1; shift ;;
     *) echo "Argumento no reconocido: $1" >&2; exit 1 ;;
   esac
@@ -34,83 +53,103 @@ done
 [[ -n "$OUT"  ]] || { echo "ERROR: falta -o SALIDA.iso" >&2; exit 1; }
 command -v xorriso >/dev/null || { echo "ERROR: instala xorriso (sudo apt install xorriso)" >&2; exit 1; }
 
+# sudo solo si no somos root (mount/umount lo necesitan)
+if [[ "$(id -u)" -ne 0 ]]; then SUDO="sudo"; else SUDO=""; fi
+
+ORIG="$(readlink -f "$ORIG")"
+AUTO="$(readlink -f "$AUTO")"
+
 echo ">> ISO origen : $ORIG"
 echo ">> Answer file: $AUTO"
 echo ">> ISO salida : $OUT"
 
-# xorriso aborta con "-outdev ... media holds non-zero data" si el fichero de
-# salida ya existe (p. ej. de un intento anterior). El -outdev debe estar vacio.
-if [[ -e "$OUT" ]]; then
-  echo ">> Aviso: '$OUT' ya existia; lo elimino para empezar limpio."
-  rm -f "$OUT"
-fi
+rm -f "$OUT"
 
-# --- Comprobar tamano de install.wim dentro de la ISO -----------------------
-WIM_PATH=""
-for p in /sources/install.wim /sources/install.esd; do
-  if xorriso -indev "$ORIG" -find "$p" >/dev/null 2>&1 \
-     && xorriso -indev "$ORIG" -find "$p" 2>/dev/null | grep -q .; then
-    WIM_PATH="$p"; break
-  fi
-done
+# Directorios de trabajo. El de 'add' (autounattend + .swm) va en el mismo disco
+# que la salida, que es donde hay espacio para los .swm (~6 GB) y la ISO (~8 GB).
+OUTDIR="$(dirname "$OUT")"; [[ -d "$OUTDIR" ]] || OUTDIR="."
+MNT="$(mktemp -d)"
+WORK="$(mktemp -d "$OUTDIR/.win11build.XXXXXX")"
+cleanup() {
+  if mountpoint -q "$MNT" 2>/dev/null; then $SUDO umount "$MNT" 2>/dev/null || true; fi
+  rmdir "$MNT" 2>/dev/null || true
+  rm -rf "$WORK" 2>/dev/null || true
+}
+trap cleanup EXIT
 
-WIM_MB=0
-if [[ -n "$WIM_PATH" ]]; then
-  WIM_BYTES=$(xorriso -indev "$ORIG" -lsl "$WIM_PATH" 2>/dev/null \
-              | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/){print $i; exit}}')
-  WIM_MB=$(( ${WIM_BYTES:-0} / 1024 / 1024 ))
-  echo ">> Imagen     : $WIM_PATH  (~${WIM_MB} MB)"
-fi
+# Montar la ISO en solo-lectura. UDF preferido para leer install.wim >4 GB
+# completo (la capa ISO 9660 podria truncarlo).
+$SUDO mount -o loop,ro -t udf "$ORIG" "$MNT" 2>/dev/null \
+  || $SUDO mount -o loop,ro "$ORIG" "$MNT"
 
-# --- Caso simple: imagen <= ~4 GB o install.esd ----------------------------
-if [[ "$SPLIT" -eq 0 || "$WIM_PATH" != "/sources/install.wim" || "$WIM_MB" -le 4000 ]]; then
-  if [[ "$WIM_MB" -gt 4000 && "$WIM_PATH" == "/sources/install.wim" ]]; then
-    echo "!! AVISO: install.wim supera 4 GB. Si la ISO resultante no arranca o"
-    echo "          Setup no encuentra la imagen, relanza con --split." >&2
-  fi
-  echo ">> Construyendo (metodo nativo 'keep', sin extraer)..."
-  # 'keep' conserva el El Torito cargado tal cual (catalogo + imagenes de
-  # arranque) sin re-resolverlas por ruta de fichero. Las ISOs de Win11
-  # 24H2/25H2 ocultan las imagenes El Torito (no son ficheros del arbol), por
-  # lo que 'replay' falla con "not a data file in the ISO filesystem".
-  xorriso -indev "$ORIG" \
-          -outdev "$OUT" \
-          -boot_image any keep \
-          -map "$AUTO" /autounattend.xml \
-          -commit
+# Volume ID original (Windows lo usa para detectar el medio igual que el original)
+VOLID="$(xorriso -indev "$ORIG" -toc 2>/dev/null | grep -m1 'Volume id' | sed "s/.*: *'//; s/'.*//")"
+[[ -n "$VOLID" ]] || VOLID="WIN_CUSTOM"
+echo ">> Volume ID  : $VOLID"
 
+# autounattend.xml en la raiz de la ISO
+mkdir -p "$WORK/add"
+cp "$AUTO" "$WORK/add/autounattend.xml"
+
+# 0b-GitHub.ps1 embebido via $OEM$. Lo que cuelga de sources/$OEM$/$$/ acaba en
+# C:\Windows\ del sistema instalado; con $$/Setup/Scripts queda en
+# C:\Windows\Setup\Scripts\0b-GitHub.ps1 (ruta que invoca el FirstLogonCommands).
+if [[ -f "$PS1SCRIPT" ]]; then
+  OEM_SCRIPTS="$WORK/add/sources/\$OEM\$/\$\$/Setup/Scripts"
+  mkdir -p "$OEM_SCRIPTS"
+  cp "$PS1SCRIPT" "$OEM_SCRIPTS/0b-GitHub.ps1"
+  echo ">> Bootstrap   : $PS1SCRIPT -> /sources/\$OEM\$/\$\$/Setup/Scripts/0b-GitHub.ps1"
 else
-  # --- Caso install.wim > 4 GB: trocear en .swm y sustituir ----------------
-  command -v wimlib-imagex >/dev/null || { echo "ERROR: instala wimtools (sudo apt install wimtools)" >&2; exit 1; }
-  TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-  echo ">> Extrayendo install.wim..."
-  xorriso -osirrox on -indev "$ORIG" -extract /sources/install.wim "$TMP/install.wim"
-  echo ">> Troceando en .swm (<3800 MB por parte)..."
-  wimlib-imagex split "$TMP/install.wim" "$TMP/install.swm" 3800
-
-  MAPARGS=(-map "$AUTO" /autounattend.xml)
-  for f in "$TMP"/install*.swm; do
-    MAPARGS+=(-map "$f" "/sources/$(basename "$f")")
-  done
-
-  echo ">> Construyendo ('keep' + sustituyendo install.wim por .swm)..."
-  xorriso -indev "$ORIG" \
-          -outdev "$OUT" \
-          -boot_image any keep \
-          -rm /sources/install.wim -- \
-          "${MAPARGS[@]}" \
-          -commit
+  echo ">> AVISO: no encuentro el script de bootstrap ($PS1SCRIPT)." >&2
+  echo ">>        La ISO se generara SIN 0b-GitHub.ps1; el FirstLogonCommands fallara." >&2
 fi
+
+# Imagen de arranque UEFI: preferimos la version sin "Press any key to boot..."
+EFIIMG="efi/microsoft/boot/efisys_noprompt.bin"
+[[ -f "$MNT/$EFIIMG" ]] || EFIIMG="efi/microsoft/boot/efisys.bin"
+[[ -f "$MNT/$EFIIMG" ]] || { echo "ERROR: no encuentro la imagen EFI en la ISO" >&2; exit 1; }
+
+# ¿Hay que trocear install.wim? (limite de 4 GiB por fichero en ISO 9660)
+EXCL=()
+WIM="$MNT/sources/install.wim"
+if [[ -f "$WIM" ]]; then
+  WIM_BYTES="$(stat -c%s "$WIM")"
+  echo ">> install.wim: $((WIM_BYTES/1024/1024)) MB"
+  if [[ "$SPLIT" -eq 1 || "$WIM_BYTES" -gt 4294967295 ]]; then
+    command -v wimlib-imagex >/dev/null || { echo "ERROR: instala wimtools (sudo apt install wimtools)" >&2; exit 1; }
+    echo ">> Troceando install.wim en .swm (<3800 MB)..."
+    mkdir -p "$WORK/add/sources"
+    wimlib-imagex split "$WIM" "$WORK/add/sources/install.swm" 3800
+    EXCL=(-m "install.wim")
+  fi
+fi
+
+echo ">> Reconstruyendo la ISO (xorriso -as mkisofs)..."
+xorriso -as mkisofs \
+  -iso-level 4 -rock -disable-deep-relocation -untranslated-filenames \
+  -V "$VOLID" -volset "$VOLID" \
+  -publisher "MICROSOFT CORPORATION" \
+  -A "CDIMAGE 2.56 (01/01/2005 TM)" \
+  "${EXCL[@]}" \
+  -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 \
+  -eltorito-alt-boot -eltorito-platform efi \
+  -b "$EFIIMG" \
+  -o "$OUT" "$MNT" "$WORK/add"
 
 # --- Verificacion -----------------------------------------------------------
 echo
 echo "=== Verificacion ==="
-echo "- Arranque El Torito conservado:"
-xorriso -indev "$OUT" -report_el_torito plain 2>/dev/null | grep -E "boot img|img path" || true
+echo "- Tamano de la ISO:"
+ls -lh "$OUT" | awk '{print "  " $5 "  " $NF}'
+echo "- Arranque El Torito (BIOS + UEFI):"
+xorriso -indev "$OUT" -report_el_torito plain 2>/dev/null | grep -E "El Torito boot img" || echo "  (sin El Torito!)"
 echo "- autounattend.xml en la raiz:"
 xorriso -indev "$OUT" -find /autounattend.xml 2>/dev/null || echo "  (NO encontrado!)"
+if [[ -f "$PS1SCRIPT" ]]; then
+  echo "- 0b-GitHub.ps1 embebido (\$OEM\$):"
+  xorriso -indev "$OUT" -find '/sources/$OEM$/$$/Setup/Scripts/0b-GitHub.ps1' 2>/dev/null \
+    || echo "  (NO encontrado!)"
+fi
 echo
 echo ">> Listo: $OUT"
 echo ">> Pruebalo en una VM (UEFI + TPM) antes de usarlo en hardware real."
-echo ">> Si la VM NO arranca, usa el Metodo 2 (reconstruir con 'xorriso -as"
-echo ">> mkisofs'): ver Seccion 11 de tutorial-iso-windows11-autounattend.md."

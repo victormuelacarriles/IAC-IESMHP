@@ -28,8 +28,8 @@ Según dónde vayas a **construir** la ISO:
 **Si construyes en Linux (Ubuntu):**
 
 - `xorriso` y `wimtools`: `sudo apt install xorriso wimtools`
-- Con el método recomendado (replay) **no necesitas extraer la ISO**.
-- Script todo-en-uno: `construir-iso-win11.sh` (adjunto).
+- No extraes los ~8 GB: se **monta** la ISO en solo-lectura y se reconstruye (necesita `sudo` para montar).
+- Script todo-en-uno: `0-CreaIsoW11.sh` (adjunto).
 
 **En ambos casos:**
 
@@ -42,7 +42,7 @@ Según dónde vayas a **construir** la ISO:
 
 ## 2. Paso 1 — Extraer el contenido de la ISO
 
-> Este paso es necesario para el método de Windows (`oscdimg`) y para el **Método 2** de Linux. Si construyes en Linux con el **Método 1 (replay, recomendado)**, **puedes saltártelo**: ese método trabaja directamente sobre la ISO original sin extraer nada.
+> Este paso (extraer a una carpeta) solo es necesario para el método de Windows (`oscdimg`). En Linux el método recomendado **monta** la ISO original en solo-lectura y la reconstruye sin extraerla (ver Sección 11), así que **puedes saltártelo**.
 
 Crea una carpeta de trabajo, p. ej. `C:\win11build\iso` (Windows) o `~/win11build/iso` (Linux), y vuelca ahí todo el contenido de la ISO original:
 
@@ -78,7 +78,18 @@ Descarga el `autounattend.xml` resultante.
 
 ### Opción B: usar la plantilla de ejemplo
 
-Usa el fichero `autounattend-ejemplo.xml` que te adjunto. Está completo y comentado, pero **debes** revisar/editar: contraseña, nombre de edición, URL de GitHub, idioma y disco destino. Y **probarlo en VM**.
+Usa el fichero `autounattend.xml` de esta carpeta. Está completo y comentado, pero **debes** revisar/editar: contraseña, nombre de edición, idioma y disco destino. Y **probarlo en VM**.
+
+> **Flujo real de este proyecto (IAC-IESMHP).** El `autounattend.xml` ya
+> incorporado en esta carpeta NO descarga el script de GitHub en el primer
+> arranque: crea la cuenta `usuario`/`usuario@1`, habilita el Escritorio Remoto
+> seguro (RDP + NLA), instala **git** con winget y ejecuta
+> `C:\Windows\Setup\Scripts\0b-GitHub.ps1`, que va **embebido en la ISO** (vía
+> `$OEM$`, lo coloca `0-CreaIsoW11.sh`). Ese script clona el repo con
+> sparse-checkout (solo raíz + `W11`) y lanza `1-Setup.ps1`. Las secciones de
+> abajo sobre `Invoke-WebRequest`/`install.ps1` son el método **genérico**
+> (descargar de GitHub) que se conserva como referencia. Ver
+> [`CLAUDE.md`](CLAUDE.md) para el detalle del flujo de este proyecto.
 
 ---
 
@@ -155,8 +166,8 @@ Cambia `Windows 11 Pro` por la edición exacta presente en tu ISO. Para ver los 
 
 El `autounattend.xml` debe quedar en la **raíz** de la ISO, con ese nombre exacto (Setup lo busca por nombre en medios extraíbles y en la raíz).
 
-- **Método Windows / Método 2 Linux** (trabajas sobre la carpeta extraída): copia el fichero a la raíz de esa carpeta, p. ej. `C:\win11build\iso\autounattend.xml`.
-- **Método 1 Linux (replay)**: no copias nada a mano; el fichero se inserta al generar la ISO con `xorriso -map` (ver Sección 11).
+- **Método Windows** (trabajas sobre la carpeta extraída): copia el fichero a la raíz de esa carpeta, p. ej. `C:\win11build\iso\autounattend.xml`.
+- **Linux** (método recomendado de la Sección 11): no copias nada a la ISO a mano; el fichero se mete en una carpeta `add/` aparte y `xorriso` lo coloca en la raíz al reconstruir. El script `0-CreaIsoW11.sh` lo hace solo.
 
 ### (Opcional) Incrustar el script en lugar de descargarlo de GitHub
 
@@ -168,8 +179,9 @@ sources/$OEM$/$$/Setup/Scripts/install.ps1
 
 Lo que pongas en `$OEM$/$$/` acaba en `C:\Windows\`, así que el script quedará en `C:\Windows\Setup\Scripts\install.ps1` y puedes ejecutarlo desde `FirstLogonCommands` apuntando a esa ruta local (sin `Invoke-WebRequest`). Es lo más robusto cuando no hay garantía de red.
 
-> En el Método 1 de Linux puedes inyectar también el `$OEM$` añadiendo más `-map`, por ejemplo:
-> `-map './sources/$OEM$' '/sources/$OEM$'` (entrecomilla por el `$`).
+> En Linux puedes inyectar también el `$OEM$` colocándolo dentro de la carpeta
+> `add/` que pasas a `xorriso` (p. ej. `/tmp/add/sources/$OEM$/...`); al
+> reconstruir queda en `/sources/$OEM$` de la ISO.
 
 ---
 
@@ -215,7 +227,7 @@ Resultado: `C:\win11build\Win11_custom.iso`.
 - **TLS.** Windows 11 ya usa TLS 1.2+, pero dejar la línea `SecurityProtocol=Tls12` no estorba.
 - **Particionado destruye datos.** `WillWipeDisk=true` sobre `DiskID 0` borra el disco. Asegúrate del número de disco correcto en el equipo destino.
 - **Contraseña en claro.** En el XML la contraseña va en texto plano; trátalo como secreto. El generador de Schneegans permite ofuscarla.
-- **Versiona el `autounattend.xml`** junto al script (y el `construir-iso-win11.sh`) en tu repo de GitHub para tener trazabilidad.
+- **Versiona el `autounattend.xml`** junto al script (y el `0-CreaIsoW11.sh`) en tu repo de GitHub para tener trazabilidad.
 
 ---
 
@@ -236,82 +248,74 @@ Si trabajas en Ubuntu no necesitas Windows ADK. Los pasos 2–6 (generar el `aut
 
 Dependencias: `sudo apt install xorriso wimtools`
 
-### Método 1 — modificar la ISO in situ (recomendado)
+### Método recomendado — montar la ISO y reconstruirla con `xorriso -as mkisofs`
 
-No extraes nada. `xorriso` carga la ISO original, **conserva su arranque 1:1** y solo añade el `autounattend.xml`. Ventajas: conserva el arranque BIOS+UEFI exacto, respeta el **UDF** (clave para `install.wim` grande) y **mantiene el Volume ID original** (lo que en el Método 2 hay que reponer a mano).
-
-```bash
-xorriso -indev Win11_original.iso \
-        -outdev Win11_custom.iso \
-        -boot_image any keep \
-        -map autounattend.xml /autounattend.xml \
-        -commit
-```
-
-> **`keep` en vez de `replay`.** Las ISOs de Windows 11 **24H2/25H2** guardan las
-> imágenes de arranque El Torito como *hidden* (no son ficheros visibles del árbol).
-> Con `replay`, xorriso intenta re-declararlas por su ruta y falla con
-> `SORRY : Cannot enable EL Torito boot image #N ... not a data file in the ISO
-> filesystem` → la ISO no arranca (bug de xorriso ≤ 1.5.6, corregido en 1.5.7).
-> `keep` conserva el catálogo El Torito tal cual estaba cargado, sin re-resolverlo
-> a fichero, y evita el problema.
->
-> **El `-outdev` debe estar vacío.** Si `Win11_custom.iso` ya existe de un intento
-> anterior, xorriso aborta con `-indev differs from -outdev and -outdev media holds
-> non-zero data`. Borra el fichero de salida antes (`rm -f Win11_custom.iso`). El
-> script `construir-iso-win11.sh` ya lo hace solo.
->
-> Aviso inofensivo: `xorriso` puede mostrar `EFI boot equipment ... no directory
-> /EFI/BOOT`. Es una convención para preparar USB en Windows; **no afecta** al
-> arranque de la ISO en VM ni grabada con `dd`.
-
-### Método 2 — reconstruir la ISO desde cero
-
-Extrae todo el contenido (Paso 1) y regenera con `xorriso -as mkisofs`. Funciona, pero debes reponer a mano los **metadatos** (Microsoft los usa para la detección automática de SO) y los flags de arranque El Torito. Comando verificado en Ubuntu 24.04 con Windows 11 24H2:
+Es el método que usa el script y el único fiable con las ISOs de Windows 11 **24H2/25H2**. No extraes los ~8 GB: montas la ISO original en **solo-lectura** y `xorriso` la reconstruye leyendo del montaje, añadiendo el `autounattend.xml` y conservando el arranque BIOS+UEFI.
 
 ```bash
+ISO=~/Descargas/Win11_original.iso
+OUT=~/Descargas/Win11_custom.iso
+AUTO=./autounattend.xml
+
+rm -f "$OUT"
+sudo mount -o loop,ro -t udf "$ISO" /tmp/m 2>/dev/null || sudo mount -o loop,ro "$ISO" /tmp/m
+mkdir -p /tmp/add && cp "$AUTO" /tmp/add/autounattend.xml
+
+# Si install.wim > 4 GiB hay que trocearlo (limite de fichero de ISO 9660):
+#   mkdir -p /tmp/add/sources
+#   wimlib-imagex split /tmp/m/sources/install.wim /tmp/add/sources/install.swm 3800
+#   ...y añade  -m install.wim  al comando de abajo para excluir el original.
+
 xorriso -as mkisofs \
   -iso-level 4 -rock -disable-deep-relocation -untranslated-filenames \
-  -V "CCCOMA_X64FRE_ES-ES_DV9" \
-  -volset "CCCOMA_X64FRE_ES-ES_DV9" \
+  -V "CCCOMA_X64FRE_ES-ES_DV9" -volset "CCCOMA_X64FRE_ES-ES_DV9" \
   -publisher "MICROSOFT CORPORATION" \
-  -p "MICROSOFT CORPORATION, ONE MICROSOFT WAY, REDMOND WA 98052, (425) 882-8080" \
   -A "CDIMAGE 2.56 (01/01/2005 TM)" \
   -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 \
   -eltorito-alt-boot -eltorito-platform efi \
   -b efi/microsoft/boot/efisys_noprompt.bin \
-  -o Win11_custom.iso  carpeta_extraida/
+  -o "$OUT" /tmp/m /tmp/add
+sudo umount /tmp/m
 ```
 
-El **Volume ID** real de tu ISO lo obtienes con:
+Notas:
 
-```bash
-xorriso -indev Win11_original.iso -toc 2>/dev/null | grep -i "Volume id"
-# o:  isoinfo -d -i Win11_original.iso | grep -i "Volume id"
-```
+- **No uses `-udf`**: la emulación `mkisofs` de `xorriso` no lo soporta (`Unsupported option '-udf'`). El límite de 4 GB de `install.wim` se resuelve troceándolo en `.swm`, no con UDF.
+- **Volume ID**: arriba va a fuego `CCCOMA_X64FRE_ES-ES_DV9`. El real de tu ISO lo sacas con `xorriso -indev "$ISO" -toc 2>/dev/null | grep -i "Volume id"`. El script lo detecta solo.
+- **`efisys_noprompt.bin`** evita el "Press any key to boot from CD/DVD" (ideal para desatendido). Si tu ISO no lo trae, usa `efisys.bin`.
+
+#### Por qué NO el método nativo (`replay` / `keep`)
+
+El modo nativo `xorriso -indev ORIG -outdev SALIDA -boot_image any replay -map ...` (más cómodo, sin montar) **no funciona** con las ISOs de Win11 24H2/25H2:
+
+- `replay` falla con `SORRY : Cannot enable EL Torito boot image #N ... not a data file in the ISO filesystem`, porque esas ISOs ocultan las imágenes El Torito (bug de xorriso ≤ 1.5.6, corregido en 1.5.7).
+- `keep` no da error y conserva el arranque, **pero** escribiendo a un fichero distinto solo vuelca una sesión incremental: te queda una ISO de **pocos KB sin los datos** (8 GB perdidos).
+
+Por eso se reconstruye con `-as mkisofs` desde el montaje.
 
 ### `install.wim` mayor de 4 GB (la pega habitual en Linux)
 
-ISO 9660 tiene un **límite de 4 GB por fichero**; por eso la ISO de Microsoft usa UDF. El Método 1 lo respeta mejor, pero si tu imagen es grande conviene asegurarse. Comprueba el tamaño (sin DISM) y, si hace falta, **trocea `install.wim` en `.swm`** (<4 GB); Windows Setup los recompone solo:
+ISO 9660 tiene un **límite de 4 GB por fichero**; por eso la ISO de Microsoft usa UDF. Como `xorriso` no escribe UDF, si tu `install.wim` supera 4 GB hay que **trocearlo en `.swm`** (<4 GB); Windows Setup los recompone solo:
 
 ```bash
-wiminfo sources/install.wim                        # ediciones y tamaño
-wimlib-imagex split install.wim install.swm 3800   # trocear si supera ~4000 MB
+stat -c%s /tmp/m/sources/install.wim               # tamaño en bytes
+wimlib-imagex split /tmp/m/sources/install.wim \
+                    /tmp/add/sources/install.swm 3800   # trocear (<3800 MB/parte)
 ```
 
-(Luego sustituyes `install.wim` por los `install.swm`/`install2.swm`... en `/sources/`.)
+Luego añade `-m install.wim` al comando `xorriso` para excluir el original (los `.swm` van en `/tmp/add/sources/`). El script `0-CreaIsoW11.sh` hace todo esto solo.
 
 ### Script todo-en-uno
 
-`construir-iso-win11.sh` automatiza el Método 1, detecta el tamaño de `install.wim` y, con `--split`, lo trocea y sustituye **solo si hace falta**:
+`0-CreaIsoW11.sh` automatiza el método recomendado: monta la ISO, detecta el Volume ID, añade el `autounattend.xml`, trocea `install.wim` **solo si supera 4 GiB** (o si fuerzas `--split`) y reconstruye la ISO. Necesita `sudo` para montar.
 
 ```bash
 sudo apt install xorriso wimtools
-chmod +x construir-iso-win11.sh
+chmod +x 0-CreaIsoW11.sh
 
-./construir-iso-win11.sh -i Win11_original.iso -a autounattend.xml -o Win11_custom.iso
-# imagen grande (install.wim > 4 GB):
-./construir-iso-win11.sh -i Win11_original.iso -a autounattend.xml -o Win11_custom.iso --split
+./0-CreaIsoW11.sh -i Win11_original.iso -a autounattend.xml -o Win11_custom.iso
+# forzar el troceo de install.wim aunque no llegue a 4 GiB:
+./0-CreaIsoW11.sh -i Win11_original.iso -a autounattend.xml -o Win11_custom.iso --split
 ```
 
 ### Verificar la ISO resultante
