@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  PLANTILLA autounattend.xml para Windows 11 (24H2 / 25H2)
+  ============================================================================
+  PUNTO DE PARTIDA - REVISA Y PRUEBA EN MAQUINA VIRTUAL ANTES DE USAR.
+
+  Debes personalizar:
+    1. <Value>Windows 11 Pro</Value>      -> edicion exacta de tu install.wim
+                                             (comprueba con: dism /Get-WimInfo
+                                              /WimFile:...\sources\install.wim)
+    2. Idioma/teclado (es-ES, 0000040A)   -> ajusta si procede
+    3. Cuenta local "admin" y su password -> cambia el password (va EN CLARO)
+    4. URL raw de GitHub                   -> tu repo/script real
+    5. DiskID 0 / WillWipeDisk=true        -> BORRA el disco 0. Verifica disco.
+
+  Activacion: la clave va en BLANCO -> Windows queda SIN ACTIVAR.
+  (Aviso: puede autoactivarse si el firmware UEFI tiene clave OEM o licencia
+   digital ligada al hardware, o si la red tiene un servidor KMS.)
+  ============================================================================
+-->
+<unattend xmlns="urn:schemas-microsoft-com:unattend"
+          xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+
+  <!-- ===================== PASO windowsPE ===================== -->
+  <settings pass="windowsPE">
+
+    <!-- Bypass de requisitos de Windows 11 (TPM, Secure Boot, RAM, CPU, disco).
+         Quitalo si tu hardware cumple los requisitos. -->
+    <component name="Microsoft-Windows-Setup" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral"
+               versionScope="nonSxS">
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>4</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassCPUCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>5</Order>
+          <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassStorageCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+
+      <!-- Particionado UEFI/GPT estandar. BORRA el disco 0. -->
+      <DiskConfiguration>
+        <Disk wcm:action="add">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <CreatePartition wcm:action="add">
+              <Order>1</Order><Type>EFI</Type><Size>300</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>2</Order><Type>MSR</Type><Size>16</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>3</Order><Type>Primary</Type><Extend>true</Extend>
+            </CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add">
+              <Order>1</Order><PartitionID>1</PartitionID>
+              <Format>FAT32</Format><Label>System</Label>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>2</Order><PartitionID>2</PartitionID>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>3</Order><PartitionID>3</PartitionID>
+              <Format>NTFS</Format><Label>Windows</Label><Letter>C</Letter>
+            </ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+        <WillShowUI>OnError</WillShowUI>
+      </DiskConfiguration>
+
+      <ImageInstall>
+        <OSImage>
+          <InstallTo>
+            <DiskID>0</DiskID>
+            <PartitionID>3</PartitionID>
+          </InstallTo>
+          <InstallFrom>
+            <!-- Selecciona la edicion por nombre (sin clave de producto) -->
+            <MetaData wcm:action="add">
+              <Key>/IMAGE/NAME</Key>
+              <Value>Windows 11 Pro</Value>
+            </MetaData>
+          </InstallFrom>
+        </OSImage>
+      </ImageInstall>
+
+      <UserData>
+        <!-- Clave en BLANCO => instalacion SIN activar -->
+        <ProductKey>
+          <Key />
+          <WillShowUI>OnError</WillShowUI>
+        </ProductKey>
+        <AcceptEula>true</AcceptEula>
+      </UserData>
+    </component>
+
+    <component name="Microsoft-Windows-International-Core-WinPE"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <SetupUILanguage><UILanguage>es-ES</UILanguage></SetupUILanguage>
+      <InputLocale>0000040A</InputLocale>
+      <SystemLocale>es-ES</SystemLocale>
+      <UILanguage>es-ES</UILanguage>
+      <UserLocale>es-ES</UserLocale>
+    </component>
+  </settings>
+
+  <!-- ===================== PASO oobeSystem ===================== -->
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral"
+               versionScope="nonSxS">
+
+      <!-- Saltar pantallas del OOBE (incluida la cuenta Microsoft) -->
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <ProtectYourPC>3</ProtectYourPC>
+      </OOBE>
+
+      <!-- Cuenta local de administrador -->
+      <UserAccounts>
+        <LocalAccounts>
+          <LocalAccount wcm:action="add">
+            <Name>admin</Name>
+            <Group>Administrators</Group>
+            <DisplayName>admin</DisplayName>
+            <Password>
+              <Value>CambiaEstaClave1!</Value>
+              <PlainText>true</PlainText>
+            </Password>
+          </LocalAccount>
+        </LocalAccounts>
+      </UserAccounts>
+
+      <!-- Autologon: necesario para que se ejecute FirstLogonCommands -->
+      <AutoLogon>
+        <Username>admin</Username>
+        <Enabled>true</Enabled>
+        <LogonCount>1</LogonCount>
+        <Password>
+          <Value>CambiaEstaClave1!</Value>
+          <PlainText>true</PlainText>
+        </Password>
+      </AutoLogon>
+
+      <!-- Descarga y ejecuta el script desde GitHub en el primer inicio -->
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/USUARIO/REPO/main/install.ps1' -OutFile 'C:\Windows\Temp\install.ps1'; powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'C:\Windows\Temp\install.ps1'"</CommandLine>
+          <Description>Descargar y ejecutar script de instalacion desde GitHub</Description>
+          <RequiresUserInput>false</RequiresUserInput>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+
+    <component name="Microsoft-Windows-International-Core"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <InputLocale>0000040A</InputLocale>
+      <SystemLocale>es-ES</SystemLocale>
+      <UILanguage>es-ES</UILanguage>
+      <UserLocale>es-ES</UserLocale>
+    </component>
+  </settings>
+
+</unattend>
