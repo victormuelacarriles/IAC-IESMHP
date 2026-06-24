@@ -251,8 +251,12 @@ if (Test-Path $Comun) {
 $Setup = Join-Path $Dest 'W11\ISO\1-Setup.ps1'
 if (Test-Path $Setup) {
   Log "Ejecutando $Setup en una ventana PowerShell visible..."
-  $p = Start-Process -FilePath 'powershell.exe' `
-        -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File', $Setup) `
+  # OJO (PS 5.1): con -ArgumentList COMO ARRAY, Start-Process NO entrecomilla los
+  # elementos con espacios -> la ruta "C:\Program Files\..." se parte y powershell
+  # no encuentra el .ps1 (sale con codigo -196608 sin ejecutar nada). Pasamos un
+  # UNICO string con la ruta entre comillas (igual que la tarea de reanudacion).
+  $argLine = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $Setup
+  $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $argLine `
         -WindowStyle Normal -PassThru -Wait
   Log "1-Setup.ps1 termino con codigo $($p.ExitCode)"
 } else {
