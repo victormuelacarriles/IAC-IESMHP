@@ -200,6 +200,10 @@ real.**
   `checkout` (un `.ps1` en ejecución no está bloqueado en Windows) para evitar el
   error "untracked working tree files would be overwritten"; los `.log` y
   `Tiempos.log` no colisionan (el repo no los rastrea) y se conservan.
+  Además, como esa carpeta la crea Windows Setup (`$OEM$`) como
+  SYSTEM/TrustedInstaller y git ≥2.35.2 rechaza operar en repos de otro
+  propietario ("detected dubious ownership"), 0b ejecuta antes
+  `git config --global --add safe.directory …` (la ruta y `*`).
 - **Logs al lado de cada script** (req 0) y **`Tiempos.log`** central (req 1),
   ambos en `…\W11\ISO\`. Ver sección "Logs y tiempos".
 - **Ventana visible** (req 2): 0b lanza `1-Setup.ps1` con

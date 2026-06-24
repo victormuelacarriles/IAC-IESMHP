@@ -157,6 +157,17 @@ if (-not $Git) {
 }
 Log "git = $Git"
 
+# --- "dubious ownership": marcar el repo como seguro -----------------------
+# La carpeta C:\Program Files\IAC-IESMHP la crea Windows Setup ($OEM$) como
+# SYSTEM/TrustedInstaller, no como 'usuario'; git (>=2.35.2) rechaza operar en
+# repos cuyo propietario no coincide con quien lo ejecuta ("detected dubious
+# ownership"). La marcamos como segura para el usuario actual antes de clonar.
+try {
+  & $Git config --global --add safe.directory '*'
+  & $Git config --global --add safe.directory ($Dest -replace '\\','/')
+  Log "git safe.directory configurado para $Dest (y '*')."
+} catch { Log "AVISO: no pude fijar safe.directory: $($_.Exception.Message)" }
+
 # --- Clonar / actualizar con sparse-checkout (cono => raiz + $Subdir) ------
 # La carpeta $Dest YA EXISTE (contiene este 0b-GitHub.ps1 puesto por $OEM$), asi
 # que NO se usa 'git clone' (exige dir vacio): se clona IN-PLACE.
