@@ -16,6 +16,12 @@ un rol por programa, `defaults/` para fijar versiones, un `CLAUDE.md` por rol y 
 > mano (es el canal de conexión de Ansible). **VMware Workstation** está
 > **comentado** en `roles.yaml`, pendiente de replantear (su paquete Choco falla).
 
+> **Nota**: este MISMO listado de software se instala también **en local** desde
+> la ISO, sin Ansible, mediante `W11/ISO/2-Aplicaciones.ps1` (winget preferente +
+> chocolatey). Si cambias las apps aquí, replícalo allí (y viceversa). Ansible
+> queda como vía de mantenimiento/recuperación por SSH. Ver
+> [`../ISO/CLAUDE.md`](../ISO/CLAUDE.md).
+
 ---
 
 ## Cómo conecta Ansible con Windows

@@ -26,6 +26,12 @@ Estos dos pasos los cubren los dos scripts de esta carpeta.
 **Entorno**: PowerShell como Administrador dentro de la propia VM Windows 11.
 **Objetivo**: maximizar el espacio libre del disco virtual antes de la compactación.
 
+> **Invocación automática**: además de ejecutarse a mano, este script lo lanza
+> ahora la cadena de la ISO como **paso de "compactado"** (último paso de
+> `W11/ISO/1-Setup.ps1`, tras Windows Update). Esa es la contraparta **dentro de
+> Windows** del compactado; el recorte real del VMDK sigue siendo `CompactaW11.sh`
+> en el **host Linux** con la VM apagada. Requisito vigente: `sdelete64.exe`.
+
 Tareas previstas (13 bloques, por orden de ejecución):
 
 | # | Bloque | Acción |

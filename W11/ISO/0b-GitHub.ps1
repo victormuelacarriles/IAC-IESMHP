@@ -3,20 +3,27 @@
   0b-GitHub.ps1  -  Bootstrap de IAC-IESMHP en Windows 11
   ============================================================================
   Lo lanza el autounattend.xml (FirstLogonCommands) en el primer inicio de
-  sesion. Va embebido en la ISO via $OEM$ y acaba en
-  C:\Windows\Setup\Scripts\0b-GitHub.ps1 (lo coloca alli 0-CreaIsoW11.sh).
+  sesion. Va embebido en la ISO via $OEM$\$1 y, desde el principio, vive en su
+  ubicacion DEFINITIVA:
+
+      C:\Program Files\IAC-IESMHP\W11\ISO\0b-GitHub.ps1   (lo coloca 0-CreaIsoW11.sh)
 
   Hace:
     1. Localiza git (lo instala Order 2 del autounattend; si aun no esta en el
        PATH lo busca en rutas conocidas; como ultimo recurso lo instala con
-       winget).
+       winget o por descarga directa).
     2. Clona https://github.com/victormuelacarriles/IAC-IESMHP.git en
        "C:\Program Files\IAC-IESMHP" con sparse-checkout en modo cono, dejando
-       SOLO los ficheros de la raiz y la subcarpeta W11 (no baja Mint /
-       ThinStation / Ubuntu ni ninguna otra). Si ya existe, hace pull.
-    3. Ejecuta "C:\Program Files\IAC-IESMHP\W11\ISO\1-Setup.ps1".
+       SOLO los ficheros de la raiz y la subcarpeta W11. Como la carpeta destino
+       YA contiene este propio script, NO se puede usar 'git clone' (exige dir
+       vacio): se clona IN-PLACE con init + fetch + checkout, machacando este
+       0b-GitHub.ps1 con la version de GitHub (queda "actualizado" sin moverse).
+    3. Carga comun.ps1 (ya clonado), anota el tiempo de clonado en Tiempos.log y
+       ejecuta "C:\Program Files\IAC-IESMHP\W11\ISO\1-Setup.ps1" en una VENTANA
+       VISIBLE.
 
   Equivalente Windows de 0b-Github.sh (Ubuntu). Idempotente: se puede relanzar.
+  Log (al lado del script, req 0): C:\Program Files\IAC-IESMHP\W11\ISO\0b-GitHub.ps1.log
   ============================================================================
 #>
 [CmdletBinding()]
@@ -29,20 +36,24 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# --- Log -------------------------------------------------------------------
-$LogDir = 'C:\Windows\Setup\Scripts'
-if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
-$LogFile = Join-Path $LogDir '0b-GitHub.ps1.log'
+# --- Log: junto al propio script, <nombre>.ps1.log (req 0) -----------------
+$SelfPath = $PSCommandPath
+if (-not $SelfPath) { $SelfPath = $MyInvocation.MyCommand.Path }
+$SelfDir  = Split-Path -Parent $SelfPath
+$LogFile  = "$SelfPath.log"
+if (-not (Test-Path $SelfDir)) { New-Item -ItemType Directory -Force -Path $SelfDir | Out-Null }
 
 function Log {
   param([string]$Msg)
   $line = '{0}  {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Msg
   Write-Host $line
-  Add-Content -Path $LogFile -Value $line -Encoding UTF8
+  try { Add-Content -Path $LogFile -Value $line -Encoding UTF8 } catch {}
 }
 
 Log "===== 0b-GitHub.ps1 inicio ====="
 Log "Repo=$RepoUrl  Dest=$Dest  Subdir=$Subdir  Branch=$Branch"
+Log "Script (definitivo) en: $SelfPath"
+$StartClone = Get-Date
 
 # --- Helpers ---------------------------------------------------------------
 function Sync-ProcessPath {
@@ -147,27 +158,41 @@ if (-not $Git) {
 Log "git = $Git"
 
 # --- Clonar / actualizar con sparse-checkout (cono => raiz + $Subdir) ------
+# La carpeta $Dest YA EXISTE (contiene este 0b-GitHub.ps1 puesto por $OEM$), asi
+# que NO se usa 'git clone' (exige dir vacio): se clona IN-PLACE.
 $gitDir = Join-Path $Dest '.git'
 try {
   if (Test-Path $gitDir) {
-    Log "El repo ya existe; actualizando (fetch + sparse + pull)..."
+    Log "El repo ya existe; actualizando (sparse + fetch + reset)..."
     & $Git -C $Dest sparse-checkout set $Subdir
     & $Git -C $Dest fetch --depth 1 origin $Branch
-    & $Git -C $Dest checkout $Branch
-    & $Git -C $Dest pull --ff-only origin $Branch
+    # FETCH_HEAD apunta SIEMPRE a lo recien traido (no dependemos de que exista
+    # el ref remoto origin/$Branch, que 'fetch <remote> <branch>' no garantiza).
+    & $Git -C $Dest checkout -f -B $Branch FETCH_HEAD
+    & $Git -C $Dest reset --hard FETCH_HEAD
   } else {
-    $parent = Split-Path $Dest -Parent
-    if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
-    if (Test-Path $Dest) { Remove-Item -Recurse -Force $Dest }  # carpeta vacia/parcial
+    if (-not (Test-Path $Dest)) { New-Item -ItemType Directory -Force -Path $Dest | Out-Null }
 
-    Log "Clonando (no-checkout, sin blobs)..."
-    & $Git clone --filter=blob:none --no-checkout --depth 1 --branch $Branch $RepoUrl $Dest
+    Log "Clonado IN-PLACE (init + fetch + checkout, sin blobs)..."
+    & $Git -C $Dest init
+    & $Git -C $Dest remote remove origin 2>$null | Out-Null
+    & $Git -C $Dest remote add origin $RepoUrl
 
     # Modo cono: incluye SIEMPRE los ficheros de la raiz + las carpetas dadas.
     Log "sparse-checkout (cono) -> solo raiz + $Subdir"
     & $Git -C $Dest sparse-checkout init --cone
     & $Git -C $Dest sparse-checkout set $Subdir
-    & $Git -C $Dest checkout $Branch
+    & $Git -C $Dest fetch --depth 1 origin $Branch
+
+    # El UNICO fichero sin rastrear que colisiona con uno del repo es este propio
+    # 0b-GitHub.ps1 (lo coloco $OEM$). git checkout abortaria por "untracked
+    # working tree files would be overwritten"; lo borramos antes (en Windows un
+    # .ps1 en ejecucion NO esta bloqueado: ya esta leido en memoria). Los .log y
+    # Tiempos.log no colisionan (el repo no los rastrea) y se conservan.
+    $self = Join-Path $Dest 'W11\ISO\0b-GitHub.ps1'
+    if (Test-Path $self) { Remove-Item -Force $self -ErrorAction SilentlyContinue }
+
+    & $Git -C $Dest checkout -f -B $Branch FETCH_HEAD
   }
 } catch {
   Log "ERROR al clonar/actualizar: $($_.Exception.Message)"
@@ -175,12 +200,26 @@ try {
 }
 Log "Repo listo en $Dest"
 
-# --- Lanzar 1-Setup.ps1 ----------------------------------------------------
+# --- Anotar el tiempo de clonado en Tiempos.log (ya disponible comun.ps1) ---
+$Comun = Join-Path $Dest 'W11\ISO\comun.ps1'
+if (Test-Path $Comun) {
+  try {
+    . $Comun
+    $Global:IAC_LOG = $LogFile          # que Add-Tiempo escriba en este mismo log
+    Add-Tiempo -Fase 'github (clonado)' -Inicio $StartClone
+  } catch { Log "AVISO: no se pudo cargar comun.ps1 para los tiempos: $($_.Exception.Message)" }
+} else {
+  Log "AVISO: no encuentro $Comun (no se anota el tiempo de clonado)."
+}
+
+# --- Lanzar 1-Setup.ps1 EN UNA VENTANA VISIBLE (req 2) ---------------------
 $Setup = Join-Path $Dest 'W11\ISO\1-Setup.ps1'
 if (Test-Path $Setup) {
-  Log "Ejecutando $Setup ..."
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Setup
-  Log "1-Setup.ps1 termino con codigo $LASTEXITCODE"
+  Log "Ejecutando $Setup en una ventana PowerShell visible..."
+  $p = Start-Process -FilePath 'powershell.exe' `
+        -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File', $Setup) `
+        -WindowStyle Normal -PassThru -Wait
+  Log "1-Setup.ps1 termino con codigo $($p.ExitCode)"
 } else {
   Log "AVISO: no existe $Setup (aun). Nada que ejecutar."
 }

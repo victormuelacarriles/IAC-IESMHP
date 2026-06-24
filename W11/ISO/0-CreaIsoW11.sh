@@ -4,8 +4,11 @@
 # Inserta un autounattend.xml en una ISO de Windows 11 desde Linux (Ubuntu)
 # reconstruyendo la ISO con xorriso (modo -as mkisofs), conservando el
 # arranque BIOS + UEFI. Ademas embebe 0b-GitHub.ps1 via $OEM$ para que acabe
-# en C:\Windows\Setup\Scripts\0b-GitHub.ps1 del sistema instalado (lo lanza el
-# FirstLogonCommands del autounattend.xml en el primer inicio de sesion).
+# en "C:\Program Files\IAC-IESMHP\W11\ISO\0b-GitHub.ps1" del sistema instalado
+# (lo lanza el FirstLogonCommands del autounattend.xml en el primer inicio de
+# sesion). Esa es ya su ubicacion DEFINITIVA: cuando 0b clona el repo, este se
+# materializa sobre esa misma carpeta y el propio 0b queda "actualizado" desde
+# GitHub sin moverse de sitio.
 #
 # Dependencias:  sudo apt install xorriso wimtools
 #
@@ -98,14 +101,18 @@ echo ">> Volume ID  : $VOLID"
 mkdir -p "$WORK/add"
 cp "$AUTO" "$WORK/add/autounattend.xml"
 
-# 0b-GitHub.ps1 embebido via $OEM$. Lo que cuelga de sources/$OEM$/$$/ acaba en
-# C:\Windows\ del sistema instalado; con $$/Setup/Scripts queda en
-# C:\Windows\Setup\Scripts\0b-GitHub.ps1 (ruta que invoca el FirstLogonCommands).
+# 0b-GitHub.ps1 embebido via $OEM$. En la jerarquia $OEM$, "$1" mapea a la raiz
+# del disco de sistema (C:\); por eso sources/$OEM$/$1/Program Files/... acaba en
+# "C:\Program Files\IAC-IESMHP\W11\ISO\0b-GitHub.ps1" del sistema instalado, que
+# es la ruta DEFINITIVA del script (la misma que luego materializa el git clone)
+# y la que invoca el FirstLogonCommands del autounattend.xml.
 if [[ -f "$PS1SCRIPT" ]]; then
-  OEM_SCRIPTS="$WORK/add/sources/\$OEM\$/\$\$/Setup/Scripts"
+  OEM_SCRIPTS="$WORK/add/sources/\$OEM\$/\$1/Program Files/IAC-IESMHP/W11/ISO"
   mkdir -p "$OEM_SCRIPTS"
   cp "$PS1SCRIPT" "$OEM_SCRIPTS/0b-GitHub.ps1"
-  echo ">> Bootstrap   : $PS1SCRIPT -> /sources/\$OEM\$/\$\$/Setup/Scripts/0b-GitHub.ps1"
+  echo ">> Bootstrap   : $PS1SCRIPT"
+  echo ">>               -> /sources/\$OEM\$/\$1/Program Files/IAC-IESMHP/W11/ISO/0b-GitHub.ps1"
+  echo ">>               (en el sistema instalado: C:\\Program Files\\IAC-IESMHP\\W11\\ISO\\0b-GitHub.ps1)"
 else
   echo ">> AVISO: no encuentro el script de bootstrap ($PS1SCRIPT)." >&2
   echo ">>        La ISO se generara SIN 0b-GitHub.ps1; el FirstLogonCommands fallara." >&2
@@ -153,8 +160,8 @@ xorriso -indev "$OUT" -report_el_torito plain 2>/dev/null | grep -E "El Torito b
 echo "- autounattend.xml en la raiz:"
 xorriso -indev "$OUT" -find /autounattend.xml 2>/dev/null || echo "  (NO encontrado!)"
 if [[ -f "$PS1SCRIPT" ]]; then
-  echo "- 0b-GitHub.ps1 embebido (\$OEM\$):"
-  xorriso -indev "$OUT" -find '/sources/$OEM$/$$/Setup/Scripts/0b-GitHub.ps1' 2>/dev/null \
+  echo "- 0b-GitHub.ps1 embebido (\$OEM\$ -> C:\\Program Files\\IAC-IESMHP\\W11\\ISO):"
+  xorriso -indev "$OUT" -find '/sources/$OEM$/$1/Program Files/IAC-IESMHP/W11/ISO/0b-GitHub.ps1' 2>/dev/null \
     || echo "  (NO encontrado!)"
 fi
 echo

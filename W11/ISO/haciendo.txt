@@ -1,0 +1,12 @@
+He dejado un windows 11 corriendo. 
+
+Al acabar, tendría que estar activa las 10.0.72.190,
+ accesible directamente por ssh, y por escritorio remoto. 
+
+POr hacer: 
+- añadir control de tiempos (en )
+- añadir la activación de alto rendimiento. 
+- activar bloqueo por defecto de usuario (1-Setups.ps1)
+- añadir la actualización completa y el compactado
+- incorporar lógica de particionadao en 1-Setup.ps1 dependiendo del aula. 
+

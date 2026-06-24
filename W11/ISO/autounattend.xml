@@ -6,8 +6,9 @@
   Instalacion desatendida que, en el primer inicio de sesion:
     1. Habilita el Escritorio Remoto SEGURO (RDP con NLA) + firewall.
     2. Instala GIT con winget (aceptando licencia y fuente).
-    3. Ejecuta C:\Windows\Setup\Scripts\0b-GitHub.ps1 (embebido en la ISO via
-       $OEM$ por 0-CreaIsoW11.sh), que clona el repo y lanza 1-Setup.ps1.
+    3. Ejecuta "C:\Program Files\IAC-IESMHP\W11\ISO\0b-GitHub.ps1" (embebido en
+       la ISO via $OEM$\$1 por 0-CreaIsoW11.sh), que clona el repo SOBRE esa
+       misma carpeta y lanza 1-Setup.ps1.
 
   Cuenta administradora por defecto: usuario / usuario@1  (password EN CLARO).
 
@@ -170,7 +171,8 @@
       <!-- Acciones del primer inicio de sesion:
            1) Escritorio Remoto SEGURO (RDP + NLA + firewall)
            2) Instalar GIT con winget (acepta licencia y fuente)
-           3) Lanzar 0b-GitHub.ps1 (embebido por 0-CreaIsoW11.sh en $OEM$) -->
+           3) Lanzar 0b-GitHub.ps1 (embebido por 0-CreaIsoW11.sh en
+              $OEM$\$1\Program Files\IAC-IESMHP\W11\ISO) -->
       <FirstLogonCommands>
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
@@ -186,7 +188,7 @@
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>3</Order>
-          <CommandLine>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\0b-GitHub.ps1"</CommandLine>
+          <CommandLine>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Program Files\IAC-IESMHP\W11\ISO\0b-GitHub.ps1"</CommandLine>
           <Description>Clonar el repo IAC-IESMHP y lanzar 1-Setup.ps1</Description>
           <RequiresUserInput>false</RequiresUserInput>
         </SynchronousCommand>
