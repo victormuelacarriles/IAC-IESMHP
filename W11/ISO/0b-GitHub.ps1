@@ -171,29 +171,49 @@ try {
 # --- Clonar / actualizar con sparse-checkout (cono => raiz + $Subdir) ------
 # La carpeta $Dest YA EXISTE (contiene este 0b-GitHub.ps1 puesto por $OEM$), asi
 # que NO se usa 'git clone' (exige dir vacio): se clona IN-PLACE.
+#
+# IMPORTANTE (Windows PowerShell 5.1): git escribe MUCHA informacion en stderr
+# (progreso, "No such remote", etc.). Con $ErrorActionPreference='Stop', esa
+# salida -sobre todo si se redirige con 2>$null/2>&1- se convierte en un error
+# TERMINANTE que aborta el script. Por eso aqui:
+#   - bajamos a 'Continue' mientras corre git,
+#   - NUNCA redirigimos stderr de git,
+#   - comprobamos los fallos REALES a mano con $LASTEXITCODE.
 $gitDir = Join-Path $Dest '.git'
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$cloneOK = $true
 try {
   if (Test-Path $gitDir) {
     Log "El repo ya existe; actualizando (sparse + fetch + reset)..."
     & $Git -C $Dest sparse-checkout set $Subdir
     & $Git -C $Dest fetch --depth 1 origin $Branch
+    if ($LASTEXITCODE -ne 0) { throw "git fetch fallo (code $LASTEXITCODE)" }
     # FETCH_HEAD apunta SIEMPRE a lo recien traido (no dependemos de que exista
     # el ref remoto origin/$Branch, que 'fetch <remote> <branch>' no garantiza).
     & $Git -C $Dest checkout -f -B $Branch FETCH_HEAD
+    if ($LASTEXITCODE -ne 0) { throw "git checkout fallo (code $LASTEXITCODE)" }
     & $Git -C $Dest reset --hard FETCH_HEAD
   } else {
     if (-not (Test-Path $Dest)) { New-Item -ItemType Directory -Force -Path $Dest | Out-Null }
 
     Log "Clonado IN-PLACE (init + fetch + checkout, sin blobs)..."
     & $Git -C $Dest init
-    & $Git -C $Dest remote remove origin 2>$null | Out-Null
-    & $Git -C $Dest remote add origin $RepoUrl
+    if ($LASTEXITCODE -ne 0) { throw "git init fallo (code $LASTEXITCODE)" }
+
+    # Alta del remoto 'origin' idempotente SIN redirigir stderr (un
+    # 'remote remove origin' cuando no existe escribe "No such remote" y, con
+    # 2>$null+Stop, abortaba el script).
+    $remotes = & $Git -C $Dest remote
+    if ($remotes -contains 'origin') { & $Git -C $Dest remote set-url origin $RepoUrl }
+    else                             { & $Git -C $Dest remote add    origin $RepoUrl }
 
     # Modo cono: incluye SIEMPRE los ficheros de la raiz + las carpetas dadas.
     Log "sparse-checkout (cono) -> solo raiz + $Subdir"
     & $Git -C $Dest sparse-checkout init --cone
     & $Git -C $Dest sparse-checkout set $Subdir
     & $Git -C $Dest fetch --depth 1 origin $Branch
+    if ($LASTEXITCODE -ne 0) { throw "git fetch fallo (code $LASTEXITCODE)" }
 
     # El UNICO fichero sin rastrear que colisiona con uno del repo es este propio
     # 0b-GitHub.ps1 (lo coloco $OEM$). git checkout abortaria por "untracked
@@ -204,11 +224,15 @@ try {
     if (Test-Path $self) { Remove-Item -Force $self -ErrorAction SilentlyContinue }
 
     & $Git -C $Dest checkout -f -B $Branch FETCH_HEAD
+    if ($LASTEXITCODE -ne 0) { throw "git checkout fallo (code $LASTEXITCODE)" }
   }
 } catch {
   Log "ERROR al clonar/actualizar: $($_.Exception.Message)"
-  exit 1
+  $cloneOK = $false
+} finally {
+  $ErrorActionPreference = $prevEAP
 }
+if (-not $cloneOK) { exit 1 }
 Log "Repo listo en $Dest"
 
 # --- Anotar el tiempo de clonado en Tiempos.log (ya disponible comun.ps1) ---
