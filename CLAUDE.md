@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⛔ Gestión de git — NO la hagas tú (regla del propietario)
+
+**NUNCA** ejecutes operaciones de git que modifiquen el repositorio o el remoto:
+nada de `git add`, `git commit`, `git push`, `git reset`, `git checkout` para
+cambiar de rama, crear ramas, etc. **El propietario (Víctor) sube SIEMPRE él mismo
+los cambios de código a GitHub.**
+
+- Limita tu trabajo a **crear/editar ficheros** en el árbol de trabajo. Deja los
+  cambios **sin commitear**; ya los revisará y subirá él.
+- Puedes usar git en **solo lectura** si lo necesitas para diagnosticar
+  (`git status`, `git log`, `git diff`), pero **sin** modificar nada.
+- Si crees que hace falta un commit/push, **dilo y para**; no lo hagas.
+
+> Nota histórica: en una sesión previa (24/06/2026) sí se hicieron commits/push
+> de los arreglos de `W11/ISO/0b-GitHub.ps1`. A partir de ahí el propietario pidió
+> expresamente que **no** se gestione git. Respétalo.
+
 ## Propósito del proyecto
 
 Automatización del despliegue de Ubuntu 26.04 Desktop en equipos del IES Miguel Herrero (Torrelavega). El flujo genera una ISO personalizada de Ubuntu, que al arrancar particiona los discos, copia el sistema operativo e instala GRUB sin intervención manual.

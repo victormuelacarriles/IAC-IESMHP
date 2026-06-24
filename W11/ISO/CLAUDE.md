@@ -1,5 +1,11 @@
 # CLAUDE.md — ISO desatendida de Windows 11 (IAC-IESMHP)
 
+> ⛔ **git**: no ejecutes operaciones de git que modifiquen el repo/remoto
+> (`add`/`commit`/`push`/`reset`/cambios de rama). El propietario sube SIEMPRE él
+> mismo los cambios a GitHub. Solo crea/edita ficheros y déjalos sin commitear.
+> Ver la regla completa en el [`CLAUDE.md` raíz](../../CLAUDE.md).
+
+
 Generación de una **ISO de Windows 11 personalizada** que instala el SO sin
 intervención y, en el primer inicio de sesión, prepara el equipo de principio a
 fin: lo engancha al repo de configuración, instala software, prepara los discos,
@@ -204,6 +210,19 @@ real.**
   SYSTEM/TrustedInstaller y git ≥2.35.2 rechaza operar en repos de otro
   propietario ("detected dubious ownership"), 0b ejecuta antes
   `git config --global --add safe.directory …` (la ruta y `*`).
+- **Gotchas de Windows PowerShell 5.1 (confirmados en VM, no repetir)**:
+  - **No redirigir el stderr de ejecutables nativos** (`git`, etc.) con
+    `2>$null` / `2>&1` cuando `$ErrorActionPreference='Stop'`: PS 5.1 envuelve
+    cada línea de stderr en un `ErrorRecord` y la convierte en error TERMINANTE
+    (p. ej. `git remote remove origin` cuando no existe escribía
+    "No such remote: 'origin'" y abortaba). 0b corre el bloque git con
+    `ErrorActionPreference='Continue'` y comprueba fallos reales con
+    `$LASTEXITCODE`.
+  - **`Start-Process -ArgumentList` con ARRAY no entrecomilla** los elementos con
+    espacios: una ruta como `"C:\Program Files\…\1-Setup.ps1"` se parte y
+    `powershell -File` no encuentra el script (salía `-196608` sin ejecutar ni
+    crear log). Pásale un **único string** con la ruta entre comillas (así lo
+    hacen 0b y la tarea `Register-Resume` de `comun.ps1`).
 - **Logs al lado de cada script** (req 0) y **`Tiempos.log`** central (req 1),
   ambos en `…\W11\ISO\`. Ver sección "Logs y tiempos".
 - **Ventana visible** (req 2): 0b lanza `1-Setup.ps1` con
