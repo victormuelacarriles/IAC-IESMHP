@@ -189,7 +189,8 @@ You may need to shut down and restart PowerShell and/or consoles
 =========================================================================================================================
 
 
-Ejem
+Ejemplo "Particionado.ps1.log" 
+=========================================================================================================================
 2026-06-25 09:17:27  ===== 3-Particionado.ps1 inicio =====
 2026-06-25 09:17:27  Paso 1/4: reasignando lectores opticos (R:) y unidades USB (S, T...).
 2026-06-25 09:17:30    R: 'CCCOMA_X64FRE_ES-ES_DV9' -> R:
@@ -199,3 +200,4 @@ Ejem
 2026-06-25 09:17:30  Paso 4/4: ubicacion de perfiles por defecto.
 2026-06-25 09:17:30  No existe una unidad D: fija; NO se cambia la carpeta de perfiles (se deja en C:\Users).
 2026-06-25 09:17:30  ===== 3-Particionado.ps1 fin =====
+=========================================================================================================================
