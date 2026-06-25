@@ -29,10 +29,10 @@
      - obs
      - rdp           # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
      - vscode
-#     - clienteNAS    #Cliente NFS del NAS del DEPARTAMENTO: autodescubre exports y los monta RO en /mnt/nasDepInfo (ver roles/clienteNAS/CLAUDE.md)
+     - clienteNAS    #Cliente NFS del NAS del DEPARTAMENTO: autodescubre exports y los monta RO en /mnt/nasDepInfo (ver roles/clienteNAS/CLAUDE.md)
      - DirtyFrag     #Evalua y mitiga la vuln. "Dirty Frag" (CVE-2026-43284 ESP/IPsec + CVE-2026-43500 RxRPC): bloquea esp4/esp6/rxrpc
      - Docker        #Instalación de SISTEMA de Docker para uso ROOTLESS (la parte por usuario la hace rolesUsuario/DockerRootless)
-#     - vmware        #sigue fallando la compilación. error raro de: "[Apploader] Use shipped Linux kernel AIO access library"
+     - vmware        #sigue fallando la compilación. error raro de: "[Apploader] Use shipped Linux kernel AIO access library"
      - preparaAD     #Prerequisitos para unión a dominio Active Directory (realmd+SSSD+adcli). NO une al dominio: ver roles/preparaAD/CLAUDE.md
 
 
