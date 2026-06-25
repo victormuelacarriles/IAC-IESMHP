@@ -14,4 +14,4 @@ El multimonitor real lo controla la función `use_xrandr()` en `packages/base/et
   - 1 monitor (VM/puesto simple) → `-s $SCREEN_RESOLUTION` normal.
 - `XRANDR_OPTIONS` vacío → `-s $SCREEN_RESOLUTION`; cualquier otro valor se pasa verbatim a `xrandr`.
 
-Verificado también: `KEYMAP`/`KEYBOARD_MAP`/`X_KEYBSEL` NO existen en 7.2; el teclado/locale español va solo con `LOCALE=es_ES` + `package locale-es_ES`. La compilación es solo-Fedora (dnf + root real). Tutorial verificado en [[../ThinStation/ThinStation-NG_Proceso-Compilacion.md]].
+Verificado también: `KEYMAP`/`KEYBOARD_MAP`/`X_KEYBSEL` NO existen en 7.2; el teclado/locale español va solo con `LOCALE=es_ES` + `package locale-es_ES`. La compilación es solo-Fedora (dnf + root real). Tutorial verificado en [[../ThinStation/CLAUDE.md]].

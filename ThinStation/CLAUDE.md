@@ -1,4 +1,4 @@
-# ThinStation-NG 7.2 — Compilación de una imagen universal en Fedora
+# CLAUDE.md — ThinStation-NG 7.2 (cliente ligero RDP, compilación en Fedora)
 
 > Generación de una imagen **ISO + PXE** (híbrida **UEFI + Legacy BIOS**) de cliente ligero con
 > sesión **RDP en modo kiosco** (diálogo de IP al arrancar), acceso **SSH** y máxima compatibilidad

@@ -351,7 +351,7 @@ propiedades (`compression`, `dedup`, `recordsize`, `dedupratio`, feature
 
 ## Ficheros de datos
 
-- `macs.csv` — en raíz del repo (`/opt/IAC-IESMHP/macs.csv`). Formato: `MAC,hostname`. Usado por `2-SetupSOdesdeLiveCD.sh` y `NombreIP.sh` para asignar nombre al equipo.
+- `macs.csv` — en raíz del repo (`/opt/IAC-IESMHP/macs.csv`). Formato: `MAC, Equipo, IPf, Comentario` (las líneas que empiezan por `#` son comentarios). Por la MAC se asigna el nombre del equipo (`prefijo-NN`, `-00` reservado al profesor) y, si la interfaz está en DHCP, se convierte a IP estática conservando máscara/gateway/DNS y cambiando solo el último octeto por `IPf`. Usado por `2-SetupSOdesdeLiveCD.sh` y `NombreIP.sh`.
 - `Autorizados.txt` — claves SSH públicas autorizadas para `root` y `usuario`.
 - `FondoIES-Ubuntu-Gris.png` — fondo de escritorio embebido en el squashfs. Vive en `Ubuntu/ISO/26.04/imagenesIES/` (junto a los demás fondos y los logos Plymouth `bgrt-fallback.png`/`watermark.png`), **no** en la raíz del repo.
 

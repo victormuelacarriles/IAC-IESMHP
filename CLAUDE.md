@@ -1,6 +1,9 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guía general para Claude Code (claude.ai/code) sobre **todo** el repositorio
+`IAC-IESMHP`. Este fichero describe el **espíritu común** a las cuatro líneas de
+despliegue del proyecto y sirve de **índice**; el detalle de cada una vive en su
+propio `CLAUDE.md` (mapa al final).
 
 ## ⛔ Gestión de git — NO la hagas tú (regla del propietario)
 
@@ -19,236 +22,162 @@ los cambios de código a GitHub.**
 > de los arreglos de `W11/ISO/0b-GitHub.ps1`. A partir de ahí el propietario pidió
 > expresamente que **no** se gestione git. Respétalo.
 
+---
+
 ## Propósito del proyecto
 
-Automatización del despliegue de Ubuntu 26.04 Desktop en equipos del IES Miguel Herrero (Torrelavega). El flujo genera una ISO personalizada de Ubuntu, que al arrancar particiona los discos, copia el sistema operativo e instala GRUB sin intervención manual.
+**Infraestructura como código (IAC) para el IES Miguel Herrero (Torrelavega)**:
+automatizar el despliegue y la configuración de los equipos de las aulas **sin
+intervención manual**. Para cada sistema operativo se genera una **imagen de
+instalación personalizada** que, al arrancar, deja la máquina lista de principio a
+fin: particiona, instala el SO, le pone nombre e IP, instala el software del aula y
+aplica la configuración.
 
-**Metodología de trabajo**: el usuario arranca la ISO en una máquina virtual (VMware), recoge los logs y los pega aquí para diagnosticar fallos y optimizar el proceso.
+El repositorio **ya no es solo Ubuntu**: aloja **cuatro líneas de despliegue** que
+comparten la misma filosofía y estructura, cada una con su propio `CLAUDE.md`:
 
----
+| Línea | Carpeta | Sistema | Rol en el proyecto |
+|-------|---------|---------|--------------------|
+| **Mint** | [`Mint/`](Mint/CLAUDE.md) | Linux Mint Cinnamon 22.x | **Primera generación** (versión previa). De aquí evolucionó el resto; sigue como referencia/legacy. |
+| **Ubuntu** | [`Ubuntu/`](Ubuntu/CLAUDE.md) | Ubuntu 26.04 Desktop | **Línea Linux actual**, la más desarrollada (ZFS, GDM 26.04, RegistroDeCambios vivo). |
+| **ThinStation** | [`ThinStation/`](ThinStation/CLAUDE.md) | ThinStation-NG 7.2 | **Cliente ligero** RDP en modo kiosco. No instala SO: arranca de ISO/USB/PXE en RAM. En uso real en aulas ESO/Bachillerato. |
+| **W11** | [`W11/ISO/`](W11/ISO/CLAUDE.md) | Windows 11 | **ISO desatendida** de Windows: instala + software en local (winget/choco) + Ansible como mantenimiento. |
 
-## Cadena de ejecución completa
-
-```
-0a-CreaISO.sh          ← Se ejecuta en el equipo de desarrollo (Linux), genera la ISO
-  └── [ISO bootea]
-       └── iac-iesmhp-launch.sh    ← autostart GNOME del Live CD, abre terminal
-            └── iac-iesmhp-run.sh  ← instalado en el squashfs por 0a-CreaISO.sh
-                 └── 0b-Github.sh  ← clona el repo IAC-IESMHP desde GitHub
-                      └── 1-SetupLiveCD.sh         ← particiona discos, monta squashfs capas, prepara chroot
-                           └── 2-SetupSOdesdeLiveCD.sh  ← corre DENTRO del chroot, configura el SO instalado
-                                └── [reboot → primer arranque]
-                                     └── 3-SetupPrimerInicio.service  ← systemd oneshot, configura hostname/IP/Ansible
-                                          └── 4-Comprobaciones.sh     ← diagnóstico (llamado desde 2 y 3)
-```
-
----
-
-## Comandos clave
-
-### Generar la ISO (en equipo Linux con Ubuntu)
-```bash
-# Instalar dependencias
-sudo apt install xorriso mtools squashfs-tools gdisk -y
-
-# Actualizar el repo y generar la ISO
-cd ~/xIAC-IESMHP/Ubuntu/ISO/26.04
-git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh
-sudo ./0a-CreaISO.sh ~/Descargas/ubuntu-26.04-desktop-amd64.iso 0b-Github.sh ~/Descargas/mi-ubuntu.iso
-# Argumento 4 opcional: ruta a un PNG personalizado como fondo (por defecto FondoIES-Ubuntu-Gris.png)
-```
-
-### Ver logs en el equipo instalado
-```bash
-ls /var/log/IAC-IESMHP/Ubuntu/
-# 1-SetupLiveCD.sh.log         ← particionado y copia del FS
-# 2-SetupSOdesdeLiveCD.sh.log  ← configuración en chroot
-# 2-SetupSOdesdeLiveCD.steps   ← resumen de pasos con timestamps (diagnóstico rápido)
-# 3-SetupPrimerInicio.sh.log   ← primer arranque: log ÚNICO de TODO lo que
-#                                 lanza el servicio (este script + NombreIP +
-#                                 Auto-Ansible + ansible-playbook + 4-Compro-
-#                                 baciones). Cada línea con hora; sobrevive a
-#                                 cuelgues NVIDIA (sync periódico). Antes había
-#                                 además 5-PrimerArranque.log con el MISMO
-#                                 contenido — eliminado el 2026-05-18.
-# 4-Comprobaciones.sh.log      ← diagnóstico
-```
+**Metodología de trabajo** (común a todas): el usuario **arranca la imagen en una
+máquina virtual (VMware)**, recoge los logs y los pega aquí para diagnosticar fallos
+y optimizar el proceso. Solo cuando funciona en VM se prueba en hardware real.
 
 ---
 
-## Arquitectura y decisiones clave
+## El patrón común (espíritu del proyecto)
 
-### comun.sh — Variables centralizadas (única fuente de verdad)
-- **`Ubuntu/ISO/26.04/comun.sh`** define **una sola vez** todas las rutas y
-  constantes "mágicas" del proyecto: `GITHUB_USER`/`REPO`/`GITREPO`/`GITRAW`,
-  `DISTRO`/`versionDISTRO`, `RAIZSCRIPTS` (`/opt/IAC-IESMHP`), `RAIZDISTRO`,
-  `RAIZANSIBLE`, `RAIZLOG`, rutas absolutas de los sub-scripts
-  (`SCRIPT_LIVECD`…`SCRIPT_AUTOANSIBLE`), ficheros de datos (`FICHERO_MACS`,
-  `URL_MACS`, `FICHERO_AUTORIZADOS`) y redes/proxy de aula
-  (`RED_IABD`/`RED_SMRD`, `PROXY_IABD`/`PROXY_SMRD`).
-- Los scripts **1, 2, 3, 4, NombreIP** hacen `source` de él (localizándolo
-  relativo a `${BASH_SOURCE[0]}`, sin codificar `/opt/...` a fuego) en lugar de
-  redefinir esas variables. **Para cambiar una ruta, editar solo `comun.sh`.**
-- **Excepción**: `0b-Github.sh` corre en el Live CD *antes* de clonar el repo,
-  así que no puede cargar `comun.sh` aún. Mantiene un bloque de arranque mínimo
-  con solo `GITHUB_USER`+`REPO` (única duplicación inevitable, marcada en el
-  código) y tras clonar carga `comun.sh`. Si se cambia la URL/nombre del repo,
-  actualizar también esas dos líneas de `0b-Github.sh`.
-- `comun.sh` es un fichero **nuevo**: hay que hacer commit+push a `main` antes de
-  arrancar una ISO (0b lo clona desde GitHub). Ver `Ubuntu/RegistroDeCambios/20260612-Cambios.md`.
+Aunque cada SO tiene sus particularidades, **todas las líneas comparten el mismo
+esqueleto**. Entenderlo es la clave para moverse por cualquiera de ellas:
 
-### 0a-CreaISO.sh — Generación de la ISO
-- **Squashfs multicapa (Ubuntu 26.04+)**: la ISO usa capas `minimal.squashfs` / `minimal.standard.squashfs` / `minimal.standard.live.squashfs`. El script detecta la capa `*.live.squashfs` para insertar el autostart de escritorio, que es donde vive el entorno GNOME.
-- **snapd enmascarado**: se enmascaran `snapd.service`, `snapd.socket` y `snapd.seeded.service` vía symlinks a `/dev/null` en el squashfs. Esto reduce el tiempo de arranque del Live CD de ~3 min a ~10 s y bloquea definitivamente `ubuntu-desktop-bootstrap` (el instalador snap de Ubuntu 26.04).
-- **Autostart GNOME**: se escribe `iac-iesmhp-setup.desktop` tanto en `/etc/skel/.config/autostart` como en `/home/ubuntu/.config/autostart` para cubrir el caso de que el home del usuario `ubuntu` preexista o se cree desde skel. El `.desktop` llama a `iac-iesmhp-launch.sh`, que aplica el fondo y luego abre un terminal con `iac-iesmhp-run.sh`.
-- **Boot UEFI únicamente**: se eliminan `isolinux/` y `boot/grub/i386-pc/`. La detección del modo EFI (appended partition GPT vs El Torito) es automática vía `xorriso -report_el_torito`, con fallback a `sfdisk+dd`.
+### 1. Imagen autodesplegable construida en Linux
+Un script **`0…CreaISO`** corre en un equipo de desarrollo Linux y produce la imagen
+personalizada (ISO con `xorriso`). En Linux/W11 inserta un **answer file** y/o
+**autostart** para que la imagen arranque y se configure sola; ThinStation, al ser
+cliente ligero, **compila** la imagen entera (Fedora + `./build`) y no instala nada
+en disco.
 
-### 0b-Github.sh — Bootstrap en el Live CD
-- Se embebe en la raíz del squashfs como `/0b-Github.sh` (no en PATH estándar).
-- Enmascara `/usr/sbin/update-initramfs` → `/bin/true` y desactiva `man-db auto-update` antes de cualquier `apt-get install` para evitar bloqueos en el entorno live.
-- Espera red con 12 reintentos (5 s cada uno) antes de clonar el repo.
-- El repo se clona en `/opt/IAC-IESMHP`.
+### 2. Bootstrap desde GitHub + cadena de scripts numerados
+La imagen arranca y, en el primer arranque/sesión, un script **`0b-GitHub`** clona
+el repo desde GitHub y lanza una **cadena de scripts numerada** que va de menor a
+mayor: *crear → clonar → particionar/instalar → configurar el SO → primer arranque
+→ comprobaciones*. Los números son consistentes entre Mint, Ubuntu y W11 (varía el
+lenguaje: Bash en Linux, PowerShell en Windows). El repo se clona en
+`/opt/IAC-IESMHP` (Linux) o `C:\Program Files\IAC-IESMHP` (Windows).
 
-### 1-SetupLiveCD.sh — Particionado e instalación del FS
-- **Detección de discos**: ignora USB y loop; usa `lsblk -dno NAME,SIZE,TRAN`.
-  Fija una variable explícita `PERFIL` (`CEIABD` | `DISTANCIA`).
-  - 2×NVMe (Distancia) → pequeño=`/`, grande=`/home`. **Sin ZFS** (ext4
-    íntegro, idéntico a v22.x).
-  - NVMe+SD (CEIABD) → NVMe lleva EFI 1G + swap 16G + `/` ext4 100G +
-    `p4` ZFS (zpool `rpool` → `/home`). SDA entero ZFS (zpool `tank` →
-    `/datos`).
-- **Esquema de particiones**:
-  - **DISTANCIA**: EFI 512 MiB | swap 8 GiB | root ext4 resto. Disco grande
-    1 partición ext4 entera → `/home`.
-  - **CEIABD**: sgdisk con typecodes EF00/8200/8300/BF00. NVMe pequeño:
-    EFI 1 GiB + swap 16 GiB + `/` ext4 100 GiB + `rpool` ZFS resto. SDA
-    entero BF00 → `tank` ZFS.
-- **ZFS en CEIABD** (bloque añadido):
-  - Instala `zfsutils-linux` en el entorno live.
-  - Detecta Fast Dedup (OpenZFS ≥ 2.3) y lo activa si está.
-  - `zpool create rpool` con `compression=zstd, dedup=on, recordsize=64K,
-    ashift=12, autotrim=on` y altroot `-R /mnt`. Crea el dataset **único y
-    definitivo** `rpool/home canmount=on mountpoint=/home`: el rsync vuelca
-    /home (squashfs) al pool y los usuarios viven como directorios normales
-    dentro (desde 2026-06-12 ya NO hay datasets por usuario ni cuotas).
-  - `zpool create tank` análogo pero **sin dedup**, `recordsize=1M`. Crea
-    `tank/datos canmount=on mountpoint=/datos setuid=off devices=off`,
-    `chmod 1777`.
-- **Capas squashfs**: Ubuntu 26.04 combina `minimal.squashfs + minimal.standard.squashfs + minimal.standard.live.squashfs` con overlayfs en `/tmp/merged`; Ubuntu <24.04 usa `filesystem.squashfs` único.
-- Copia el FS con `rsync` (excluyendo `/etc/fstab` y `/etc/machine-id`).
-- **Tras el rsync (CEIABD)**: copia `/etc/zfs/zpool.cache` y `/etc/hostid`
-  del live al sistema instalado para que `zfs-import-cache` lo importe
-  sin escanear discos y sin `-f`.
-- Pasa las particiones al chroot vía `/mnt/tmp/.iac-partitions.env`. En
-  CEIABD el fichero incluye además `PERFIL=`, `ZFS_POOL_HOME=`,
-  `ZFS_HOME_DATASET=`, `ZFS_HOME_PARTID=` (by-id), `ZFS_POOL_DATA=`,
-  `ZFS_DATA_DATASET=`, `ZFS_DATA_PARTID=`.
-- **Pre-reboot (CEIABD)**: `zpool sync` + `zpool export rpool tank` para
-  que el sistema instalado no vea los pools "in use" por el hostid del
-  live.
-- Si `2-SetupSOdesdeLiveCD.sh` termina con `Correcto`, reinicia
-  automáticamente; si no, espera 100000 s para diagnóstico (en fallo NO
-  exporta los pools — siguen accesibles desde `/mnt`).
+### 3. Única fuente de verdad para las variables
+Cada línea centraliza sus rutas y constantes "mágicas" en **un solo fichero** que
+los demás scripts cargan (`source` / `dot-source`): **`comun.sh`** (Linux) /
+**`comun.ps1`** (Windows). Define `GITHUB_USER`/`REPO`, rutas del proyecto, ficheros
+de datos y redes/proxy de aula. **Para cambiar una ruta, se edita solo ese fichero**
+(excepción inevitable: `0b-GitHub`, que corre antes de clonar y duplica
+`GITHUB_USER`+`REPO`).
+> Como `comun.*` y los scripts se clonan desde GitHub, hay que **commit+push a
+> `main` ANTES de generar/arrancar una imagen** o el equipo clonará una versión vieja.
 
-### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot
-- **Preámbulo**: carga `.iac-partitions.env` al inicio y fija `PERFIL`
-  para todos los bloques (default `DISTANCIA` si no hay fichero).
-- **fstab bifurcado**: DISTANCIA → 4 líneas como antes. CEIABD → solo `/`,
-  `/boot/efi` y `swap` (las entradas `/home` y `/datos` las gestiona
-  `zfs-mount.service`; `/` lleva `noatime`).
-- **ZFS dentro del chroot (solo CEIABD)**: `apt install linux-headers-generic`
-  + `zfsutils-linux zfs-zed zfs-dkms zfs-initramfs`; habilita servicios
-  `zfs.target zfs-import-cache zfs-mount zfs-zed`; deshabilita
-  `zfs-import-scan` (redundante con cachefile); `zpool set cachefile=` en
-  `rpool` y `tank` para regenerar el cache desde el sistema instalado.
-- **`/home` = dataset ZFS único (CEIABD, simplificación 2026-06-12)**:
-  `rpool/home` (canmount=on, mountpoint=/home, creado en `1-SetupLiveCD.sh`)
-  se usa tal cual — ya NO se reestructura en contenedor + dataset por
-  usuario, NO hay cuotas y NO existe el helper `nuevo-alumno.sh`. El script
-  solo verifica que `rpool/home` está montado en `/home` (red de seguridad:
-  abortar antes de escribir al ext4 subyacente) y crea el usuario con
-  `useradd -m` estándar (misma rama que DISTANCIA). Alta de usuarios en el
-  equipo instalado: `sudo adduser <usuario>`. Snapshot global
-  `rpool/home@inicial` tras eliminar el usuario `ubuntu` del Live CD
-  (rollback devuelve TODO /home al estado post-instalación).
-- **Parche grub.cfg**: `update-grub` en chroot a veces escribe `root=/dev/nvme0n1p3` en lugar de `root=UUID=...`. El script lo detecta y parchea con `sed`.
-- **Casper hooks**: se eliminan directamente con `rm -rf` (sin `apt remove`) para evitar que los triggers dpkg se bloqueen en el chroot. Los hooks afectados: `/usr/share/initramfs-tools/hooks/casper` y variantes.
-- `update-initramfs -c -k all` tarda 2–4 min; es el paso más lento del chroot. Con `zfs-initramfs` instalado, el initramfs incluye el módulo ZFS (informativo: `/` sigue siendo ext4).
-- Crea el servicio systemd `3-SetupPrimerInicio.service` con `WantedBy=multi-user.target`.
-- Termina siempre con `echo "Correcto"` si todo fue bien (1-SetupLiveCD lo comprueba con `tail -n1`).
+### 4. Identidad del equipo: `macs.csv` + IP estática
+Un único **`macs.csv`** en la raíz del repo mapea cada equipo. Formato:
+`MAC, Equipo, IPf, Comentario` (líneas que empiezan por `#` son comentarios). Por la
+**MAC** se asigna el **nombre** (`prefijo-NN`, reservando `-00` para el equipo de
+profesor) y, si la interfaz está en DHCP, se convierte a **IP estática** conservando
+máscara/gateway/DNS y cambiando solo el último octeto por `IPf`. Lo aplica el paso
+de "primer arranque" (`NombreIP.sh` en Linux, bloque equivalente en `1-Setup.ps1`).
 
-### 3-SetupPrimerInicio.sh — Primer arranque
-- Detecta el aula por el tercer octeto de la IP: 72→IABD, 32→SMRV.
-- Configura proxy apt según aula: `10.0.72.140:3128` (IABD) o `10.0.32.119:3128` (SMRV).
-- Instala `ssh` y `ansible`, habilita `PermitRootLogin yes` y hace `apt-get full-upgrade`.
-- Muestra progreso al usuario mediante diálogos `zenity` en todas las sesiones gráficas activas.
-- Se autodeshabilita con triple mecanismo: `systemctl disable` + `rm` del `.service` + `mv "$0" "$0.borrado"`.
-- Ejecuta `NombreIP.sh` (resuelve MAC→hostname y opcionalmente convierte DHCP a IP estática).
-- Ejecuta `Auto-Ansible.sh` y lanza directamente `ansible-playbook roles.yaml` desde `$RAIZANSIBLE` (ver sección **Configuración post-instalación con Ansible**).
+### 5. Detección de aula por IP (3er octeto)
+La red del centro codifica el aula en el **tercer octeto**: `10.0.72.x` → **IABD**,
+`10.0.32.x` → **SMRD/SMRV**. Se usa para fijar el **proxy de aula**
+(IABD `10.0.72.140:3128`, SMRD `10.0.32.119:3128`) en apt/winget/choco y para
+decidir servidor vs. cliente NFS. El equipo `-00` suele ser el servidor del aula.
 
-### 4-Comprobaciones.sh — Diagnóstico
-Comprueba: kernel e initramfs presentes, NVMe drivers en initramfs, ausencia de hooks casper, grub.cfg con UUIDs, fstab vs blkid, paquetes dpkg rotos, servicio SSH. **Sección 9 ZFS (CEIABD)**: salud de pools, datasets esperados (`rpool/home` montado en `/home`, `tank/datos` en `/datos`), dedup ratio + feature `fast_dedup`, servicios `zfs-import-cache`/`zfs-mount`/`zfs-zed` y módulo `zfs.ko` en initramfs. Genera resumen de errores/warnings al final. Útil como primer análisis al pegar un log.
+### 6. Configuración post-instalación con Ansible
+Tras instalar el SO, la cadena lanza **Ansible** (`roles.yaml`) para instalar el
+software y configurar el equipo. Convenciones compartidas por Ubuntu y W11:
+- **Un rol por programa**, con su versión del aula en `defaults/` y **su propio
+  `CLAUDE.md`** por rol.
+- **`roles.yaml` maestro** con detección de aula en `pre_tasks` y **tolerancia a
+  fallos**: si un rol falla, se anota y se sigue con el resto (no aborta).
+- Cada rol lleva **su nombre como tag** para instalar un solo programa
+  (`--tags chrome`).
+- En Linux Ansible corre **en local** en el primer arranque; en W11 el mismo
+  software se instala **en local sin Ansible** (winget+choco desde la ISO) y Ansible
+  por SSH queda como vía de mantenimiento.
+
+### 7. Robustez, logs y registro de cambios
+- **Supervivencia a reinicios**: la fase larga (Windows Update, upgrades) usa una
+  **máquina de estados** que sobrevive a los reinicios (W11: autologon + tarea de
+  reanudación + fase en registro; Linux: servicio systemd oneshot que se
+  autodeshabilita y centinela `Correcto` que decide si reiniciar o esperar).
+- **Logs**: cada script deja su `.log` (al lado del script en W11, en
+  `/var/log/IAC-IESMHP/<Distro>/` en Linux). Útiles como primer análisis al pegar.
+- **RegistroDeCambios**: los cambios de cada sesión se documentan en
+  `<Distro>/RegistroDeCambios/YYYYMMDD-Cambios.md` (con hora). **Consúltalo antes de
+  tocar un script** para no repetir correcciones que ya se probaron.
 
 ---
 
-## Configuraciones de hardware soportadas
+## Protocolo de diagnóstico (al pegar un log)
 
-| Aula      | Disco pequeño       | Disco grande      |
-|-----------|---------------------|-------------------|
-| Distancia | NVMe 0.5 TB (EFI 512M, swap 8G, `/` ext4 resto) | NVMe 2.0 TB (`/home` ext4) |
-| CEIABD    | NVMe 0.5 TB (EFI 1G, swap 16G, `/` 100G ext4, `p4` ZFS → `rpool`) | SDA 1.0 TB (ZFS → `tank` → `/datos`) |
-
-**Distancia** = ext4 íntegro (sin ZFS). **CEIABD** = ZFS en `/home` (zpool
-`rpool` con dedup+zstd) y `/datos` (zpool `tank` con zstd). Ver detalle
-operativo y comandos en [Ubuntu/CLAUDE.md](Ubuntu/CLAUDE.md) sección "ZFS —
-operación".
-
----
-
-## Configuración post-instalación con Ansible
-
-Una vez instalado el SO, `3-SetupPrimerInicio.sh` lanza `ansible-playbook roles.yaml`
-para configurar el equipo (software, NFS de aula, drivers, claves SSH…). Toda esta
-parte vive en `Ubuntu/ansible/` y está **documentada con sus propios CLAUDE.md**:
-
-- **`Ubuntu/ansible/CLAUDE.md`** — describe `roles.yaml` (el playbook maestro), los
-  inventarios `*.ini`, los comandos de ejecución, el estado de cada rol
-  (activo / comentado / legacy) y las convenciones (caché apt, detección de aula
-  por IP, equipo `-00` = servidor).
-- **`Ubuntu/ansible/roles/<rol>/CLAUDE.md`** — un fichero por rol con sus tareas,
-  variables (`defaults/`) e issues conocidos. Roles documentados: `basicos`,
-  `horaHTTP` (sincroniza la hora en cada arranque por NTP y, si está filtrado el
-  UDP 123, por HTTP), `certificados`, `clienteNAS` (cliente NFS del NAS del
-  departamento; comentado en `roles.yaml`), `comparteaula` (+ legacy
-  `comparteaula32`/`comparteaula72`),
-  `DirtyFrag` (mitiga CVE-2026-43284/43500), `flatpak` (soporte Flatpak + Flathub),
-  `nvidia`, `obs`, `vscode`, `rdp` (servidor RDP nativo de GNOME; sustituye al
-  antiguo `xrdp`), `vmware`, `Docker`
-  (instalación de sistema para uso rootless; sustituye al antiguo `contenedores`),
-  `preparaAD` (prerequisitos de unión a dominio Active Directory; no une por defecto).
-
-  El estado vigente (activo / comentado / no listado) de cada rol está en la
-  tabla de `Ubuntu/ansible/CLAUDE.md`; la fuente de verdad es `roles.yaml`.
-- **`Ubuntu/ansible/rolesUsuario/CLAUDE.md`** — configuraciones e **instalaciones
-  de software sin permisos root** que **todo usuario** debería tener en su perfil
-  (`~/.ssh`, dotfiles…), ejecutadas **como el usuario** (no root). Carpeta nueva,
-  en construcción; aún no enganchada a `roles.yaml`.
-
-**Al diagnosticar o modificar la fase Ansible, leer primero esos CLAUDE.md** (en
-especial el de `Ubuntu/ansible/` para saber qué roles están activos en `roles.yaml`).
+1. Identifica la **línea** (Mint/Ubuntu/ThinStation/W11) y lee su `CLAUDE.md`.
+2. Lee el **RegistroDeCambios** más reciente de esa línea (qué se tocó por última vez).
+3. Lee el log o el script de comprobaciones (`4-Comprobaciones.sh` en Linux).
+4. **Cruza cada error con los falsos positivos conocidos** documentados en el
+   `CLAUDE.md` de la línea — muchos `[ERR]` son del propio script de diagnóstico.
+5. Si el error es real, localiza la **línea exacta** del script que lo genera y
+   propón el **cambio mínimo**.
+6. Documenta el fix en `<Distro>/RegistroDeCambios/YYYYMMDD-Cambios.md` (con la hora).
 
 ---
 
-## Ficheros de datos
+## Aulas y hardware
 
-- `macs.csv` — en raíz del repo (`/opt/IAC-IESMHP/macs.csv`). Formato: `MAC,hostname`. Usado por `2-SetupSOdesdeLiveCD.sh` y `NombreIP.sh` para asignar nombre al equipo.
-- `Autorizados.txt` — claves SSH públicas autorizadas para `root` y `usuario`.
-- `FondoIES-Ubuntu-Gris.png` — fondo de escritorio embebido en el squashfs. Vive en `Ubuntu/ISO/26.04/imagenesIES/` (junto a los demás fondos y los logos Plymouth `bgrt-fallback.png`/`watermark.png`), **no** en la raíz del repo.
+| Aula | Red (3er octeto) | Notas |
+|------|------------------|-------|
+| **IABD** | `10.0.72.x` | Aula CEIABD. Proxy `10.0.72.140:3128`. |
+| **SMRD / SMRV** | `10.0.32.x` | Proxy `10.0.32.119:3128`. |
+| **Distancia** | — | Perfil de disco sin ZFS (ext4 íntegro). |
+
+Particionado por perfil (línea Ubuntu; detalle en [`Ubuntu/CLAUDE.md`](Ubuntu/CLAUDE.md)):
+
+| Perfil | Disco pequeño | Disco grande |
+|--------|---------------|--------------|
+| Distancia | NVMe 0.5 TB (EFI+swap+`/` ext4) | NVMe 2.0 TB (`/home` ext4) |
+| CEIABD | NVMe 0.5 TB (EFI+swap+`/` ext4 + `rpool` ZFS) | SDA 1.0 TB (ZFS `tank` → `/datos`) |
 
 ---
 
-## Issues conocidos y áreas en optimización
+## Ficheros de datos compartidos (raíz del repo)
 
-- **`0b-Github.sh` línea 54**: comentario `#####FALLA AQUí!` — en alguna versión se bloqueaba antes del `apt-get install git`. Mitigado enmascarando `update-initramfs` (tanto `/usr/local/sbin/` como `/usr/sbin/`) y `man-db` antes de cualquier apt.
-- **`Auto-Ansible.sh` línea 38**: `ssh-keygen -F $HOSTNAME` falla. Pendiente de corrección.
-- **snapd en Live CD**: si en futuras ISOs snapd vuelve a arrancar, los síntomas son arranque lento (~3 min) y bloqueo de `ubuntu-desktop-bootstrap` antes del autostart.
+- **`macs.csv`** — mapeo `MAC, Equipo, IPf, Comentario` de **todos** los equipos.
+  Lo consumen las cuatro líneas para nombre + IP estática.
+- **`Autorizados.txt`** — claves SSH públicas autorizadas (root/usuario/Administrador).
+- **`README.md`** — instrucciones mínimas de clonado.
+
+> Los fondos de escritorio, logos Plymouth e imágenes del IES viven dentro de cada
+> línea (p. ej. `Ubuntu/ISO/26.04/imagenesIES/`, `ThinStation/imagenes/`), **no** en
+> la raíz.
+
+---
+
+## Mapa de los `CLAUDE.md` del repositorio
+
+Cuando trabajes en una parte concreta, **lee primero su `CLAUDE.md`** (es la fuente
+de verdad; este fichero raíz solo da el contexto general):
+
+- **Por línea de despliegue**
+  - [`Mint/CLAUDE.md`](Mint/CLAUDE.md) — ISO Mint 22.x, control de aulas (Wake-on-LAN), Ansible Mint.
+  - [`Ubuntu/CLAUDE.md`](Ubuntu/CLAUDE.md) — ISO Ubuntu 26.04, particionado/ZFS, GDM, falsos positivos, ZFS-operación.
+  - [`ThinStation/CLAUDE.md`](ThinStation/CLAUDE.md) — compilación en Fedora, imagen universal BIOS+UEFI, RDP kiosco.
+  - [`W11/ISO/CLAUDE.md`](W11/ISO/CLAUDE.md) — ISO desatendida de Windows 11, `autounattend.xml`, máquina de estados, `comun.ps1`.
+- **Ansible (post-instalación)**
+  - [`Ubuntu/ansible/CLAUDE.md`](Ubuntu/ansible/CLAUDE.md) y un `CLAUDE.md` por rol en `Ubuntu/ansible/roles/<rol>/`.
+  - [`W11/ansible/CLAUDE.md`](W11/ansible/CLAUDE.md) (Ansible por SSH→PowerShell) y un `CLAUDE.md` por rol en `W11/ansible/roles/<rol>/`.
+  - `Ubuntu/ansible/rolesUsuario/CLAUDE.md` — configuración por usuario (no root), en construcción.
+- **Utilidades**
+  - [`W11/Utiles/Compacta/CLAUDE.md`](W11/Utiles/Compacta/CLAUDE.md) — limpieza dentro de la VM (`LimpiaW11.ps1`) + compactado del VMDK en el host (`CompactaW11.sh`).
+
+> **Estado vigente de cada rol Ansible** (activo / comentado / legacy): la tabla del
+> `CLAUDE.md` de cada `ansible/`; la fuente de verdad última es su `roles.yaml`.
