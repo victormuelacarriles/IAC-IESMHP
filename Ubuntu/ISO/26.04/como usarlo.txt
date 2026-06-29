@@ -1,3 +1,11 @@
+Pendiente:
+
+- sugerencia de David: 
+    hacer que el instalador no borre el /home de alumnos (si ya está formateado)
+
+
+
+
 sudo apt install xorriso mtools gdisk -y
 
 # 2. Dar permisos y ejecutar
