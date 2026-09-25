@@ -38,6 +38,9 @@ mkdir -p "$RAIZLOG"
 # (StandardOutput=journal). Seguimos enviando copia al journal sin volver a
 # anexar al fichero (ver bug 2026-05-15 "log duplicado").
 exec 3>&1 4>&2
+# Stdin → /dev/null: bajo systemd ya lo es; esto cubre una re-ejecución manual
+# desde terminal, donde apt-get podría quedar DETENIDO (bug 2026-09-25).
+exec </dev/null
 
 # Consumidor de log: antepone hora a cada linea, la graba en los DOS ficheros
 # reabriendolos por linea (flush inmediato a kernel) y la reenvia al journal.

@@ -43,6 +43,11 @@ exec > >(tee -a "$RAIZLOG/1-SetupLiveCD.sh.log") 2>&1
 setxkbmap es || true
 loadkeys es   || true
 
+# Stdin → /dev/null para TODO lo que queda (apt-get, chroot del script 2...):
+# con stdin = terminal y stdout = tee, apt-get puede quedar DETENIDO (estado
+# 'T') al restaurar el tty tras dpkg (2026-09-25). El script no lee de teclado.
+exec </dev/null
+
 # ─────────────── Cabecera ──────────────
 echoverde "1-SetupLiveCD (vs$VERSIONSCRIPT)"
 echo         "   Script personalizado de instalación de "
@@ -610,8 +615,10 @@ sed 's/^/  /' /mnt/tmp/.iac-partitions.env
 
 # ─────────────── Ejecutar SCRIPT2 ──────
 echoamarillo "Ejecutando $SCRIPT2 en chroot... (${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2)"
-echo "chroot /mnt ${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2 2>&1 | tee $DISTROLOGS/$SCRIPT2.log" 
-chroot /mnt "${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2" 2>&1 | tee "$DISTROLOGS/$SCRIPT2.log"
+echo "chroot /mnt ${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2 </dev/null 2>&1 | tee $DISTROLOGS/$SCRIPT2.log"
+# </dev/null: sin terminal como stdin, ningún apt-get del script 2 puede quedar
+# DETENIDO (estado 'T') al restaurar el tty tras dpkg (2026-09-25).
+chroot /mnt "${RAIZSCRIPTSDISTRO#/mnt}/$SCRIPT2" </dev/null 2>&1 | tee "$DISTROLOGS/$SCRIPT2.log"
 
 # ─────────────── Resultado ─────────────
 echo && echo

@@ -264,7 +264,9 @@ else
 fi
 
 echo "Lanzamos el script github de instalación (0b-Github.sh)..."
-sudo /bin/bash /0b-Github.sh 2>&1 | tee "${LOG_FILE}"
+# </dev/null: sin terminal como stdin, ningún apt-get de la cadena (0b → 1 → 2)
+# puede quedar DETENIDO (estado 'T') al tener stdout = tee (bug 2026-09-25).
+sudo /bin/bash /0b-Github.sh </dev/null 2>&1 | tee "${LOG_FILE}"
 EXIT_CODE=${PIPESTATUS[0]}
 
 echo ""

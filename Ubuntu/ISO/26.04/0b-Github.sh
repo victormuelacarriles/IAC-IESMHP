@@ -121,9 +121,11 @@ log "update-initramfs enmascarado (no-op en entorno live)."
 log "Desactivamos actualización de man-db"
 rm -f /var/lib/man-db/auto-update
 log "Actualizando lista de paquetes..."
-DEBIAN_FRONTEND=noninteractive apt-get update -q
+# </dev/null: con stdin = terminal y stdout = tee, apt-get puede quedar
+# DETENIDO (estado 'T') al restaurar el tty tras dpkg (bug 2026-09-25).
+DEBIAN_FRONTEND=noninteractive apt-get update -q </dev/null
 log "Asegurando que git está instalado..."
-DEBIAN_FRONTEND=noninteractive apt-get install git -y
+DEBIAN_FRONTEND=noninteractive apt-get install git -y </dev/null
 log "git instalado: $(git --version 2>/dev/null || echo 'no encontrado')"
 
 
@@ -165,7 +167,7 @@ chmod +x "${SCRIPT_INSTALL}"
 
 
 log "=== 0b-Github.sh finalizado: $(date) — lanzando ${SCRIPT_INSTALL} ==="
-bash "${SCRIPT_INSTALL}"
+bash "${SCRIPT_INSTALL}" </dev/null
 
 
 # echo "1. Ver qué procesos están corriendo en ese momento:"
