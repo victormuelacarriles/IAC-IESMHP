@@ -346,8 +346,11 @@ if [ "$PERFIL" = "CEIABD" ]; then
     # 0b-Github.sh ya enmascaró update-initramfs → la postinst de zfs-* no se
     # cuelga reconstruyendo el initramfs del live. El módulo zfs viene con
     # firma Canonical en el kernel del live, no requiere DKMS aquí.
-    DEBIAN_FRONTEND=noninteractive apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y zfsutils-linux
+    # </dev/null: sin él, apt-get (stdin = terminal, stdout = tee) puede quedar
+    # DETENIDO por señal de control de terminal (estado 'T' en ps) al restaurar
+    # el tty tras dpkg → el script se "cuelga" (2026-09-25).
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq </dev/null
+    DEBIAN_FRONTEND=noninteractive apt-get install -y zfsutils-linux </dev/null
     modprobe zfs || { echorojo "Error: no se pudo cargar el módulo ZFS en el live"; sleep 10 && exit 1; }
     ZFS_VER=$(zfs version 2>/dev/null | head -1 | awk '{print $NF}' | sed -e 's/^zfs-//' -e 's/-.*//')
     echoverde "  ZFS versión: ${ZFS_VER:-desconocida}"
