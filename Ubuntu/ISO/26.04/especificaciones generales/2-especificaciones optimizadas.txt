@@ -1,0 +1,94 @@
+Especificación Técnica de Particionado y Formateo (Ubuntu Desktop 26.04)
+1. Fase de Inventario y Evaluación de Hardware
+El script debe comenzar evaluando el hardware del equipo para tomar decisiones de enrutamiento:
+
+Inventario de Discos: Escanear y clasificar todos los discos conectados (de 1 a 10) en tres categorías: NVME, SSD (SATA no mecánicos) y HDD (mecánicos). Evaluar la capacidad total de cada uno.
+
+Memoria RAM: Leer la memoria RAM total instalada en el sistema para determinar si se aplicará la regla de deduplicación (umbral de 32GB).
+
+Aislamiento de Swap: Confirmar la ausencia total de particiones o archivos Swap en la planificación.
+
+2. Lógica de Selección de Discos Principales
+La asignación de discos para los puntos de montaje críticos seguirá un orden de prioridad estricto.
+
+2.1. Disco para el Sistema Operativo (/efi, /boot, /)
+
+Prioridad 1 (SSD dedicado): Buscar entre los discos SSD disponibles. Seleccionar el SSD de menor tamaño que garantice una capacidad total de al menos 102.5GB (espacio mínimo para particiones base).
+
+Prioridad 2 (NVMe de reserva): Si no hay discos SSD disponibles, seleccionar el disco NVMe de menor tamaño que garantice los 102.5GB.
+
+Prioridad 3 (Contingencia mecánica): Si el equipo carece de almacenamiento de estado sólido, seleccionar un disco HDD (ext4).
+
+2.2. Disco para Perfiles de Usuario (/home)
+
+Prioridad 1 (NVMe principal): Buscar el disco NVMe de mayor tamaño, siempre que sea mayor o igual a 256GB.
+
+Prioridad 2 (SSD principal): Si no existen discos NVMe, buscar el SSD de mayor tamaño, siempre que sea mayor o igual a 256GB.
+
+Nota: Se debe evitar asignar /home a un HDD, salvo en el caso de contingencia total (solo hay discos mecánicos en el equipo).
+
+3. Estructura y Particionado del Sistema Operativo
+En el disco seleccionado para el SO, se aplicará la siguiente estructura de particiones.
+
+Partición 1: /efi
+
+Tamaño: 500MB fijos.
+
+Formato: FAT32.
+
+Partición 2: /boot
+
+Tamaño: 2GB fijos.
+
+Formato: ext4 (garantiza la compatibilidad pura del gestor de arranque con la topología subyacente antes de cargar módulos complejos).
+
+Partición 3: / (Raíz) e Integración ZFS
+
+Formato: Dataset ZFS dentro de un zpool dedicado al SO (o ext4 en escenario de contingencia HDD).
+
+Gestión del espacio sobrante: Tras asignar los 2.5GB de /efi y /boot, se evalúa el espacio restante (R) del disco:
+
+Si el espacio sobrante después de restar 100GB para la raíz es menor de 256GB (R - 100GB < 256GB): Todo el espacio restante del disco se asigna al dataset /.
+
+Si el espacio sobrante es mayor o igual a 256GB (R - 100GB >= 256GB): El dataset / se limita estrictamente a 100GB. Todo el espacio restante se asigna a un dataset adicional dentro de este mismo zpool, el cual se montará en /datos/SSD_x (o /datos/NVME_x según corresponda al tipo de disco).
+
+4. Estructura y Reglas para /home
+El disco seleccionado para /home se formateará como un zpool independiente (salvo contingencia HDD) con las siguientes reglas geométricas y de rendimiento:
+
+Límites de Tamaño:
+
+Si el disco tiene 1TB o menos: El dataset /home ocupará la totalidad de la capacidad del disco.
+
+Si el disco tiene más de 1TB: Se limitará el dataset /home exactamente a 1TB. El resto de la capacidad del disco se agrupará en un dataset adicional montado como /datos/NVME_x (o SSD_x).
+
+Activación de Deduplicación (ZFS Dedup):
+
+La propiedad dedup=on se activará en el dataset de /home únicamente si se cumplen dos condiciones simultáneas: El equipo posee 32GB de RAM (o más) y la capacidad máxima de /home está limitada a 1TB. (Al haber topado /home a 1TB en el punto anterior, la tabla de deduplicación no saturará la memoria RAM del equipo).
+
+5. Gestión del Almacenamiento Restante (/datos)
+Todos los discos no asignados a SO o /home, así como los datasets creados con el espacio sobrante de los discos principales, se montarán estructurados bajo el directorio /datos.
+
+Discos HDD (Mecánicos): Se formatearán íntegramente en ext4. Se montarán secuencialmente como /datos/HDD1, /datos/HDD2, etc.
+
+Discos SSD/NVMe Adicionales: Se creará un zpool independiente por cada disco físico completo. El dataset raíz de cada pool se montará secuencialmente como /datos/SSD1, /datos/SSD2... o /datos/NVME1, /datos/NVME2...
+
+6. Casos Límite y Excepciones Contempladas
+6.1. Escenario Monodisco (Único disco NVMe o SSD)
+Si el inventario detecta un solo disco de estado sólido, todo residirá en él. La lógica de particionado será:
+
+Crear /efi (500MB) y /boot (2GB).
+
+Evaluar espacio restante (R):
+
+Si R permite asignar 100GB para / y deja un remanente mayor o igual a 256GB: Se particiona el zpool internamente. Se crea un dataset de 100GB para / y un dataset separado para /home (hasta un máximo de 1TB). Si tras asignar el 1TB de /home sobra espacio, se crea un tercer dataset /datos/NVME1 (o SSD1).
+
+Si el remanente es menor a 256GB: Se crea un único volumen/dataset ZFS que ocupará todo el espacio restante, unificando / y /home en la misma jerarquía.
+
+6.2. Escenario de Contingencia (Cero estado sólido, solo HDDs)
+La prioridad es mantener el equipo operativo si no se detecta ningún SSD/NVMe.
+
+El SO se instala en el HDD más pequeño que garantice 102.5GB. /efi (FAT32), /boot (ext4) y / (ext4). Todo el espacio sobrante del disco se queda en la raíz /.
+
+/home se instala en el HDD de mayor capacidad (>= 256GB) formateado en ext4. Si supera 1TB, se particiona de forma clásica en ext4 dejando el resto para /datos/HDD_x.
+
+El resto de HDDs seguirán la regla general de formateo ext4 para la ruta /datos. No habrá ZFS en todo el sistema.

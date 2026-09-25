@@ -1,0 +1,35 @@
+Tengo un script bash que formatea, antes de la instalación de Ubuntu Desktop 26.04, todos los discos que haya en el ordenador. Está planteado para solo dos tipos de hardware (tamaños y tipos específicos de discos). 
+
+Quiero generalizarlo, que me valga para cualquier número de discos (de 1 a 10): quiero que me ayudes a redactar las especificaciones. 
+
+Debe distinguir entre discos HDD (mecánicos) y de estado sólido (nvme y SSD).
+
+Mi idea es que monte todo en datasets ZFS, excepto /efi (partición de 500Mb de tipo FAT32). Para / dejará siempre un mínimo de 100Gb, y no quiero una partición de swap. Siempre deben estar en el mismo disco / y /efi.
+
+Por otro lado, que monte /home sobre  el disco nvme más grande que haya (siempre mayor o igual de 256GB). Si el equipo cuenta con 32GB de RAM (o más) lo formateara con ZFS con deduplicación 
+
+Con el resto de almacenamiento la idea es agruparlo montado bajo una carpeta /datos: /datos/HDD1,/datos/HDD2 ... , /datos/SDD1, /datos/SDD2..., /datos/NVME1, /datos/NVME2 …. LOs discos mecánicos usarán ext4, y los no mecánicos serán datasets ZFS (creando un pool por cada disco no mecánico)
+
+Se debe evitar que /home y / deben montarse sobre un HDD (Solo en el caso de que no haya mas que discos mecánicos: la prioridad es instalar siempre para el equipo funcione)
+
+Si no hay ningún nvme, y varios SSD, utilizar el SSD más grande para la partición /home. En otro, colocar las particiones necesarias para el SO ( / al menos 100Gb y /efi 500MB): si el espacio que sobra es menor de 256Gb, hacer que sea todo del /.  Si el espacio que sobra es mayor o igual  de 256Gb, y el resto de discos / particiones SSD agrupalas en /datos/SSD.
+
+si el equipo tiene un único disco (NVMe o SSD), utilizarás ese disco  para todo. Si puedes separar el /home en un volumen ZFS de al menos 256Gb (manteniendo un mínimo de 100'5Gb para la / + /efi) particiona: si no, único volumen
+
+
+No me des el script. Simplemente revisa mis especificaciones por si son inchorentes o me he olvidado algún caso. Pregúntame las cuestiones que no haya tenido en cuenta y, solo cuando ya no tengas dudas, proponme una especificación completa ordenada y coherente. 
+
+
+DUDAS:
+=======
+1) Selección del disco para el Sistema Operativo (/ + /efi):    En el caso de múltiples SSD/NVME, el SO irá en el disco SSD mas pequeño que garantice al menos 100Gb para /  (prefiero reservar los NVME para /home y /datos)
+
+2) Topoliga ZFS en los casos donde sobra espacio (>= 256GB) en el disco del SO y queremos usarlo para /datos/SSD... (o /datos/NVME...): crea un dataset adicional dentro del mismo zpool
+
+3) Umbral de RAM para la Deduplicación en ZFS: fija un límete de 1Tb para activar la deduplicación.
+
+4) Partición /boot y el Bootloader: me he olvidado de la partición /boot. Modifica las especificaciones: que esté también en el mismo disco de / y /efi (con el particionado y tipología que sea mas óptima)
+
+5) Escenario de contingencia: Solo Discos Mecánicos (HDDs): usar ext4 también para / y /home en este caso.
+
+6) Consumo total del disco de /home:   cuando aislemos /home en el NVMe más grande, se asigna todo el disco entero si tiene 1Tb o menos. En el caso de mas de 1Tb, reserva el primer Tb para /home y el resto para /datos/NVME
