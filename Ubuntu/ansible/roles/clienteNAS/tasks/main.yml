@@ -1,6 +1,6 @@
 ---
 # Rol clienteNAS: monta por NFS (solo lectura) TODOS los recursos que el
-# NAS del departamento ({{ nas_server_ip }}) publica, autodescubiertos con
+# NAS del departamento publica (por la interfaz de su red, o la general), autodescubiertos con
 # `showmount -e`. Cada export se monta en {{ nas_base_mount }}/<nombre>.
 # Parametrizado en defaults/main.yml.
 
@@ -23,13 +23,50 @@
     group: root
     mode: '0755'
 
-- name: Autodescubrir los exports del NAS ({{ nas_server_ip }})
-  command: "showmount -e {{ nas_server_ip }}"
+# El NAS tiene una interfaz general (nas_ip_general, para todo el centro) y
+# otras dedicadas a las redes principales (nas_ips_por_red). Se elige por los
+# 3 primeros octetos de la IP del equipo; si su red no tiene interfaz propia,
+# se usa la general. nas_server_ip (si no está vacío) fuerza una IP concreta.
+- name: Elegir la interfaz del NAS según la red del equipo
+  set_fact:
+    nas_red_equipo: "{{ (ansible_default_ipv4.address | default('')).split('.')[:3] | join('.') }}"
+    nas_ip: >-
+      {{ nas_server_ip if (nas_server_ip | length > 0)
+         else nas_ips_por_red.get((ansible_default_ipv4.address | default('')).split('.')[:3] | join('.'), nas_ip_general) }}
+
+- name: Mostrar la interfaz del NAS elegida
+  debug:
+    msg: >-
+      Equipo en la red {{ nas_red_equipo }}.x -> NAS {{ nas_ip }}
+      ({{ 'forzada con nas_server_ip' if (nas_server_ip | length > 0)
+          else ('interfaz dedicada' if nas_ip != nas_ip_general else 'interfaz general') }})
+
+# Si la interfaz elegida es una dedicada y no responde, NO se falla aquí: se
+# prueba después con la general (plan B). Si ya era la general (o está
+# forzada), el fallo es real y se deja caer para que se vea en el log.
+- name: Autodescubrir los exports del NAS
+  command: "showmount -e {{ nas_ip }}"
   register: showmount_raw
   changed_when: false
   retries: "{{ nas_showmount_retries }}"
   delay: "{{ nas_showmount_delay }}"
   until: showmount_raw.rc == 0
+  ignore_errors: "{{ nas_ip != nas_ip_general and nas_server_ip | length == 0 }}"
+
+- name: Plan B - la interfaz dedicada no responde, probar con la general ({{ nas_ip_general }})
+  command: "showmount -e {{ nas_ip_general }}"
+  register: showmount_general
+  changed_when: false
+  retries: "{{ nas_showmount_retries }}"
+  delay: "{{ nas_showmount_delay }}"
+  until: showmount_general.rc == 0
+  when: showmount_raw is failed
+
+- name: Usar la interfaz general tras el plan B
+  set_fact:
+    nas_ip: "{{ nas_ip_general }}"
+    showmount_raw: "{{ showmount_general }}"
+  when: showmount_raw is failed
 
 # Salida típica:
 #   Export list for 10.0.1.100:
@@ -47,7 +84,7 @@
 
 - name: Avisar si el NAS no publica ningún export
   debug:
-    msg: "El NAS {{ nas_server_ip }} no exporta ningún recurso — nada que montar."
+    msg: "El NAS {{ nas_ip }} no exporta ningún recurso — nada que montar."
   when: nas_exports | length == 0
 
 # Mapa export remoto -> punto de montaje local, según nas_subdir_strategy.
@@ -55,7 +92,7 @@
   set_fact:
     nas_mounts: >-
       {{ nas_mounts | default([]) + [ {
-           'src': nas_server_ip ~ ':' ~ item,
+           'src': nas_ip ~ ':' ~ item,
            'path': nas_base_mount ~ '/' ~ (
                      (item | basename) if nas_subdir_strategy == 'basename'
                      else (item | regex_replace('^/', ''))

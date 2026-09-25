@@ -9,15 +9,21 @@ exporta. No hay lista fija: el rol **autodescubre** los exports con
 ### Lógica
 1. Instala `nfs-common` (aporta `mount.nfs` y `showmount`).
 2. Crea la carpeta base `{{ nas_base_mount }}` (por defecto `/mnt/nasDepInfo`).
-3. Ejecuta `showmount -e {{ nas_server_ip }}` (por defecto `10.0.1.100`), con
+3. **Elige la interfaz del NAS** según la red del equipo (3 primeros octetos
+   de `ansible_default_ipv4.address`): si la red está en `nas_ips_por_red` usa
+   su interfaz dedicada (`10.0.72.x` → `10.0.72.253`, `10.0.32.x` →
+   `10.0.32.253`); si no, la general `nas_ip_general` (`10.0.1.253`). Ejecuta
+   `showmount -e <IP elegida>` con
    reintentos (`nas_showmount_retries`/`nas_showmount_delay`) porque el NAS
    puede tardar en responder en el primer arranque.
 4. Extrae la 1ª columna de cada línea (la ruta exportada) y descarta lo que no
    empiece por `/` (así se ignora la cabecera `Export list for ...` sin
    depender de `--no-headers`).
+   **Plan B**: si la interfaz dedicada no responde tras los reintentos, se
+   repite con la general (el fallo previo sale en el log como `...ignoring`).
 
-Ejemplo real: `showmount -e 10.0.1.100` → `/mnt/DiscosRapidos/PruebaRapidosX3 *`
-⇒ se monta `10.0.1.100:/mnt/DiscosRapidos/PruebaRapidosX3` en
+Ejemplo real: `showmount -e 10.0.72.253` → `/mnt/DiscosRapidos/PruebaRapidosX3 *`
+⇒ se monta `10.0.72.253:/mnt/DiscosRapidos/PruebaRapidosX3` en
 `/mnt/nasDepInfo/PruebaRapidosX3`.
 5. Construye el mapa export remoto → punto de montaje local
    `{{ nas_base_mount }}/<nombre>` según `nas_subdir_strategy`.
@@ -37,7 +43,9 @@ Ejemplo real: `showmount -e 10.0.1.100` → `/mnt/DiscosRapidos/PruebaRapidosX3 
 
 | Variable | Por defecto | Para qué |
 |---|---|---|
-| `nas_server_ip` | `10.0.1.100` | IP del NAS que exporta los recursos |
+| `nas_ip_general` | `10.0.1.253` | Interfaz general del NAS (todo el centro); se usa si la red no tiene interfaz dedicada y como plan B |
+| `nas_ips_por_red` | `10.0.72`→`10.0.72.253`, `10.0.32`→`10.0.32.253` | Interfaces dedicadas por red (clave = 3 primeros octetos) |
+| `nas_server_ip` | `""` | Si no está vacío, **fuerza** esa IP (sin detección ni plan B) |
 | `nas_base_mount` | `/mnt/nasDepInfo` | Carpeta base local de los montajes |
 | `nas_fstype` | `nfs` | Tipo de FS |
 | `nas_mount_options` | `ro,defaults,_netdev` | Solo lectura; `_netdev` espera a la red |
@@ -52,16 +60,18 @@ Ejemplo real: `showmount -e 10.0.1.100` → `/mnt/DiscosRapidos/PruebaRapidosX3 
   `/volume1/DepInfo` → `/mnt/nasDepInfo/volume1/DepInfo`). **Úsalo si dos
   exports comparten el mismo basename** (colisión de carpeta local).
 
-## Cómo apuntar a otro NAS
-Sobreescribir las variables (en `defaults/main.yml`, en el playbook o con
-`-e`). Nada en `tasks/main.yml` está cableado: cambiar `nas_server_ip` y/o
-`nas_base_mount` basta.
+## Cómo apuntar a otro NAS / añadir una red
+- **Nueva red con interfaz propia en el NAS**: añadir una línea a
+  `nas_ips_por_red` en `defaults/main.yml` (`"10.0.NN": "10.0.NN.253"`).
+- **Forzar una IP** (pruebas): `-e nas_server_ip=10.0.1.253`.
+- Nada en `tasks/main.yml` está cableado; `nas_base_mount` también se cambia en
+  `defaults/main.yml`.
 
 ## Estado
-- ⛔ **comentado** en `roles.yaml` (activable a demanda; estaba pensado como 2º rol, tras `basicos`).
+- ✅ **activo** en `roles.yaml` (tras `vscode`).
 - A diferencia de `comparteaula`/`comparteaula32` (NFS de **aula**, lista o
   ruta fija), este rol es **NAS de departamento** y **autodescubre** todos los
-  exports. No detecta aula por IP.
+  exports. Usa la IP del equipo **solo** para elegir la interfaz del NAS.
 
 ## Notas
 - Solo lectura por diseño: los equipos no escriben en el NAS.
@@ -69,9 +79,12 @@ Sobreescribir las variables (en `defaults/main.yml`, en el playbook o con
   cambio si modifica `/etc/fstab`; el `mount` final solo corre sobre puntos no
   montados (`when: item.rc != 0`).
 - Si el NAS no exporta nada, el rol no falla: avisa con `debug` y no monta.
-- Si `showmount` no responde tras los reintentos, el rol **falla** (red/NAS
-  caídos) — es deliberado para que se vea en el log del primer arranque.
-- Útil para depurar: `showmount -e 10.0.1.100`.
+- Si `showmount` no responde tras los reintentos (y el plan B con la general
+  también falla), el rol **falla** (red/NAS caídos) — es deliberado para que se vea en el log del primer arranque.
+- Útil para depurar: `showmount -e 10.0.1.253` (general) o `showmount -e 10.0.72.253` (dedicada).
+- Si un equipo cambia de red, en la re-ejecución la línea de `/etc/fstab` se
+  reescribe con la nueva IP (se busca por punto de montaje), pero el montaje
+  activo no se rehace hasta reiniciar o hacer `umount`/`mount`.
 
 ### Idempotencia / re-ejecución
 

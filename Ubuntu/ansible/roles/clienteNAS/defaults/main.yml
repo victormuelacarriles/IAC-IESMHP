@@ -3,8 +3,26 @@
 # Todo es parametrizable: para apuntar a otro NAS u otra carpeta base,
 # sobreescribir estas variables desde el playbook o con -e.
 
-# IP del servidor/NAS que exporta los recursos NFS
-nas_server_ip: "10.0.1.100"
+# --- Selección de la IP del NAS -------------------------------------------
+# El NAS tiene VARIAS interfaces: una general para todo el centro y otras
+# dedicadas a las redes principales. El rol elige la IP según la red del
+# equipo (3 primeros octetos de su IP por defecto, ansible_default_ipv4):
+#   - si la red está en nas_ips_por_red  -> usa esa interfaz dedicada
+#   - si no                              -> usa nas_ip_general
+# Si la interfaz dedicada no responde a showmount, se reintenta con la general.
+
+# Interfaz general del NAS (accesible desde todo el centro)
+nas_ip_general: "10.0.1.253"
+
+# Interfaces dedicadas: "red del equipo (3 octetos)" -> "IP del NAS en esa red".
+# Para añadir una red nueva con interfaz propia, basta con añadir una línea.
+nas_ips_por_red:
+  "10.0.72": "10.0.72.253"     # IABD
+  "10.0.32": "10.0.32.253"     # SMRD / SMRV
+
+# Forzar una IP concreta (se salta la detección por red y el plan B).
+# Vacío = detección automática. Ej.: -e nas_server_ip=10.0.1.253
+nas_server_ip: ""
 
 # Carpeta base local bajo la que se montan TODOS los exports descubiertos
 nas_base_mount: "/mnt/nasDepInfo"
@@ -30,4 +48,5 @@ nas_showmount_retries: 5
 nas_showmount_delay: 5
 
 # Para ver manualmente lo que exporta el NAS:
-#   showmount -e 10.0.1.100
+#   showmount -e 10.0.1.253      (general)
+#   showmount -e 10.0.72.253     (red IABD)
