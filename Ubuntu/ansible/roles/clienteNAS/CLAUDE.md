@@ -25,6 +25,10 @@ exporta. No hay lista fija: el rol **autodescubre** los exports con
 Ejemplo real: `showmount -e 10.0.72.253` → `/mnt/DiscosRapidos/PruebaRapidosX3 *`
 ⇒ se monta `10.0.72.253:/mnt/DiscosRapidos/PruebaRapidosX3` en
 `/mnt/nasDepInfo/PruebaRapidosX3`.
+4b. **Exclusiones**: descarta los exports cuya ruta contenga alguna palabra de
+   `nas_excluir` (sin distinguir mayúsculas; por defecto `LiveCDs` y
+   `OtroAexcluir`). Si un excluido ya estaba montado de una ejecución
+   anterior, lo **desmonta** y **quita su línea de `/etc/fstab`**.
 5. Construye el mapa export remoto → punto de montaje local
    `{{ nas_base_mount }}/<nombre>` según `nas_subdir_strategy`.
 6. Detecta con `mountpoint -q` qué puntos ya están montados y **crea solo los
@@ -47,6 +51,7 @@ Ejemplo real: `showmount -e 10.0.72.253` → `/mnt/DiscosRapidos/PruebaRapidosX3
 | `nas_ips_por_red` | `10.0.72`→`10.0.72.253`, `10.0.32`→`10.0.32.253` | Interfaces dedicadas por red (clave = 3 primeros octetos) |
 | `nas_server_ip` | `""` | Si no está vacío, **fuerza** esa IP (sin detección ni plan B) |
 | `nas_base_mount` | `/mnt/nasDepInfo` | Carpeta base local de los montajes |
+| `nas_excluir` | `[LiveCDs, OtroAexcluir]` | Palabras: no se monta ningún export cuya ruta contenga alguna (vacía = montar todo) |
 | `nas_fstype` | `nfs` | Tipo de FS |
 | `nas_mount_options` | `ro,defaults,_netdev` | Solo lectura; `_netdev` espera a la red |
 | `nas_subdir_strategy` | `basename` | `basename` o `fullpath` (ver abajo) |

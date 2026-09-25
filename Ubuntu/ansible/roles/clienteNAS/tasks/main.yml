@@ -1,7 +1,8 @@
 ---
 # Rol clienteNAS: monta por NFS (solo lectura) TODOS los recursos que el
 # NAS del departamento publica (por la interfaz de su red, o la general), autodescubiertos con
-# `showmount -e`. Cada export se monta en {{ nas_base_mount }}/<nombre>.
+# `showmount -e`. Cada export se monta en {{ nas_base_mount }}/<nombre>,
+# salvo los que contengan alguna palabra de nas_excluir.
 # Parametrizado en defaults/main.yml.
 
 #Antes de instalar el cliente NFS, comprobamos "dpkg --configure -a" para evitar que se quede a medias por un paquete roto y no instale el cliente NFS.
@@ -82,9 +83,51 @@
          | select('match', '^/')
          | list }}
 
+# Separa los exports cuya ruta contiene alguna palabra de nas_excluir (sin
+# distinguir mayúsculas). Con la lista vacía no se excluye nada.
+- name: Separar los exports excluidos (nas_excluir)
+  set_fact:
+    nas_exports_excluidos: >-
+      {{ nas_exports | select('search', nas_excluir | map('regex_escape') | join('|'), ignorecase=True) | list
+         if (nas_excluir | default([]) | length > 0) else [] }}
+
+- name: Quitar los excluidos de la lista a montar
+  set_fact:
+    nas_exports: "{{ nas_exports | difference(nas_exports_excluidos) }}"
+
+- name: Mostrar los exports excluidos
+  debug:
+    msg: "Exports excluidos por nas_excluir (no se montan): {{ nas_exports_excluidos }}"
+  when: nas_exports_excluidos | length > 0
+
+# Si un export excluido quedó montado de una ejecución anterior (antes de
+# añadirlo a nas_excluir), se desmonta y se quita de /etc/fstab. Se busca por
+# el punto de montaje local, calculado igual que en el mapa de montajes.
+- name: Desmontar los exports excluidos que estuvieran montados
+  shell: >-
+    mountpoint -q {{ mp | quote }} && umount {{ mp | quote }} && echo DESMONTADO || true
+  vars:
+    mp: >-
+      {{ nas_base_mount ~ '/' ~ ((item | basename) if nas_subdir_strategy == 'basename'
+                                 else (item | regex_replace('^/', ''))) }}
+  register: nas_umount_excl
+  changed_when: "'DESMONTADO' in nas_umount_excl.stdout"
+  loop: "{{ nas_exports_excluidos }}"
+
+- name: Quitar de /etc/fstab las entradas de los exports excluidos
+  lineinfile:
+    path: /etc/fstab
+    regexp: '^\S+\s+{{ mp | regex_escape }}\s'
+    state: absent
+  vars:
+    mp: >-
+      {{ nas_base_mount ~ '/' ~ ((item | basename) if nas_subdir_strategy == 'basename'
+                                 else (item | regex_replace('^/', ''))) }}
+  loop: "{{ nas_exports_excluidos }}"
+
 - name: Avisar si el NAS no publica ningún export
   debug:
-    msg: "El NAS {{ nas_ip }} no exporta ningún recurso — nada que montar."
+    msg: "El NAS {{ nas_ip }} no exporta ningún recurso (o todos están en nas_excluir) — nada que montar."
   when: nas_exports | length == 0
 
 # Mapa export remoto -> punto de montaje local, según nas_subdir_strategy.

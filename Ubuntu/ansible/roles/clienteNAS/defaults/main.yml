@@ -27,6 +27,13 @@ nas_server_ip: ""
 # Carpeta base local bajo la que se montan TODOS los exports descubiertos
 nas_base_mount: "/mnt/nasDepInfo"
 
+# Exports que NO se montan: se descarta todo export cuya ruta contenga
+# alguna de estas palabras (sin distinguir mayúsculas/minúsculas).
+# Si un export excluido ya estaba montado de una ejecución anterior, se
+# desmonta y se quita su línea de /etc/fstab. Lista vacía = montar todo.
+nas_excluir:
+  - "LiveCDs"
+  
 # Tipo de sistema de ficheros
 nas_fstype: "nfs"
 
