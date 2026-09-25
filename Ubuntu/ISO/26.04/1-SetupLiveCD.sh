@@ -16,7 +16,7 @@
 # =============================================================================
 set -e
 
-VERSIONSCRIPT="23.1-20260612-Ubuntu-zfs"
+VERSIONSCRIPT="23.2-20260925-Ubuntu-zfs"
 
 # Variables comunes del proyecto (REPO, GITREPO, DISTRO, RAIZSCRIPTS, RAIZLOG,
 # versionDISTRO...). Único punto de definición: comun.sh (mismo directorio).

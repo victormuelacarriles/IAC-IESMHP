@@ -16,6 +16,8 @@
 
 set -euo pipefail
 
+VERSIONSCRIPT="1.0-20260925"       #Versión del script
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PARÁMETROS Y VARIABLES
 # ─────────────────────────────────────────────────────────────────────────────
@@ -79,6 +81,7 @@ check_inputs() {
     if [[ "$(realpath "$SOURCE_ISO")" == "$(realpath "$OUTPUT_ISO")" ]]; then
         err "La ISO de origen y la de salida son el mismo fichero."
     fi
+    log "0a-CreaISO   : vs${VERSIONSCRIPT}"
     log "ISO origen   : ${SOURCE_ISO}"
     log "0b-Github.sh : ${PERSO_SCRIPT}"
     log "ISO salida   : ${OUTPUT_ISO}"

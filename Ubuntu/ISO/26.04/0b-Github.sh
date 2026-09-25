@@ -7,6 +7,10 @@
 # =============================================================================
 set -euo pipefail
 
+# Versión de ESTE fichero. Va embebido en la ISO: sirve para saber, por el log,
+# con qué ISO se arrancó el equipo. Subirla en cada cambio (y regenerar la ISO).
+VERSIONSCRIPT="1.0-20260925"
+
 # ── BLOQUE DE ARRANQUE (única duplicación inevitable del proyecto) ───────────
 # 0b-Github.sh corre en el Live CD ANTES de clonar el repo, así que todavía no
 # puede hacer `source comun.sh` (aún no existe en disco). Estos dos valores son
@@ -37,7 +41,7 @@ err()  { echo -e "${RED}[perso][✗]${NC} $*" >&2; exit 1; }
 mkdir -p "$RAIZLOG"
 exec > >(tee -a "$LOG0B") 2>&1
 
-log "=== 0b-Github.sh iniciado: $(date) ==="
+log "=== 0b-Github.sh (vs$VERSIONSCRIPT) iniciado: $(date) ==="
 log "REPO=$REPO  GITREPO=$GITREPO  DESTDIR=$DESTDIR"
 log "Kernel: $(uname -r)  CPU: $(nproc) cores  RAM: $(free -h | awk '/^Mem:/{print $2}')"
 
@@ -166,7 +170,7 @@ chmod +x "${SCRIPT_INSTALL}"
 # ─────────────── Lanzar instalación ────
 
 
-log "=== 0b-Github.sh finalizado: $(date) — lanzando ${SCRIPT_INSTALL} ==="
+log "=== 0b-Github.sh (vs$VERSIONSCRIPT) finalizado: $(date) — lanzando ${SCRIPT_INSTALL} ==="
 bash "${SCRIPT_INSTALL}" </dev/null
 
 
