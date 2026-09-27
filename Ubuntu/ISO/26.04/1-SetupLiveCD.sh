@@ -5,18 +5,17 @@
 #  Lanzado por perso.sh tras clonar el repositorio en /opt/IAC-IESMHP.
 #
 #  Configuraciones de disco soportadas:
-#    Distancia : NVMe 0,5 TB (EFI 512M, swap 8G, / resto ext4)
-#              + NVMe 2,0 TB (/home ext4)
-#              → SIN ZFS (rama intacta respecto a la versión 22.x).
+#    Distancia : NVMe 0,5 TB (EFI 1G, swap 16G, / resto ext4)
+#              + NVMe 2,0 TB (ZFS rpool→/home)
+#              → ZFS con dedup+zstd en /home (sin /datos).
 #    CEIABD    : NVMe 0,5 TB (EFI 1G, swap 16G, / 100G ext4, p4 ZFS rpool→/home)
 #              + SATA 1,0 TB (ZFS tank→/datos sin dedup)
 #              → ZFS con dedup+zstd en /home y zstd en /datos.
-#  La decisión "ZFS solo en CEIABD" la fijó el usuario el 2026-05-20 al pasar
-#  a FASE 1 del plan ZFS: Distancia se mantiene tal cual hasta nuevo aviso.
+#  Ambos perfiles llevan rpool/home (misma configuración); solo CEIABD lleva tank.
 # =============================================================================
 set -e
 
-VERSIONSCRIPT="23.2-20260925-Ubuntu-zfs"
+VERSIONSCRIPT="23.3-20260927-Ubuntu-zfs"
 
 # Variables comunes del proyecto (REPO, GITREPO, DISTRO, RAIZSCRIPTS, RAIZLOG,
 # versionDISTRO...). Único punto de definición: comun.sh (mismo directorio).
@@ -54,8 +53,9 @@ echo         "   Script personalizado de instalación de "
 echo         "   sistema operativo $DISTRO $versionDISTRO para equipos distancia / CEIABD"
 echoamarillo "   (victor.muelacarriles@educantabria.es)"
 echoverde "--------------------------------------------------------------------"
-echoverde "       Distancia     ->Disco pequeño: NVMe 0,5TB (EFI, swap, / ext4)"
-echoverde "                     ->Disco grande:  NVMe 2,0TB (/home ext4) [SIN ZFS]"
+echoverde "       Distancia     ->Disco pequeño: NVMe 0,5TB (EFI 1G, swap 16G,"
+echoverde "                                       / resto ext4)"
+echoverde "                     ->Disco grande:  NVMe 2,0TB (ZFS rpool→/home)"
 echoverde "--------------------------------------------------------------------"
 echoverde "       CEIABD        ->Disco pequeño: NVMe 0,5TB (EFI 1G, swap 16G,"
 echoverde "                                       / 100G ext4, p4 ZFS rpool→/home)"
@@ -148,9 +148,9 @@ else
         DISK_SMALL="/dev/${DISCOS_M2[0]}"
         DISK_BIG="/dev/${DISCOS_M2[1]}"
         PERFIL="DISTANCIA"
-        echoverde "Equipo 2×NVMe (perfil $PERFIL, sin ZFS):"
-        echoverde "    /     -> pequeño ($DISK_SMALL)"
-        echoverde "    /home -> grande  ($DISK_BIG)"
+        echoverde "Equipo 2×NVMe (perfil $PERFIL, ZFS):"
+        echoverde "    EFI/swap/ / ext4  -> NVMe pequeño ($DISK_SMALL)"
+        echoverde "    /home (rpool ZFS) -> NVMe grande  ($DISK_BIG)"
     fi
 fi
 
@@ -181,17 +181,19 @@ wipefs -a "$DISK_SMALL" 2>/dev/null || true
 wipefs -a "$DISK_BIG"   2>/dev/null || true
 
 if [ "$PERFIL" = "DISTANCIA" ]; then
-    # Distancia: layout histórico ext4 (mantener intacto, sin cambios respecto
-    # a la versión 22.x — decisión del usuario al iniciar FASE 1 de ZFS).
-    parted -s "$DISK_SMALL" mklabel gpt
-    parted -s "$DISK_BIG"   mklabel gpt
-    # Disco pequeño: EFI (512 MiB) + swap (8 GiB) + raíz (resto)
-    parted -s "$DISK_SMALL" mkpart ESP      fat32      1MiB    513MiB
-    parted -s "$DISK_SMALL" set 1 esp on
-    parted -s "$DISK_SMALL" mkpart primary  linux-swap 513MiB  8705MiB
-    parted -s "$DISK_SMALL" mkpart primary  ext4       8705MiB 100%
-    # Disco grande: /home (2×NVMe)
-    parted -s "$DISK_BIG"   mkpart primary  ext4       1MiB    100%
+    # Distancia: mismos tamaños de EFI/swap que CEIABD, pero / ocupa TODO el
+    # resto del NVMe pequeño (sin p4). /home va al NVMe grande íntegro en ZFS
+    # (zpool rpool con dedup+zstd, recordsize=64K — igual que en CEIABD).
+    # Tipos GPT: ver la rama CEIABD.
+    sgdisk \
+        -n 1:0:+1G    -t 1:EF00 -c 1:"EFI"   \
+        -n 2:0:+16G   -t 2:8200 -c 2:"swap"  \
+        -n 3:0:0      -t 3:8300 -c 3:"root"  \
+        "$DISK_SMALL"
+    # NVMe grande íntegro en BF00 → zpool rpool → /home
+    sgdisk \
+        -n 1:0:0 -t 1:BF00 -c 1:"rpool" \
+        "$DISK_BIG"
 else
     # CEIABD: layout nuevo con p4 ZFS en el NVMe pequeño y SDA íntegro en ZFS.
     # Códigos de tipo GPT (sgdisk):
@@ -234,8 +236,7 @@ SWAP="${DISK_SMALL}p2"
 ROOT="${DISK_SMALL}p3"
 
 # La nomenclatura de partición difiere entre NVMe (/dev/nvmeXnYpZ)
-# y discos SD/SATA (/dev/sdXN). En CEIABD el grande siempre es SATA,
-# pero conservamos las dos ramas por seguridad.
+# y discos SD/SATA (/dev/sdXN): en CEIABD el grande es SATA, en Distancia NVMe.
 if [[ "$DISK_BIG" == *sd* ]]; then
     DATA_PART="${DISK_BIG}1"
 elif [[ "$DISK_BIG" == *nvme* ]]; then
@@ -245,59 +246,59 @@ else
     exit 1
 fi
 
-# En CEIABD necesitamos también la 4ª partición del NVMe pequeño (BF00 → rpool)
-# y referencias persistentes (/dev/disk/by-id/...) para que el zpool sobreviva
-# a renombrados de devnode entre arranques (más estable que /dev/nvmeXnYpZ).
+# Particiones ZFS de cada perfil:
+#   CEIABD    → rpool en la p4 del NVMe pequeño + tank en el SDA íntegro.
+#   DISTANCIA → rpool en el NVMe grande íntegro (sin tank ni /datos).
+# ZFS_DATA_PART vacío = no hay pool tank (se usa como marcador más abajo).
 if [ "$PERFIL" = "CEIABD" ]; then
     ZFS_HOME_PART="${DISK_SMALL}p4"
-    ZFS_DATA_PART="$DATA_PART"     # SDA en CEIABD; la rama nvme no se da aquí
+    ZFS_DATA_PART="$DATA_PART"
+else
+    ZFS_HOME_PART="$DATA_PART"
+    ZFS_DATA_PART=""
+fi
 
-    # Resolver by-id: recorremos los enlaces que apunten al devnode concreto.
-    # Preferimos identificadores estables (ata-*, nvme-MODELO-*) sobre wwn-*
-    # (que puede no estar presente en algunos firmwares NVMe).
-    _resolver_byid() {
-        local devnode="$1" link target best="" fallback=""
-        for link in /dev/disk/by-id/*; do
-            [ -L "$link" ] || continue
-            target=$(readlink -f "$link" 2>/dev/null || true)
-            [ "$target" = "$devnode" ] || continue
-            case "$(basename "$link")" in
-                wwn-*)     [ -z "$fallback" ] && fallback="$link" ;;
-                *-part[0-9]*) best="$link"; break ;;
-                *)         [ -z "$best" ] && best="$link" ;;
-            esac
-        done
-        if [ -n "$best" ]; then
-            echo "$best"
-        elif [ -n "$fallback" ]; then
-            echo "$fallback"
-        else
-            echo "$devnode"
-        fi
-    }
-    ZFS_HOME_BYID=$(_resolver_byid "$ZFS_HOME_PART")
+# Referencias persistentes (/dev/disk/by-id/...) para que el zpool sobreviva
+# a renombrados de devnode entre arranques (más estable que /dev/nvmeXnYpZ).
+# Resolver by-id: recorremos los enlaces que apunten al devnode concreto.
+# Preferimos identificadores estables (ata-*, nvme-MODELO-*) sobre wwn-*
+# (que puede no estar presente en algunos firmwares NVMe).
+_resolver_byid() {
+    local devnode="$1" link target best="" fallback=""
+    for link in /dev/disk/by-id/*; do
+        [ -L "$link" ] || continue
+        target=$(readlink -f "$link" 2>/dev/null || true)
+        [ "$target" = "$devnode" ] || continue
+        case "$(basename "$link")" in
+            wwn-*)     [ -z "$fallback" ] && fallback="$link" ;;
+            *-part[0-9]*) best="$link"; break ;;
+            *)         [ -z "$best" ] && best="$link" ;;
+        esac
+    done
+    if [ -n "$best" ]; then
+        echo "$best"
+    elif [ -n "$fallback" ]; then
+        echo "$fallback"
+    else
+        echo "$devnode"
+    fi
+}
+ZFS_HOME_BYID=$(_resolver_byid "$ZFS_HOME_PART")
+echoverde "  ZFS rpool by-id: $ZFS_HOME_BYID"
+ZFS_DATA_BYID=""
+if [ -n "$ZFS_DATA_PART" ]; then
     ZFS_DATA_BYID=$(_resolver_byid "$ZFS_DATA_PART")
-    echoverde "  ZFS rpool by-id: $ZFS_HOME_BYID"
     echoverde "  ZFS tank  by-id: $ZFS_DATA_BYID"
 fi
 
 # ─────────────── Formatear ─────────────
-# En CEIABD las particiones BF00 (ZFS) NO se formatean aquí: las inicializa
-# 'zpool create' más abajo. En Distancia se formatea todo a ext4 como siempre.
-if [ "$PERFIL" = "DISTANCIA" ]; then
-    echoamarillo "Formateando (EFI=$EFI, SWAP=$SWAP, ROOT=$ROOT, DATA=$DATA_PART)..."
-else
-    echoamarillo "Formateando ext4/FAT/swap (EFI=$EFI, SWAP=$SWAP, ROOT=$ROOT); ZFS se crea aparte"
-fi
+# Las particiones BF00 (ZFS) NO se formatean aquí: las inicializa
+# 'zpool create' más abajo.
+echoamarillo "Formateando ext4/FAT/swap (EFI=$EFI, SWAP=$SWAP, ROOT=$ROOT); ZFS se crea aparte"
 mkfs.fat -F32 "$EFI"
 mkswap "$SWAP"
 mkfs.ext4 -F "$ROOT"
-if [ "$PERFIL" = "DISTANCIA" ]; then
-    mkfs.ext4 -F "$DATA_PART"
-    _UUID_CHECK=("$EFI" "$SWAP" "$ROOT" "$DATA_PART")
-else
-    _UUID_CHECK=("$EFI" "$SWAP" "$ROOT")
-fi
+_UUID_CHECK=("$EFI" "$SWAP" "$ROOT")
 
 _FALLOS=0
 for _p in "${_UUID_CHECK[@]}"; do
@@ -320,104 +321,90 @@ mkdir -p /mnt/boot/efi
 mount "$EFI"       /mnt/boot/efi
 swapon "$SWAP"
 
-if [ "$PERFIL" = "DISTANCIA" ]; then
-    # Distancia (sin ZFS): el disco grande lleva ext4 y se monta aquí.
-    # Conservamos las dos ramas (sd*/nvme*) por seguridad ante hardware fuera
-    # del catálogo, aunque en Distancia el grande es siempre NVMe.
-    if [[ "$DISK_BIG" == *sd* ]]; then
-        mkdir -p /mnt/datos
-        mount "$DATA_PART" /mnt/datos
-        echoverde "Disco grande (SD) montado en /mnt/datos"
-    else
-        mkdir -p /mnt/home
-        mount "$DATA_PART" /mnt/home
-        echoverde "Disco grande (NVMe) montado en /mnt/home"
-    fi
-fi
-# En CEIABD los datasets ZFS se crean y montan en el bloque ZFS de más abajo
-# (rpool/home → /mnt/home, tank/datos → /mnt/datos). Aquí no se hace nada
-# para no anticipar montajes que ZFS gestionará con su altroot.
+# Los datasets ZFS se crean y montan en el bloque ZFS de más abajo
+# (rpool/home → /mnt/home y, en CEIABD, tank/datos → /mnt/datos). Aquí no se
+# hace nada para no anticipar montajes que ZFS gestionará con su altroot.
 
 lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,UUID
 echoamarillo "--- Espacio disponible en puntos de montaje ---"
 df -h /mnt /mnt/boot/efi 2>/dev/null || df -h /mnt
 echoverde "Sistemas de ficheros montados"
 
-# ─────────────── ZFS (solo CEIABD) ─────
-# Sólo el perfil CEIABD usa ZFS. Distancia mantiene ext4 íntegro.
-# Decisión documentada en Ubuntu/RegistroDeCambios/20260520-Cambios.md.
-if [ "$PERFIL" = "CEIABD" ]; then
-    echoamarillo "Instalando zfsutils-linux en el entorno live..."
-    # 0b-Github.sh ya enmascaró update-initramfs → la postinst de zfs-* no se
-    # cuelga reconstruyendo el initramfs del live. El módulo zfs viene con
-    # firma Canonical en el kernel del live, no requiere DKMS aquí.
-    # </dev/null: sin él, apt-get (stdin = terminal, stdout = tee) puede quedar
-    # DETENIDO por señal de control de terminal (estado 'T' en ps) al restaurar
-    # el tty tras dpkg → el script se "cuelga" (2026-09-25).
-    DEBIAN_FRONTEND=noninteractive apt-get update -qq </dev/null
-    DEBIAN_FRONTEND=noninteractive apt-get install -y zfsutils-linux </dev/null
-    modprobe zfs || { echorojo "Error: no se pudo cargar el módulo ZFS en el live"; sleep 10 && exit 1; }
-    ZFS_VER=$(zfs version 2>/dev/null | head -1 | awk '{print $NF}' | sed -e 's/^zfs-//' -e 's/-.*//')
-    echoverde "  ZFS versión: ${ZFS_VER:-desconocida}"
+# ─────────────── ZFS (ambos perfiles) ──
+# rpool/home en los dos perfiles; tank/datos solo en CEIABD (ZFS_DATA_PART).
+echoamarillo "Instalando zfsutils-linux en el entorno live..."
+# 0b-Github.sh ya enmascaró update-initramfs → la postinst de zfs-* no se
+# cuelga reconstruyendo el initramfs del live. El módulo zfs viene con
+# firma Canonical en el kernel del live, no requiere DKMS aquí.
+# </dev/null: sin él, apt-get (stdin = terminal, stdout = tee) puede quedar
+# DETENIDO por señal de control de terminal (estado 'T' en ps) al restaurar
+# el tty tras dpkg → el script se "cuelga" (2026-09-25).
+DEBIAN_FRONTEND=noninteractive apt-get update -qq </dev/null
+DEBIAN_FRONTEND=noninteractive apt-get install -y zfsutils-linux </dev/null
+modprobe zfs || { echorojo "Error: no se pudo cargar el módulo ZFS en el live"; sleep 10 && exit 1; }
+ZFS_VER=$(zfs version 2>/dev/null | head -1 | awk '{print $NF}' | sed -e 's/^zfs-//' -e 's/-.*//')
+echoverde "  ZFS versión: ${ZFS_VER:-desconocida}"
 
-    # Fast Dedup (OpenZFS ≥ 2.3) ahorra ~50 % de RAM en la DDT respecto al
-    # dedup clásico. Si está disponible lo activamos; si no, dedup clásico.
-    FAST_DEDUP_OPT=""
-    if [ -n "$ZFS_VER" ] && printf '%s\n2.3.0\n' "$ZFS_VER" | sort -V -C 2>/dev/null; then
-        FAST_DEDUP_OPT="-o feature@fast_dedup=enabled"
-        echoverde "  Fast Dedup disponible (OpenZFS ≥ 2.3) → activado"
-    else
-        echoamarillo "  Fast Dedup NO disponible (ZFS < 2.3) → dedup clásico"
+# Fast Dedup (OpenZFS ≥ 2.3) ahorra ~50 % de RAM en la DDT respecto al
+# dedup clásico. Si está disponible lo activamos; si no, dedup clásico.
+FAST_DEDUP_OPT=""
+if [ -n "$ZFS_VER" ] && printf '%s\n2.3.0\n' "$ZFS_VER" | sort -V -C 2>/dev/null; then
+    FAST_DEDUP_OPT="-o feature@fast_dedup=enabled"
+    echoverde "  Fast Dedup disponible (OpenZFS ≥ 2.3) → activado"
+else
+    echoamarillo "  Fast Dedup NO disponible (ZFS < 2.3) → dedup clásico"
+fi
+
+# Limpiar pools preexistentes (de pruebas previas en el mismo equipo).
+# Sin esto, 'zpool create' falla con "device already in use".
+for _pool in rpool tank; do
+    if zpool list -H -o name 2>/dev/null | grep -qx "$_pool"; then
+        echoamarillo "  zpool $_pool ya importado en el live — exportando..."
+        zpool export "$_pool" 2>/dev/null || zpool destroy -f "$_pool" 2>/dev/null || true
     fi
+    if zpool import -d /dev/disk/by-id 2>/dev/null | grep -qE "pool:[[:space:]]+$_pool\b"; then
+        echoamarillo "  zpool $_pool importable de instalación previa — destruyendo..."
+        zpool import -f -d /dev/disk/by-id "$_pool" 2>/dev/null \
+            && zpool destroy -f "$_pool" 2>/dev/null || true
+    fi
+done
+# sgdisk --zap-all + wipefs ya hicieron limpieza; este wipefs final cubre
+# cualquier label ZFS residual escrito tras el zap (raro pero posible).
+wipefs -a "$ZFS_HOME_PART" 2>/dev/null || true
+[ -n "$ZFS_DATA_PART" ] && { wipefs -a "$ZFS_DATA_PART" 2>/dev/null || true; }
 
-    # Limpiar pools preexistentes (de pruebas previas en el mismo equipo).
-    # Sin esto, 'zpool create' falla con "device already in use".
-    for _pool in rpool tank; do
-        if zpool list -H -o name 2>/dev/null | grep -qx "$_pool"; then
-            echoamarillo "  zpool $_pool ya importado en el live — exportando..."
-            zpool export "$_pool" 2>/dev/null || zpool destroy -f "$_pool" 2>/dev/null || true
-        fi
-        if zpool import -d /dev/disk/by-id 2>/dev/null | grep -qE "pool:[[:space:]]+$_pool\b"; then
-            echoamarillo "  zpool $_pool importable de instalación previa — destruyendo..."
-            zpool import -f -d /dev/disk/by-id "$_pool" 2>/dev/null \
-                && zpool destroy -f "$_pool" 2>/dev/null || true
-        fi
-    done
-    # sgdisk --zap-all + wipefs ya hicieron limpieza; este wipefs final cubre
-    # cualquier label ZFS residual escrito tras el zap (raro pero posible).
-    wipefs -a "$ZFS_HOME_PART" 2>/dev/null || true
-    wipefs -a "$ZFS_DATA_PART" 2>/dev/null || true
+mkdir -p /mnt/etc/zfs
 
-    mkdir -p /mnt/etc/zfs
+echoamarillo "Creando zpool rpool (dedup=on + zstd, recordsize=64K) en $ZFS_HOME_BYID..."
+# -R /mnt = altroot: los datasets se montan bajo /mnt/* mientras estamos
+#           en el live; al exportar/reimportar en el sistema instalado
+#           pasan a /home, /datos, etc. directos.
+# cachefile=/etc/zfs/zpool.cache + copia posterior a /mnt/etc/zfs/ permite
+# que zfs-mount.service del sistema instalado importe el pool sin escanear
+# discos al arrancar.
+zpool create -f \
+    -o ashift=12 \
+    -o autotrim=on \
+    -o cachefile=/etc/zfs/zpool.cache \
+    $FAST_DEDUP_OPT \
+    -O acltype=posixacl -O xattr=sa \
+    -O atime=off -O relatime=on \
+    -O canmount=off -O mountpoint=none \
+    -O compression=zstd \
+    -O dedup=on \
+    -O recordsize=64K \
+    -R /mnt \
+    rpool "$ZFS_HOME_BYID"
+# Dataset ÚNICO y DEFINITIVO: rpool/home canmount=on mountpoint=/home.
+# El rsync vuelca /home (squashfs) al pool y los usuarios viven como
+# directorios normales dentro (sin datasets por usuario ni cuotas —
+# simplificación 2026-06-12; antes 2-SetupSOdesdeLiveCD.sh lo
+# reestructuraba en contenedor + rpool/home/<usuario>).
+zfs create -o canmount=on -o mountpoint=/home rpool/home
+echoverde "  rpool creado, dataset rpool/home montado en /mnt/home"
 
-    echoamarillo "Creando zpool rpool (dedup=on + zstd, recordsize=64K) en $ZFS_HOME_BYID..."
-    # -R /mnt = altroot: los datasets se montan bajo /mnt/* mientras estamos
-    #           en el live; al exportar/reimportar en el sistema instalado
-    #           pasan a /home, /datos, etc. directos.
-    # cachefile=/etc/zfs/zpool.cache + copia posterior a /mnt/etc/zfs/ permite
-    # que zfs-mount.service del sistema instalado importe el pool sin escanear
-    # discos al arrancar.
-    zpool create -f \
-        -o ashift=12 \
-        -o autotrim=on \
-        -o cachefile=/etc/zfs/zpool.cache \
-        $FAST_DEDUP_OPT \
-        -O acltype=posixacl -O xattr=sa \
-        -O atime=off -O relatime=on \
-        -O canmount=off -O mountpoint=none \
-        -O compression=zstd \
-        -O dedup=on \
-        -O recordsize=64K \
-        -R /mnt \
-        rpool "$ZFS_HOME_BYID"
-    # Dataset ÚNICO y DEFINITIVO: rpool/home canmount=on mountpoint=/home.
-    # El rsync vuelca /home (squashfs) al pool y los usuarios viven como
-    # directorios normales dentro (sin datasets por usuario ni cuotas —
-    # simplificación 2026-06-12; antes 2-SetupSOdesdeLiveCD.sh lo
-    # reestructuraba en contenedor + rpool/home/<usuario>).
-    zfs create -o canmount=on -o mountpoint=/home rpool/home
-    echoverde "  rpool creado, dataset rpool/home montado en /mnt/home"
-
+# tank/datos solo en CEIABD (Distancia no tiene SDA ni /datos).
+if [ -n "$ZFS_DATA_PART" ]; then
     echoamarillo "Creando zpool tank (zstd, sin dedup, recordsize=1M) en $ZFS_DATA_BYID..."
     zpool create -f \
         -o ashift=12 \
@@ -434,13 +421,13 @@ if [ "$PERFIL" = "CEIABD" ]; then
     zfs create -o canmount=on -o mountpoint=/datos -o setuid=off -o devices=off tank/datos
     chmod 1777 /mnt/datos
     echoverde "  tank creado, dataset tank/datos montado en /mnt/datos (1777)"
-
-    echoamarillo "--- zpool status ---"
-    zpool status
-    echoamarillo "--- zfs list ---"
-    zfs list -o name,used,avail,refer,mountpoint
-    echoverde "ZFS listo para el rsync (datasets visibles bajo /mnt)"
 fi
+
+echoamarillo "--- zpool status ---"
+zpool status
+echoamarillo "--- zfs list ---"
+zfs list -o name,used,avail,refer,mountpoint
+echoverde "ZFS listo para el rsync (datasets visibles bajo /mnt)"
 
 # ─────────────── Copiar squashfs ───────
 # Ubuntu <24.04 usa un único filesystem.squashfs.
@@ -502,21 +489,20 @@ for mnt in "${SQ_MOUNTS[@]}"; do umount "$mnt"; done
 #    los creó (el live). zfs-import-cache compara ese hostid con el de
 #    /etc/hostid del sistema; si difieren, falla "pool last accessed by host..."
 #    Copiar el hostid del live al sistema instalado garantiza que coinciden.
-if [ "$PERFIL" = "CEIABD" ]; then
-    mkdir -p /mnt/etc/zfs
-    if [ -f /etc/zfs/zpool.cache ]; then
-        cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
-        echoverde "zpool.cache copiado a /mnt/etc/zfs/ ($(stat -c%s /mnt/etc/zfs/zpool.cache) bytes)"
-    else
-        echoamarillo "AVISO: /etc/zfs/zpool.cache no existe en el live — zfs-mount escaneará discos al arrancar"
-    fi
-    if [ -f /etc/hostid ]; then
-        cp /etc/hostid /mnt/etc/hostid
-        echoverde "/etc/hostid copiado al sistema instalado ($(od -An -tx4 /etc/hostid 2>/dev/null | tr -d ' '))"
-    else
-        # En ese caso ZFS importará con -f en el sistema (no crítico, sí ruidoso)
-        echoamarillo "AVISO: /etc/hostid no existe en el live — el sistema instalado importará con -f"
-    fi
+# (Ambos perfiles: los dos llevan al menos rpool.)
+mkdir -p /mnt/etc/zfs
+if [ -f /etc/zfs/zpool.cache ]; then
+    cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
+    echoverde "zpool.cache copiado a /mnt/etc/zfs/ ($(stat -c%s /mnt/etc/zfs/zpool.cache) bytes)"
+else
+    echoamarillo "AVISO: /etc/zfs/zpool.cache no existe en el live — zfs-mount escaneará discos al arrancar"
+fi
+if [ -f /etc/hostid ]; then
+    cp /etc/hostid /mnt/etc/hostid
+    echoverde "/etc/hostid copiado al sistema instalado ($(od -An -tx4 /etc/hostid 2>/dev/null | tr -d ' '))"
+else
+    # En ese caso ZFS importará con -f en el sistema (no crítico, sí ruidoso)
+    echoamarillo "AVISO: /etc/hostid no existe en el live — el sistema instalado importará con -f"
 fi
 
 # ─────────────── Preparar chroot ───────
@@ -586,24 +572,22 @@ fi
 # ─────────────── Pasar particiones al chroot ──
 # lsblk dentro del chroot ve los mount points del HOST (/mnt, /mnt/boot/efi...),
 # no los del sistema instalado (/,/boot/efi...). Se pasa la info en un fichero.
-# El fichero ahora distingue perfil DISTANCIA (ext4) vs CEIABD (ZFS): el
-# script de chroot decide cómo montar y qué entradas escribir en /etc/fstab
-# según presencia de las variables ZFS_*.
+# El script de chroot decide qué hacer según las variables ZFS_*:
+#   ZFS_POOL_HOME (ambos perfiles) → rpool/home en /home
+#   ZFS_POOL_DATA (solo CEIABD)    → tank/datos en /datos
 mkdir -p /mnt/tmp
 {
     echo "PERFIL=$PERFIL"
     echo "PART_EFI=$EFI"
     echo "PART_SWAP=$SWAP"
     echo "PART_ROOT=$ROOT"
-    if [ "$PERFIL" = "DISTANCIA" ]; then
-        echo "PART_DATA=$DATA_PART"
-    else
-        # CEIABD: el "data" lógico vive en ZFS — no hay UUID ext4.
-        # PART_DATA queda vacío como marcador para 2-SetupSOdesdeLiveCD.sh.
-        echo "PART_DATA="
-        echo "ZFS_POOL_HOME=rpool"
-        echo "ZFS_HOME_DATASET=rpool/home"
-        echo "ZFS_HOME_PARTID=$ZFS_HOME_BYID"
+    # El "data" lógico vive en ZFS — no hay UUID ext4.
+    # PART_DATA queda vacío como marcador para 2-SetupSOdesdeLiveCD.sh.
+    echo "PART_DATA="
+    echo "ZFS_POOL_HOME=rpool"
+    echo "ZFS_HOME_DATASET=rpool/home"
+    echo "ZFS_HOME_PARTID=$ZFS_HOME_BYID"
+    if [ -n "$ZFS_DATA_PART" ]; then
         echo "ZFS_POOL_DATA=tank"
         echo "ZFS_DATA_DATASET=tank/datos"
         echo "ZFS_DATA_PARTID=$ZFS_DATA_BYID"
@@ -629,22 +613,25 @@ if [[ "$(tail -n 1 "$DISTROLOGS/$SCRIPT2.log")" == "Correcto" ]]; then
     # Los bind-mounts /dev /proc /sys /run del chroot se desmontan en el shutdown
     # de systemd antes de invocar el export; aquí los desmontamos a mano para
     # que el umount de /mnt/home y /mnt/datos no falle por filesystems busy.
-    if [ "$PERFIL" = "CEIABD" ]; then
-        echoamarillo "Exportando zpools antes del reboot..."
-        # Quitar bind-mounts virtuales del chroot (orden inverso al bind).
-        umount -l /mnt/dev/pts 2>/dev/null || true
-        for _d in /mnt/run /mnt/sys /mnt/proc /mnt/dev; do
-            umount -l "$_d" 2>/dev/null || true
-        done
-        # Pequeño sync explícito y export con -f por si quedó un mount lazy.
-        sync
+    echoamarillo "Exportando zpools antes del reboot..."
+    # Quitar bind-mounts virtuales del chroot (orden inverso al bind).
+    umount -l /mnt/dev/pts 2>/dev/null || true
+    for _d in /mnt/run /mnt/sys /mnt/proc /mnt/dev; do
+        umount -l "$_d" 2>/dev/null || true
+    done
+    # Pequeño sync explícito y export con -f por si quedó un mount lazy.
+    # tank solo existe en CEIABD; rpool en ambos perfiles.
+    sync
+    if [ -n "$ZFS_DATA_PART" ]; then
         zpool sync rpool tank 2>/dev/null || true
         zpool export tank 2>/dev/null || zpool export -f tank 2>/dev/null || \
             echoamarillo "  tank no se pudo exportar limpiamente (el sistema lo importará con -f)"
-        zpool export rpool 2>/dev/null || zpool export -f rpool 2>/dev/null || \
-            echoamarillo "  rpool no se pudo exportar limpiamente (el sistema lo importará con -f)"
-        echoverde "Zpools exportados."
+    else
+        zpool sync rpool 2>/dev/null || true
     fi
+    zpool export rpool 2>/dev/null || zpool export -f rpool 2>/dev/null || \
+        echoamarillo "  rpool no se pudo exportar limpiamente (el sistema lo importará con -f)"
+    echoverde "Zpools exportados."
     echo -e "\e[32mInstalación completada. Reinicia el sistema para iniciar $DISTRO $versionDISTRO.\e[0m"
     sleep 10 && reboot
 else

@@ -138,13 +138,13 @@ software y configurar el equipo. Convenciones compartidas por Ubuntu y W11:
 |------|------------------|-------|
 | **IABD** | `10.0.72.x` | Aula CEIABD. Proxy `10.0.72.140:3128`. |
 | **SMRD / SMRV** | `10.0.32.x` | Proxy `10.0.32.119:3128`. |
-| **Distancia** | — | Perfil de disco sin ZFS (ext4 íntegro). |
+| **Distancia** | — | `/` ext4 + `/home` en ZFS (`rpool` con dedup) en el NVMe grande; sin `/datos`. |
 
 Particionado por perfil (línea Ubuntu; detalle en [`Ubuntu/CLAUDE.md`](Ubuntu/CLAUDE.md)):
 
 | Perfil | Disco pequeño | Disco grande |
 |--------|---------------|--------------|
-| Distancia | NVMe 0.5 TB (EFI+swap+`/` ext4) | NVMe 2.0 TB (`/home` ext4) |
+| Distancia | NVMe 0.5 TB (EFI 1G + swap 16G + `/` ext4 resto) | NVMe 2.0 TB (ZFS `rpool` → `/home`, dedup) |
 | CEIABD | NVMe 0.5 TB (EFI+swap+`/` ext4 + `rpool` ZFS) | SDA 1.0 TB (ZFS `tank` → `/datos`) |
 
 ---

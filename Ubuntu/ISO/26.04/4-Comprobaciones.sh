@@ -5,7 +5,7 @@
 #  Funciona tanto dentro del chroot (llamado desde 2-SetupSOdesdeLiveCD.sh)
 #  como en el sistema ya arrancado (llamado desde 3-SetupPrimerInicio.sh).
 # =============================================================================
-VERSIONSCRIPT="1.4-20260612-zfs"
+VERSIONSCRIPT="1.5-20260927-zfs"
 
 # Variables comunes del proyecto (REPO, DISTRO, RAIZLOG...). Único punto de
 # definición: comun.sh (mismo directorio que este script).
@@ -279,7 +279,8 @@ if systemctl is-system-running &>/dev/null 2>&1; then
     fi
 fi
 # ─────────────────────────────────────────────────────────────────────────────
-# 9. ZFS — solo si hay zpool (perfil CEIABD). En Distancia no hay nada que ver.
+# 9. ZFS — solo si hay zpool. Desde 2026-09-27 ambos perfiles llevan rpool
+# (/home); tank (/datos) solo CEIABD. Equipos Distancia anteriores: sin pools.
 if command -v zpool >/dev/null 2>&1 && zpool list -H 2>/dev/null | grep -q .; then
     _sep "9. ZFS (perfil con pools)"
 
@@ -294,9 +295,13 @@ if command -v zpool >/dev/null 2>&1 && zpool list -H 2>/dev/null | grep -q .; th
         zpool status 2>/dev/null | sed 's/^/    /' | tee -a "$LOGFILE"
     fi
 
-    # Datasets clave esperados en CEIABD (desde 2026-06-12: rpool/home es un
-    # dataset ÚNICO montado en /home — sin datasets por usuario ni cuotas)
-    for _ds in rpool/home tank/datos; do
+    # Datasets clave esperados (desde 2026-06-12: rpool/home es un dataset
+    # ÚNICO montado en /home — sin datasets por usuario ni cuotas).
+    # tank/datos solo se espera si existe el pool tank (CEIABD); en Distancia
+    # no hay tank y no debe dar aviso.
+    _DS_ESPERADOS="rpool/home"
+    zpool list -H tank >/dev/null 2>&1 && _DS_ESPERADOS="$_DS_ESPERADOS tank/datos"
+    for _ds in $_DS_ESPERADOS; do
         if zfs list -H -o name "$_ds" >/dev/null 2>&1; then
             _MP=$(zfs get -H -o value mountpoint "$_ds" 2>/dev/null)
             _MOUNTED=$(zfs get -H -o value mounted "$_ds" 2>/dev/null)
@@ -308,7 +313,7 @@ if command -v zpool >/dev/null 2>&1 && zpool list -H 2>/dev/null | grep -q .; th
             esac
             _ok "  $_ds → mountpoint=$_MP mounted=$_MOUNTED  [$_OK_MNT]"
         else
-            _avs "  Dataset $_ds NO encontrado (esperado en CEIABD)"
+            _avs "  Dataset $_ds NO encontrado (esperado)"
         fi
     done
 
@@ -361,7 +366,7 @@ if command -v zpool >/dev/null 2>&1 && zpool list -H 2>/dev/null | grep -q .; th
     fi
 else
     _sep "9. ZFS"
-    _inf "  Sin zpools (perfil DISTANCIA o ZFS no instalado) — sección omitida"
+    _inf "  Sin zpools (Distancia pre-2026-09-27 o ZFS no instalado) — sección omitida"
 fi
 
 IP=$(hostname -I | awk '{print $1}')

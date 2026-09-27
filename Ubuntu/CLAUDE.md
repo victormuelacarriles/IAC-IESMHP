@@ -104,17 +104,19 @@ ls /var/log/IAC-IESMHP/Ubuntu/
 - **Detección de discos**: ignora USB y loop; usa `lsblk -dno NAME,SIZE,TRAN`.
   Fija una variable explícita `PERFIL` (`CEIABD` | `DISTANCIA`) que se usa en
   todos los bloques que se ramifican según hardware.
-  - 2×NVMe → `PERFIL=DISTANCIA` (pequeño=`/`, grande=`/home`)
+  - 2×NVMe → `PERFIL=DISTANCIA` (pequeño=`/` ext4, grande=`rpool` ZFS → `/home`)
   - NVMe+SD → `PERFIL=CEIABD` (NVMe lleva `/` ext4 + `rpool` ZFS; SD lleva `tank` ZFS)
-- **Esquema de particiones**:
-  - **DISTANCIA (sin ZFS, intacto respecto a v22.x)**: NVMe pequeño con EFI
-    512 MiB + swap 8 GiB + raíz ext4 resto; NVMe grande con una partición
-    ext4 íntegra para `/home`.
+- **Esquema de particiones** (ambos con `sgdisk` y tipos GPT correctos):
+  - **DISTANCIA (ZFS en /home desde 2026-09-27, v23.3)**: NVMe pequeño con
+    `p1` 1 GiB EF00 (EFI) + `p2` 16 GiB 8200 (swap) + `p3` resto 8300
+    (`/` ext4, sin p4); NVMe grande con una única BF00 íntegra (zpool
+    `rpool` → `/home`, misma configuración que en CEIABD). Sin `tank` ni `/datos`.
   - **CEIABD (ZFS, v23.0+)**: NVMe pequeño con `sgdisk` y tipos GPT correctos:
     `p1` 1 GiB EF00 (EFI) + `p2` 16 GiB 8200 (swap) + `p3` 100 GiB 8300
     (`/` ext4) + `p4` resto BF00 (zpool `rpool` → `/home`); SDA grande con
     una única BF00 íntegra (zpool `tank` → `/datos`).
-- **ZFS en CEIABD** (bloque añadido tras montar `/`+`/boot/efi`):
+- **ZFS en ambos perfiles** (bloque tras montar `/`+`/boot/efi`; `rpool`
+  siempre, `tank` solo si hay `ZFS_DATA_PART`, es decir, CEIABD):
   - Instala `zfsutils-linux` en el entorno live (`apt-get install -y`,
     `update-initramfs` ya enmascarado por `0b-Github.sh`).
   - Detecta **Fast Dedup** (OpenZFS ≥ 2.3) y lo activa con
@@ -125,7 +127,8 @@ ls /var/log/IAC-IESMHP/Ubuntu/
   - `zpool create rpool` con `ashift=12, autotrim=on,
     cachefile=/etc/zfs/zpool.cache, compression=zstd, dedup=on,
     recordsize=64K, acltype=posixacl, xattr=sa, atime=off, -R /mnt` sobre
-    `/dev/disk/by-id/...-part4`. Crea `rpool/home` con `canmount=on
+    `/dev/disk/by-id/...-part4` (CEIABD) o `...-part1` del NVMe grande
+    (Distancia). Crea `rpool/home` con `canmount=on
     mountpoint=/home` — dataset **único y definitivo** (desde 2026-06-12):
     el rsync vuelca /home al pool y los usuarios viven como directorios
     normales dentro; `2-SetupSOdesdeLiveCD.sh` ya NO lo reestructura.
@@ -134,45 +137,47 @@ ls /var/log/IAC-IESMHP/Ubuntu/
     `setuid=off`, `devices=off`; `chmod 1777`.
 - **Capas squashfs**: Ubuntu 26.04 combina `minimal.squashfs + minimal.standard.squashfs + minimal.standard.live.squashfs` con overlayfs en `/tmp/merged`; Ubuntu <24.04 usa `filesystem.squashfs` único.
 - Copia el FS con `rsync` (excluyendo `/etc/fstab` y `/etc/machine-id`).
-- **Post-rsync (CEIABD)**: copia `/etc/zfs/zpool.cache` y `/etc/hostid` del
+- **Post-rsync (ambos perfiles)**: copia `/etc/zfs/zpool.cache` y `/etc/hostid` del
   live a `/mnt/etc/zfs/` y `/mnt/etc/hostid` para que `zfs-import-cache`
   del sistema instalado importe los pools sin escanear discos y sin `-f`.
 - Pasa las particiones al chroot mediante `/mnt/tmp/.iac-partitions.env`.
-  El formato del fichero ahora incluye `PERFIL=` y, solo en CEIABD,
-  variables `ZFS_POOL_HOME=rpool`, `ZFS_HOME_DATASET=rpool/home`,
-  `ZFS_HOME_PARTID=<by-id>`, `ZFS_POOL_DATA=tank`,
-  `ZFS_DATA_DATASET=tank/datos`, `ZFS_DATA_PARTID=<by-id>`. `PART_DATA`
-  queda vacío en CEIABD como marcador.
-- **Pre-reboot (CEIABD)**: tras `Correcto` del script 2 y antes del
+  El formato del fichero incluye `PERFIL=`, `PART_DATA=` (vacío, marcador)
+  y, en ambos perfiles, `ZFS_POOL_HOME=rpool`, `ZFS_HOME_DATASET=rpool/home`,
+  `ZFS_HOME_PARTID=<by-id>`; solo en CEIABD además `ZFS_POOL_DATA=tank`,
+  `ZFS_DATA_DATASET=tank/datos`, `ZFS_DATA_PARTID=<by-id>`.
+- **Pre-reboot (ambos perfiles)**: tras `Correcto` del script 2 y antes del
   `reboot`, desmonta bind-mounts virtuales del chroot, `zpool sync` y
-  `zpool export rpool tank`. Sin esto el sistema instalado vería los
+  `zpool export` de `tank` (si existe) y `rpool`. Sin esto el sistema instalado vería los
   pools "in use" por el hostid del live. En rama de fallo NO exporta:
   los pools siguen accesibles desde `/mnt` para diagnóstico manual.
 - Si `2-SetupSOdesdeLiveCD.sh` termina con la línea literal `Correcto`, reinicia automáticamente; si no, espera 100000 s para diagnóstico.
 
-### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot (v23.7-20260612-zfs-homeunico)
+### 2-SetupSOdesdeLiveCD.sh — Configuración en chroot (v23.8-20260927-zfs-distancia)
 - **Preámbulo**: carga `.iac-partitions.env` AL INICIO (antes del primer
-  `paso`) y deja la variable `PERFIL` disponible globalmente. Si el fichero
-  no existe (re-ejecución manual desde un sistema ya instalado), asume
-  `PERFIL=DISTANCIA`.
-- **Genera `/etc/fstab` bifurcado por perfil**:
-  - **DISTANCIA**: 4 líneas como antes (`/`, `/boot/efi`, `/home` o
-    `/datos` ext4, `swap`). El criterio `sd*`→`/datos`, `nvme*`→`/home`
-    lo decide `PART_DATA` del `.iac-partitions.env`.
-  - **CEIABD**: 3 líneas (`/`, `/boot/efi`, `swap`). `/home` lo monta
-    `rpool/home` y `/datos` lo monta `tank/datos` vía
-    `zfs-mount.service`; ambas entradas SE OMITEN del fstab. La raíz lleva
-    `defaults,noatime`.
-- **Bloque ZFS (solo CEIABD, tras "Verificar conectividad")**:
+  `paso`) y deja `PERFIL`, `USA_ZFS` (hay `ZFS_POOL_HOME` → `rpool`, ambos
+  perfiles) y `USA_TANK` (hay `ZFS_POOL_DATA` → `tank`, solo CEIABD)
+  disponibles globalmente. **Las ramas ZFS dependen de `USA_ZFS`/`USA_TANK`,
+  no de `PERFIL`.** Si el fichero no existe (re-ejecución manual desde un
+  sistema ya instalado), asume `PERFIL=DISTANCIA` y detecta `rpool`/`tank`
+  con `zpool list`.
+- **Genera `/etc/fstab`**:
+  - **ZFS (`USA_ZFS=1`, ambos perfiles)**: 3 líneas (`/`, `/boot/efi`,
+    `swap`). `/home` lo monta `rpool/home` (y `/datos`, `tank/datos` en
+    CEIABD) vía `zfs-mount.service`; esas entradas SE OMITEN del fstab. La
+    raíz lleva `defaults,noatime`.
+  - **ext4 legacy (`USA_ZFS=0`)**: solo para re-ejecuciones sobre equipos
+    Distancia instalados antes del 2026-09-27: 4 líneas (`/`, `/boot/efi`,
+    `/home` o `/datos` ext4, `swap`).
+- **Bloque ZFS (`USA_ZFS=1`, tras "Verificar conectividad")**:
   - Instala `linux-headers-generic` (prerequisito de `zfs-dkms`) y luego
     `zfsutils-linux + zfs-zed + zfs-dkms + zfs-initramfs` con
     `DEBIAN_FRONTEND=noninteractive` y `Dpkg::Options::="--force-confold"`.
   - `systemctl enable zfs.target zfs-import-cache zfs-mount zfs-zed` y
     `systemctl disable zfs-import-scan` (cachefile activo → no hace falta
     escanear discos en cada boot).
-  - `zpool set cachefile=/etc/zfs/zpool.cache` para `rpool` y `tank`,
-    refrescando el cachefile con los binarios del sistema instalado.
-- **`/home` = dataset ZFS único** (bloque "Usuarios", solo CEIABD —
+  - `zpool set cachefile=/etc/zfs/zpool.cache` para `rpool` y (si existe)
+    `tank`, refrescando el cachefile con los binarios del sistema instalado.
+- **`/home` = dataset ZFS único** (bloque "Usuarios", ambos perfiles —
   simplificación 2026-06-12, v23.7):
   - `rpool/home` (canmount=on, mountpoint=/home, creado en
     `1-SetupLiveCD.sh`) se usa tal cual. Ya NO se destruye ni se recrea
@@ -231,8 +236,8 @@ La fase Ansible (software, NFS de aula, drivers, claves SSH…) está **document
 - `Ubuntu/ansible/rolesUsuario/CLAUDE.md` — configuraciones por usuario (`~/.ssh`, dotfiles…), ejecutadas **como el usuario** (no root). Carpeta nueva, en construcción; aún no enganchada a `roles.yaml`.
 - **Al diagnosticar/modificar la fase Ansible, leer primero esos CLAUDE.md** (sobre todo el de `Ubuntu/ansible/` para saber qué roles están activos en `roles.yaml`).
 
-### 4-Comprobaciones.sh — Diagnóstico (v1.4-20260612-zfs)
-Comprueba en 9 secciones: (1) kernel+initramfs+NVMe+casper, (2) grub.cfg con UUIDs+línea initrd, (3) fstab vs blkid, (4) lsblk particiones, (5) paquetes clave (casper por ficheros en disco, no dpkg; ubiquity; dpkg --audit), (6) initramfs-tools config (MODULES=most, RESUME=none), (7) GRUB EFI instalado (grubx64.efi, módulos), (8) servicios systemd fallidos + SSH (solo si sistema arrancado, no en chroot), **(9) ZFS — solo si hay zpool importado: salud de pools, datasets esperados (`rpool/home` montado en `/home`, `tank/datos` en `/datos`), propiedades dedup/compresión/fast_dedup, servicios systemd zfs-*, módulo zfs.ko en initramfs**. Genera resumen ERRORES/AVISOS al final. **Cuando ERRORES=0, reinicia automáticamente tras cuenta atrás de 30 s.** Útil como primer análisis al pegar un log.
+### 4-Comprobaciones.sh — Diagnóstico (v1.5-20260927-zfs)
+Comprueba en 9 secciones: (1) kernel+initramfs+NVMe+casper, (2) grub.cfg con UUIDs+línea initrd, (3) fstab vs blkid, (4) lsblk particiones, (5) paquetes clave (casper por ficheros en disco, no dpkg; ubiquity; dpkg --audit), (6) initramfs-tools config (MODULES=most, RESUME=none), (7) GRUB EFI instalado (grubx64.efi, módulos), (8) servicios systemd fallidos + SSH (solo si sistema arrancado, no en chroot), **(9) ZFS — solo si hay zpool importado: salud de pools, datasets esperados (`rpool/home` montado en `/home`; `tank/datos` en `/datos` solo si existe el pool `tank`), propiedades dedup/compresión/fast_dedup, servicios systemd zfs-*, módulo zfs.ko en initramfs**. Genera resumen ERRORES/AVISOS al final. **Cuando ERRORES=0, reinicia automáticamente tras cuenta atrás de 30 s.** Útil como primer análisis al pegar un log.
 
 **Falsos positivos conocidos en 4-Comprobaciones.sh** — verificar antes de asumir que el sistema está roto:
 
@@ -251,16 +256,18 @@ Comprueba en 9 secciones: (1) kernel+initramfs+NVMe+casper, (2) grub.cfg con UUI
 
 | Aula      | Disco pequeño       | Disco grande      |
 |-----------|---------------------|-------------------|
-| Distancia | NVMe 0.5 TB (EFI 512M, swap 8G, `/` ext4 resto) | NVMe 2.0 TB (`/home` ext4) |
+| Distancia | NVMe 0.5 TB (EFI 1G, swap 16G, `/` ext4 resto) | NVMe 2.0 TB (ZFS → `rpool` → `/home`) |
 | CEIABD    | NVMe 0.5 TB (EFI 1G, swap 16G, `/` 100G ext4, p4 ZFS → `rpool`) | SDA 1.0 TB (ZFS → `tank` → `/datos`) |
 
-**Distancia** mantiene ext4 íntegro (sin ZFS). **CEIABD** lleva ZFS en `/home`
-(zpool `rpool` con dedup + zstd) y `/datos` (zpool `tank` con zstd). Detalle
-operativo en la sección "ZFS — operación" más abajo.
+**Ambos perfiles** llevan ZFS en `/home` (zpool `rpool` con dedup + zstd,
+misma configuración). **Solo CEIABD** lleva además `/datos` (zpool `tank` con
+zstd). Distancia pasó de ext4 a ZFS el 2026-09-27; los equipos instalados antes
+siguen con `/home` ext4. Dedup en 2 TB consume bastante RAM (DDT); asumido
+conscientemente (equipos de 64 GB). Detalle operativo en "ZFS — operación".
 
 ---
 
-## ZFS — operación (solo CEIABD)
+## ZFS — operación (CEIABD y Distancia; `tank` solo CEIABD)
 
 ### Pools y datasets
 
@@ -270,7 +277,7 @@ rpool                         (ashift=12, autotrim=on, compression=zstd, dedup=o
 └── rpool/home                (canmount=on, mountpoint=/home — dataset ÚNICO, SIN cuotas;
                                todos los usuarios son directorios normales dentro)
 
-tank                          (ashift=12, autotrim=on, compression=zstd, recordsize=1M)
+tank  [solo CEIABD]           (ashift=12, autotrim=on, compression=zstd, recordsize=1M)
 └── tank/datos                (canmount=on, mountpoint=/datos, setuid=off,
                                devices=off, permisos 1777)
 ```

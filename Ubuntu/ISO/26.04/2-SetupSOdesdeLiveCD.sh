@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="23.7-20260612-zfs-homeunico"
+VERSIONSCRIPT="23.8-20260927-zfs-distancia"
 
 # Variables comunes del proyecto (REPO, DISTRO, RAIZSCRIPTS, RAIZDISTRO,
 # RAIZLOG, versionDISTRO...). Único punto de definición: comun.sh (mismo
@@ -48,24 +48,33 @@ info "Fichero pasos: $STEPS"
 # ─────────────────────────────────────────────────────────────────────────────
 # Cargar perfil y variables de partición pasadas por 1-SetupLiveCD.sh.
 # Se hace AQUÍ (antes del primer bloque) porque varios bloques posteriores
-# se ramifican según PERFIL (CEIABD = ZFS, DISTANCIA = ext4) y según existencia
-# de variables ZFS_*. Si el fichero no existe (re-ejecución manual del script
-# desde un sistema ya instalado), se asume DISTANCIA por compatibilidad.
+# se ramifican según las variables ZFS_* (desde 2026-09-27 ambos perfiles usan
+# ZFS en /home):
+#   USA_ZFS=1   ← ZFS_POOL_HOME fijado (rpool/home en /home; CEIABD y DISTANCIA)
+#   USA_TANK=1  ← ZFS_POOL_DATA fijado (tank/datos en /datos; solo CEIABD)
+# Si el fichero no existe (re-ejecución manual del script desde un sistema ya
+# instalado), se asume DISTANCIA y se detecta rpool/tank por zpool list.
 # ─────────────────────────────────────────────────────────────────────────────
 PARTS_FILE_GLOBAL=/tmp/.iac-partitions.env
 if [ -f "$PARTS_FILE_GLOBAL" ]; then
     # shellcheck disable=SC1090
     source "$PARTS_FILE_GLOBAL"
     info "Perfil cargado: PERFIL=${PERFIL:-<no fijado>}"
-    if [ "$PERFIL" = "CEIABD" ]; then
-        info "  ZFS_POOL_HOME=${ZFS_POOL_HOME:-} HOME=${ZFS_HOME_DATASET:-} → ${ZFS_HOME_PARTID:-}"
-        info "  ZFS_POOL_DATA=${ZFS_POOL_DATA:-} DATA=${ZFS_DATA_DATASET:-} → ${ZFS_DATA_PARTID:-}"
-    fi
 else
     info "No se encontró $PARTS_FILE_GLOBAL — asumiendo PERFIL=DISTANCIA (compatibilidad)"
     PERFIL="${PERFIL:-DISTANCIA}"
+    zpool list rpool >/dev/null 2>&1 && ZFS_POOL_HOME=rpool
+    zpool list tank  >/dev/null 2>&1 && ZFS_POOL_DATA=tank
 fi
 : "${PERFIL:=DISTANCIA}"   # default por si .env existe pero no la define
+USA_ZFS=0;  [ -n "${ZFS_POOL_HOME:-}" ] && USA_ZFS=1
+USA_TANK=0; [ -n "${ZFS_POOL_DATA:-}" ] && USA_TANK=1
+if [ "$USA_ZFS" = 1 ]; then
+    info "  ZFS_POOL_HOME=${ZFS_POOL_HOME:-} HOME=${ZFS_HOME_DATASET:-} → ${ZFS_HOME_PARTID:-}"
+fi
+if [ "$USA_TANK" = 1 ]; then
+    info "  ZFS_POOL_DATA=${ZFS_POOL_DATA:-} DATA=${ZFS_DATA_DATASET:-} → ${ZFS_DATA_PARTID:-}"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Idioma, teclado y zona horaria"
@@ -235,21 +244,22 @@ paso "Configurar /etc/fstab"
 # ─────────────────────────────────────────────────────────────────────────────
 # lsblk dentro del chroot ve los mount points del HOST (/mnt, /mnt/boot/efi…),
 # no los del sistema instalado. Las particiones vienen del fichero creado por 1-SetupLiveCD.sh.
-# En CEIABD el "disco grande" (SDA) y la p4 del NVMe pequeño viven en ZFS:
+# /home y (solo CEIABD) /datos viven en ZFS:
 #   - rpool/home    montado en /home  (dedup + zstd, recordsize=64K)
-#   - tank/datos    montado en /datos (zstd sin dedup, recordsize=1M)
+#                   CEIABD: p4 del NVMe pequeño · DISTANCIA: NVMe grande íntegro
+#   - tank/datos    montado en /datos (zstd sin dedup, recordsize=1M) — solo CEIABD
 # zfs-mount.service del sistema instalado los monta al arrancar leyendo
 # /etc/zfs/zpool.cache (copiado al sistema en 1-SetupLiveCD.sh). Por eso
-# /etc/fstab NO lleva entradas para /home ni /datos en CEIABD.
+# /etc/fstab NO lleva entradas para /home ni /datos.
 #
-# En DISTANCIA el flujo es el clásico ext4: /home en el NVMe grande;
-# se mantiene la lógica histórica intacta.
+# La rama ext4 (disco grande en PART_DATA) solo queda para re-ejecuciones sobre
+# equipos Distancia instalados antes del 2026-09-27 (/home ext4).
 EFI="${PART_EFI##*/}"
 SWAP="${PART_SWAP##*/}"
 ROOT="${PART_ROOT##*/}"
 DATA_DEV=""
 DATA_MNT=""
-if [ "$PERFIL" = "DISTANCIA" ] && [ -n "${PART_DATA:-}" ]; then
+if [ "$USA_ZFS" = 0 ] && [ -n "${PART_DATA:-}" ]; then
     DATA_DEV="${PART_DATA##*/}"
     if [[ "$PART_DATA" == *nvme* ]]; then
         DATA_MNT="/home"
@@ -264,7 +274,7 @@ if [ -z "$ROOT" ]; then
     EFI=$(lsblk  -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/boot/efi" {print $1}')
     SWAP=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "[SWAP]"        {print $1}')
     ROOT=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt"          {print $1}')
-    if [ "$PERFIL" = "DISTANCIA" ]; then
+    if [ "$USA_ZFS" = 0 ]; then
         DATA_DEV=$(lsblk -rno NAME,MOUNTPOINT | awk '$2 == "/mnt/home" {print $1}')
         if [ -n "$DATA_DEV" ]; then
             DATA_MNT="/home"
@@ -275,10 +285,12 @@ if [ -z "$ROOT" ]; then
     fi
 fi
 
-if [ "$PERFIL" = "DISTANCIA" ]; then
+if [ "$USA_ZFS" = 0 ]; then
     ok "Particiones leídas: EFI=$EFI  SWAP=$SWAP  ROOT=$ROOT  DATA=$DATA_DEV → $DATA_MNT"
-else
+elif [ "$USA_TANK" = 1 ]; then
     ok "Particiones leídas: EFI=$EFI  SWAP=$SWAP  ROOT=$ROOT  (ZFS gestiona /home y /datos)"
+else
+    ok "Particiones leídas: EFI=$EFI  SWAP=$SWAP  ROOT=$ROOT  (ZFS gestiona /home)"
 fi
 
 info "EFI=/dev/$EFI  SWAP=/dev/$SWAP  ROOT=/dev/$ROOT"
@@ -293,7 +305,7 @@ if [ -n "$DATA_DEV" ]; then
 fi
 info "UUID ROOT=$UUID_ROOT  EFI=$UUID_EFI  SWAP=$UUID_SWAP$( [ -n "$UUID_DATA" ] && echo "  DATA=$UUID_DATA ($DATA_MNT)")"
 
-# Punto de montaje del disco grande (solo Distancia con /datos ext4).
+# Punto de montaje del disco grande (solo rama ext4 legacy con /datos).
 # En CEIABD, /datos lo gestiona ZFS (tank/datos) y no hay que crearlo aquí
 # — el chroot ve /datos como dataset montado vía el altroot del live CD.
 if [ "$DATA_MNT" = "/datos" ]; then
@@ -302,9 +314,9 @@ if [ "$DATA_MNT" = "/datos" ]; then
     ok "Punto de montaje /datos creado (1777, área de datos compartida)"
 fi
 
-if [ "$PERFIL" = "DISTANCIA" ]; then
+if [ "$USA_ZFS" = 0 ]; then
     cat > /etc/fstab << EOF
-# /etc/fstab — generado por $0 el $(date) (perfil DISTANCIA, ext4)
+# /etc/fstab — generado por $0 el $(date) (perfil $PERFIL, ext4)
 UUID=$UUID_ROOT  /          ext4  defaults  0 1
 UUID=$UUID_EFI   /boot/efi  vfat  umask=0077  0 1
 UUID=$UUID_DATA  $DATA_MNT      ext4  defaults  0 2
@@ -312,17 +324,22 @@ UUID=$UUID_SWAP  none       swap  sw          0 0
 EOF
     ok "fstab generado con UUIDs (disco grande → $DATA_MNT)"
 else
-    # CEIABD: ZFS monta /home y /datos vía zfs-mount.service en cada arranque.
-    # En fstab quedan solo /, /boot/efi y swap.
+    # ZFS monta /home (y /datos en CEIABD) vía zfs-mount.service en cada
+    # arranque. En fstab quedan solo /, /boot/efi y swap.
+    if [ "$USA_TANK" = 1 ]; then
+        _FSTAB_ZFS="# /home  ← rpool/home  (zfs-mount.service, ver /etc/zfs/zpool.cache)
+# /datos ← tank/datos  (zfs-mount.service)"
+    else
+        _FSTAB_ZFS="# /home  ← rpool/home  (zfs-mount.service, ver /etc/zfs/zpool.cache)"
+    fi
     cat > /etc/fstab << EOF
-# /etc/fstab — generado por $0 el $(date) (perfil CEIABD, ZFS para /home y /datos)
-# /home  ← rpool/home  (zfs-mount.service, ver /etc/zfs/zpool.cache)
-# /datos ← tank/datos  (zfs-mount.service)
+# /etc/fstab — generado por $0 el $(date) (perfil $PERFIL, ZFS)
+$_FSTAB_ZFS
 UUID=$UUID_ROOT  /          ext4  defaults,noatime  0 1
 UUID=$UUID_EFI   /boot/efi  vfat  umask=0077        0 1
 UUID=$UUID_SWAP  none       swap  sw                0 0
 EOF
-    ok "fstab generado con UUIDs (/home y /datos los monta ZFS)"
+    ok "fstab generado con UUIDs (/home$( [ "$USA_TANK" = 1 ] && echo ' y /datos') los monta ZFS)"
 fi
 cat /etc/fstab
 
@@ -397,11 +414,12 @@ done
 ok "Internet disponible"
 
 # ─────────────────────────────────────────────────────────────────────────────
-if [ "$PERFIL" = "CEIABD" ]; then
+if [ "$USA_ZFS" = 1 ]; then
 paso "Instalar ZFS en el sistema instalado y habilitar servicios"
 # ─────────────────────────────────────────────────────────────────────────────
-# Los pools rpool y tank YA existen y están importados (los creó 1-SetupLiveCD.sh
-# fuera del chroot con altroot=/mnt → dentro del chroot se ven en /home y /datos).
+# Los pools rpool (ambos perfiles) y tank (solo CEIABD) YA existen y están
+# importados (los creó 1-SetupLiveCD.sh fuera del chroot con altroot=/mnt →
+# dentro del chroot se ven en /home y /datos).
 # Aquí instalamos los binarios y el módulo DKMS dentro del sistema instalado
 # para que el primer arranque pueda importar y montar los pools sin depender
 # del entorno live.
@@ -492,9 +510,11 @@ systemctl disable zfs-import-scan.service 2>/dev/null || true
 zpool set cachefile=/etc/zfs/zpool.cache rpool 2>/dev/null \
     && ok "  cachefile refrescado para rpool" \
     || info "  zpool set rpool cachefile no fue posible (cachefile copiado del live sigue válido)"
-zpool set cachefile=/etc/zfs/zpool.cache tank 2>/dev/null \
-    && ok "  cachefile refrescado para tank" \
-    || info "  zpool set tank cachefile no fue posible"
+if [ "$USA_TANK" = 1 ]; then
+    zpool set cachefile=/etc/zfs/zpool.cache tank 2>/dev/null \
+        && ok "  cachefile refrescado para tank" \
+        || info "  zpool set tank cachefile no fue posible"
+fi
 
 ok "ZFS instalado y configurado en el chroot"
 info "zpool status:"
@@ -546,7 +566,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 paso "Usuarios (root y usuario)"
 # ─────────────────────────────────────────────────────────────────────────────
-# CEIABD: /home es el dataset ÚNICO rpool/home (canmount=on, mountpoint=/home),
+# CEIABD y DISTANCIA: /home es el dataset ÚNICO rpool/home (canmount=on, mountpoint=/home),
 # creado en 1-SetupLiveCD.sh y montado en este chroot vía la altroot del live
 # (host:/mnt/home = chroot:/home). Todos los usuarios viven como directorios
 # normales dentro de él: SIN datasets por usuario, SIN cuotas, SIN helper de
@@ -556,7 +576,7 @@ paso "Usuarios (root y usuario)"
 # Red de seguridad: si el dataset NO estuviera montado, useradd -m escribiría
 # al ext4 subyacente y el contenido quedaría oculto al arrancar (zfs-mount
 # montaría el dataset encima). Mejor abortar aquí.
-if [ "$PERFIL" = "CEIABD" ] && zpool list rpool >/dev/null 2>&1; then
+if [ "$USA_ZFS" = 1 ] && zpool list rpool >/dev/null 2>&1; then
     if ! mountpoint -q /home; then
         err "rpool/home NO está montado en /home — abortando antes de escribir al fs subyacente"
         exit 1
@@ -643,11 +663,11 @@ else
     info "Usuario 'ubuntu' no presente"
 fi
 
-# CEIABD: snapshot @inicial del dataset único rpool/home. Se toma DESPUÉS de
-# eliminar /home/ubuntu (Live CD) para no arrastrarlo en el snapshot. Ancla de
-# rollback global: zfs rollback rpool/home@inicial devuelve TODO /home (todos
-# los usuarios) al estado post-instalación — usar con cuidado.
-if [ "$PERFIL" = "CEIABD" ] && zfs list -H -o name rpool/home >/dev/null 2>&1; then
+# ZFS (ambos perfiles): snapshot @inicial del dataset único rpool/home. Se toma
+# DESPUÉS de eliminar /home/ubuntu (Live CD) para no arrastrarlo en el snapshot.
+# Ancla de rollback global: zfs rollback rpool/home@inicial devuelve TODO /home
+# (todos los usuarios) al estado post-instalación — usar con cuidado.
+if [ "$USA_ZFS" = 1 ] && zfs list -H -o name rpool/home >/dev/null 2>&1; then
     if zfs list -H -t snapshot rpool/home@inicial >/dev/null 2>&1; then
         info "Snapshot rpool/home@inicial ya existe"
     else
