@@ -39,7 +39,7 @@ preparaad_usuario_union: "svc-union-linux"
 # comas. Kerberos exige desfase < 5 min con el DC. El rol detecta el cliente NTP
 # del equipo (chrony en Mint/Debian, systemd-timesyncd en Ubuntu) y lo apunta
 # aquí. VACÍO = no se toca el reloj (default del sistema, p. ej. ntp.ubuntu.com).
-preparaad_ntp: "10.0.72.118"
+preparaad_ntp: "10.0.1.48"
 
 # Motor de UNIÓN que usa realmd (`realm join --membership-software=...`):
 #   ""       → default de realmd = adcli. Correcto contra Windows AD (producción
