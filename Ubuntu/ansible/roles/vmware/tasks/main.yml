@@ -57,7 +57,60 @@
     update_cache: false
   when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
 
+# libaio1t64 (Ubuntu 24.04+) solo trae libaio.so.1t64; el AppLoader de VMware
+# busca libaio.so.1 y, si no lo ve, avisa "Use shipped Linux kernel AIO access
+# library". Con el enlace usa la del sistema (el aviso NO es la causa del fallo).
+- name: Enlazar libaio.so.1 -> libaio.so.1t64 (para el AppLoader de VMware)
+  file:
+    src: /usr/lib/x86_64-linux-gnu/libaio.so.1t64
+    dest: /usr/lib/x86_64-linux-gnu/libaio.so.1
+    state: link
+    force: false
+  failed_when: false
+
+# Se compila si se acaba de instalar/actualizar O si faltan los módulos para el
+# kernel en uso (p. ej. tras un upgrade de kernel con VMware ya instalado).
+- name: Comprobar si existen los módulos vmmon/vmnet para el kernel actual
+  shell: "modinfo -k {{ ansible_kernel }} vmmon && modinfo -k {{ ansible_kernel }} vmnet"
+  register: vmware_modulos
+  changed_when: false
+  failed_when: false
+
 - name: Ejecutar post-instalación de VMware(2/2) (compilación)
   command: "xvfb-run -a /usr/lib/vmware/bin/vmware-modconfig --console --install-all"
-  when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
+  register: vmware_modconfig
+  when: >-
+    vmware_installed_version is not defined
+    or vmware_installed_version != vmware_version
+    or vmware_modulos.rc != 0
   ignore_errors: true
+
+# vmware-modconfig apenas escribe por stdout/stderr: el motivo real del fallo
+# está en su log de /tmp/vmware-root/. Lo mostramos para poder diagnosticar.
+- name: Mostrar el final del log de vmware-modconfig (si falló)
+  shell: "tail -n 40 \"$(ls -t /tmp/vmware-root/*.log 2>/dev/null | head -n 1)\""
+  register: vmware_modconfig_log
+  changed_when: false
+  failed_when: false
+  when: vmware_modconfig is defined and vmware_modconfig.rc is defined and vmware_modconfig.rc != 0
+
+- name: Log de vmware-modconfig
+  debug:
+    var: vmware_modconfig_log.stdout_lines
+  when: vmware_modconfig_log.stdout_lines is defined
+
+# Comprobación final: VMware solo funciona si vmmon y vmnet están cargados.
+# Si están compilados pero no cargan, lo habitual es Secure Boot (módulos sin firmar).
+- name: Comprobación final - módulos vmmon/vmnet cargados
+  shell: |
+    modprobe vmmon && modprobe vmnet; rc=$?
+    lsmod | grep -E '^(vmmon|vmnet) '
+    mokutil --sb-state 2>/dev/null
+    exit $rc
+  register: vmware_final
+  changed_when: false
+  failed_when: false
+
+- name: Resultado de la comprobación final de VMware
+  debug:
+    msg: "{{ 'OK: vmmon y vmnet cargados' if vmware_final.rc == 0 else 'ERROR: módulos de VMware NO cargados' }} | {{ vmware_final.stdout_lines + vmware_final.stderr_lines }}"
