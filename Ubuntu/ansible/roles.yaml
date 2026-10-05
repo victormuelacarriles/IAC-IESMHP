@@ -19,22 +19,23 @@
     - name: Actualizar cache apt (para no hacerlo en cada rol)
       apt:
         update_cache: yes
+      tags: always    #se ejecuta también al lanzar un solo rol con --tags
   roles:
-     - basicos       #cosas que debieras estar desde el livecd pero que recomprobamos #[python, pip, pipx, ansible]
-     - horaHTTP      #Sincroniza la hora en CADA arranque (NTP y, si está filtrado el UDP 123, fallback HTTP). service+timer. Ver roles/horaHTTP/CLAUDE.md
-     - nvidia
-     - flatpak       #Instala el soporte de flatpak y el repositorio de Flathub
+     - { role: basicos, tags: basicos } #cosas que debieras estar desde el livecd pero que recomprobamos #[python, pip, pipx, ansible]
+     - { role: horaHTTP, tags: horaHTTP } #Sincroniza la hora en CADA arranque (NTP y, si está filtrado el UDP 123, fallback HTTP). service+timer. Ver roles/horaHTTP/CLAUDE.md
+     - { role: nvidia, tags: nvidia }
+     - { role: flatpak, tags: flatpak } #Instala el soporte de flatpak y el repositorio de Flathub
      # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml
-     - certificados
-     - obs
-     - rdp           # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
-     - vscode
-     - clienteNAS    #Cliente NFS del NAS del DEPARTAMENTO: 
+     - { role: certificados, tags: certificados }
+     - { role: obs, tags: obs }
+     - { role: rdp, tags: rdp } # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
+     - { role: vscode, tags: vscode }
+     - { role: clienteNAS, tags: clienteNAS } #Cliente NFS del NAS del DEPARTAMENTO: 
                       #autodescubre exports y los monta RO en /mnt/nasDepInfo (ver roles/clienteNAS/CLAUDE.md)
-     - DirtyFrag     #Evalua y mitiga la vuln. "Dirty Frag" (CVE-2026-43284 ESP/IPsec + CVE-2026-43500 RxRPC): bloquea esp4/esp6/rxrpc
-     - Docker        #Instalación de SISTEMA de Docker para uso ROOTLESS (la parte por usuario la hace rolesUsuario/DockerRootless)
-     - vmware        #sigue fallando la compilación. error raro de: "[Apploader] Use shipped Linux kernel AIO access library"
-     - preparaAD     #Prerequisitos para unión a dominio Active Directory (realmd+SSSD+adcli). NO une al dominio: ver roles/preparaAD/CLAUDE.md
+     - { role: DirtyFrag, tags: DirtyFrag } #Evalua y mitiga la vuln. "Dirty Frag" (CVE-2026-43284 ESP/IPsec + CVE-2026-43500 RxRPC): bloquea esp4/esp6/rxrpc
+     - { role: Docker, tags: Docker } #Instalación de SISTEMA de Docker para uso ROOTLESS (la parte por usuario la hace rolesUsuario/DockerRootless)
+     - { role: vmware, tags: vmware } #sigue fallando la compilación. error raro de: "[Apploader] Use shipped Linux kernel AIO access library"
+     - { role: preparaAD, tags: preparaAD } #Prerequisitos para unión a dominio Active Directory (realmd+SSSD+adcli). NO une al dominio: ver roles/preparaAD/CLAUDE.md
 
 
 #POR HACER:

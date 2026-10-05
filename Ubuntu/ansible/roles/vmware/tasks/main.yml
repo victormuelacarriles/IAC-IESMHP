@@ -41,6 +41,23 @@
   command: "/usr/lib/vmware/bin/vmware-setup-helper -e -o -u no -c no"
   when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
 
-- name: Ejecutar post-instalación de VMware(2/2) (compilación)
-  command: "/usr/lib/vmware/bin/vvmware-modconfig --console --install-all"
+# vmware-modconfig inicializa GTK aunque se use --console: sin DISPLAY (SSH /
+# Ansible / primer arranque) aborta con "cannot open display" y rc=1 antes de
+# compilar. xvfb-run le da una pantalla virtual. libaio1t64 evita el aviso
+# "An up-to-date libaio ... is preferred".
+- name: Instalar dependencias de vmware-modconfig (pantalla virtual + libaio)
+  apt:
+    name:
+      - xvfb
+      - xauth
+      - libaio1t64
+      - build-essential
+      - "linux-headers-{{ ansible_kernel }}"
+    state: present
+    update_cache: false
   when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
+
+- name: Ejecutar post-instalación de VMware(2/2) (compilación)
+  command: "xvfb-run -a /usr/lib/vmware/bin/vmware-modconfig --console --install-all"
+  when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
+  ignore_errors: true
