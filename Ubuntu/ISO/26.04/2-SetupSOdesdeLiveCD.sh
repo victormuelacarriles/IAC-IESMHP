@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="23.8-20260927-zfs-distancia"
+VERSIONSCRIPT="23.9-20261005-gis-mask"
 
 # Variables comunes del proyecto (REPO, DISTRO, RAIZSCRIPTS, RAIZDISTRO,
 # RAIZLOG, versionDISTRO...). Único punto de definición: comun.sh (mismo
@@ -794,6 +794,19 @@ if [ -d /home/usuario ]; then
     chown -R usuario:usuario /home/usuario/.config /home/usuario/.local
 fi
 ok "gnome-initial-setup marcado como completado (rutas antiguas y nuevas)"
+
+# Enmascarar a nivel de sistema (todos los usuarios, locales y de dominio, actuales
+# y futuros) las unidades de usuario del asistente de bienvenida. En 26.04,
+# gnome-initial-setup-upgrade-login.service lanza 'gnome-initial-setup --upgrade-user'
+# tras el primer inicio de sesión (hay gnome-initial-setup-done pero no
+# upgrade-26.04-done) y provoca un bucle de diálogos de polkit cada minuto
+# (com.ubuntu.whoopsiepreferences.change). Equivale a 'systemctl mask' (enlace a /dev/null).
+# Revertir: rm /etc/systemd/user/gnome-initial-setup-{upgrade,first}-login.service
+mkdir -p /etc/systemd/user
+for _u in gnome-initial-setup-upgrade-login.service gnome-initial-setup-first-login.service; do
+    ln -sfn /dev/null "/etc/systemd/user/$_u"
+done
+ok "gnome-initial-setup: unidades de usuario upgrade-login y first-login enmascaradas (/etc/systemd/user → /dev/null)"
 
 # Deshabilitar el bloqueo de pantalla en la sesión del GDM greeter.
 # GDM en Ubuntu 26.04 corre el greeter como sesión Wayland del usuario 'gdm-greeter'.
