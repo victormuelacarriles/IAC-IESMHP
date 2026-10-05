@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="23.9-20261005-gis-mask"
+VERSIONSCRIPT="23.10-20261005-headless"
 
 # Variables comunes del proyecto (REPO, DISTRO, RAIZSCRIPTS, RAIZDISTRO,
 # RAIZLOG, versionDISTRO...). Único punto de definición: comun.sh (mismo
@@ -517,6 +517,22 @@ if [ "$USA_TANK" = 1 ]; then
 fi
 
 ok "ZFS instalado y configurado en el chroot"
+
+# SSH disponible desde el PRIMER arranque del sistema instalado. Antes solo se
+# instalaba en 3-SetupPrimerInicio.sh: si ese servicio no llegaba a ejecutarse
+# (p. ej. equipo SIN monitor) el equipo respondía "Connection refused" y no
+# había forma de entrar a ver los logs. El acceso root es por clave
+# (authorized_keys, más abajo; 'prohibit-password' por defecto lo permite).
+# 3-SetupPrimerInicio.sh sigue aplicando la configuración completa (UsePAM,
+# PermitRootLogin, sftp…). En chroot el postinst no arranca el servicio; solo
+# lo habilita. Ubuntu 26.04 usa activación por socket (ssh.socket).
+info "Instalando openssh-server (SSH accesible desde el primer arranque)..."
+if DEBIAN_FRONTEND=noninteractive apt-get install -y        -o Dpkg::Options::="--force-confold" openssh-server openssh-sftp-server; then
+    systemctl enable ssh.socket 2>/dev/null || systemctl enable ssh.service 2>/dev/null || true
+    ok "openssh-server instalado y habilitado"
+else
+    err "Instalación de openssh-server falló — SSH no estará hasta 3-SetupPrimerInicio.sh"
+fi
 info "zpool status:"
 zpool status 2>/dev/null | sed 's/^/  /' || info "  (zpool status no disponible)"
 info "zfs list:"
@@ -851,8 +867,8 @@ dconf update && ok "dconf recompilado (gdm screensaver + session-name)" \
 # Garantía final contra auto-login: aunque algo sobreescriba /etc/gdm3/custom.conf
 # (casper.service, postinst de gdm3 durante full-upgrade, etc.), este servicio
 # se ejecuta en CADA arranque Before=display-manager.service y lo corrige.
-# 3-SetupPrimerInicio tiene After=graphical.target → llega tarde; este servicio
-# llega a tiempo.
+# 3-SetupPrimerInicio no está ordenado respecto a GDM (y solo corre en el primer
+# arranque) → no garantiza llegar antes; este servicio sí llega a tiempo.
 cat > /usr/local/sbin/iac-gdm-noautologin.sh << 'GDMEARLYSCRIPT'
 #!/bin/bash
 mkdir -p /etc/gdm3
@@ -1153,7 +1169,11 @@ cat > /etc/systemd/system/3-SetupPrimerInicio.service << EOF
 Description=IAC-IESMHP Configuracion primer arranque
 DefaultDependencies=no
 Wants=network-online.target
-After=network-online.target graphical.target
+# NO After=graphical.target: sin monitor conectado GDM/Wayland no completa
+# graphical.target y este servicio no arrancaba nunca (y además formaba un
+# ciclo de ordenación con WantedBy=multi-user.target). Los avisos gráficos
+# de mostrar_mensaje() son opcionales; el script no necesita sesión gráfica.
+After=network-online.target
 Conflicts=shutdown.target
 
 [Service]
