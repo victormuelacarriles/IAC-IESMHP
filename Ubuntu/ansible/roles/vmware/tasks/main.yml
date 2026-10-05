@@ -8,7 +8,7 @@
 - name: Comprobar si VMware está instalado
   shell: vmware --version
   register: vmware_check
-  ignore_errors: true
+  failed_when: false    # rc=127 si no está instalado: es lo esperado, no un error
   changed_when: false
 
 - name: Extraer versión instalada de VMware
@@ -68,8 +68,8 @@
     force: false
   failed_when: false
 
-# Se compila si se acaba de instalar/actualizar O si faltan los módulos para el
-# kernel en uso (p. ej. tras un upgrade de kernel con VMware ya instalado).
+# El instalador de VMware 26 ya compila vmmon/vmnet; solo hace falta compilar
+# si faltan para el kernel en uso (p. ej. tras un upgrade de kernel).
 - name: Comprobar si existen los módulos vmmon/vmnet para el kernel actual
   shell: "modinfo -k {{ ansible_kernel }} vmmon && modinfo -k {{ ansible_kernel }} vmnet"
   register: vmware_modulos
@@ -77,12 +77,10 @@
   failed_when: false
 
 - name: Ejecutar post-instalación de VMware(2/2) (compilación)
-  command: "xvfb-run -a /usr/lib/vmware/bin/vmware-modconfig --console --install-all"
+  # VMware 26 ya no admite --console ("Opción desconocida --console", rc=2).
+  command: "xvfb-run -a /usr/lib/vmware/bin/vmware-modconfig --install-all"
   register: vmware_modconfig
-  when: >-
-    vmware_installed_version is not defined
-    or vmware_installed_version != vmware_version
-    or vmware_modulos.rc != 0
+  when: vmware_modulos.rc != 0
   ignore_errors: true
 
 # vmware-modconfig apenas escribe por stdout/stderr: el motivo real del fallo
