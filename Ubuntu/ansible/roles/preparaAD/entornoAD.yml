@@ -15,13 +15,13 @@
 # ===========================================================================
 
 # Dominio AD, en formato DNS y minúsculas.
-preparaad_dominio: "mhpies.local"
+preparaad_dominio: "iesmhp.local"
 
 # IPs que resuelven el dominio (DNS de los controladores de dominio), separadas
 # por comas. SOLO se usan si el DNS del aula NO resuelve el dominio: en ese caso
 # el rol despliega un split-DNS hacia estos servidores (drop-in de
 # systemd-resolved). VACÍO = desactiva ese arreglo automático.
-preparaad_dominio_dnss: "10.0.72.118"
+preparaad_dominio_dnss: "10.0.1.48,10.0.1.54"
 
 # Nombre (hoja) de la OU donde se crean las cuentas de equipo. La crea y delega
 # utilesAD/1-CreaUsuarioUnionAD.ps1 en el DC con ESTE mismo nombre.
