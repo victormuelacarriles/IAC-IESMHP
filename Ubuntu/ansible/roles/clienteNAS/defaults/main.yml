@@ -12,7 +12,7 @@
 # Si la interfaz dedicada no responde a showmount, se reintenta con la general.
 
 # Interfaz general del NAS (accesible desde todo el centro)
-nas_ip_general: "10.0.1.253"
+nas_ip_general: "10.0.1.100"
 
 # Interfaces dedicadas: "red del equipo (3 octetos)" -> "IP del NAS en esa red".
 # Para añadir una red nueva con interfaz propia, basta con añadir una línea.
