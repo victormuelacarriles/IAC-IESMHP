@@ -5,7 +5,7 @@
 #  Funciona tanto dentro del chroot (llamado desde 2-SetupSOdesdeLiveCD.sh)
 #  como en el sistema ya arrancado (llamado desde 3-SetupPrimerInicio.sh).
 # =============================================================================
-VERSIONSCRIPT="1.5-20260927-zfs"
+VERSIONSCRIPT="1.6-20261006-red"
 
 # Variables comunes del proyecto (REPO, DISTRO, RAIZLOG...). Único punto de
 # definición: comun.sh (mismo directorio que este script).
@@ -277,6 +277,32 @@ if systemctl is-system-running &>/dev/null 2>&1; then
     else
         _avs "SSH: no activo"
     fi
+fi
+# ─────────────────────────────────────────────────────────────────────────────
+# 8b. Red: cloud-init no debe gestionar la red (su 50-cloud-init.yaml con
+# dhcp4: true se fusiona con la IP estática de NM => dos IPs; 2026-10-06).
+# Los ficheros se comprueban también en chroot; las IPs solo con sistema arrancado.
+_sep "8b. RED (cloud-init / netplan)"
+if [ -f /etc/cloud/cloud-init.disabled ]; then
+    _ok "cloud-init desactivado (/etc/cloud/cloud-init.disabled)"
+elif [ -d /etc/cloud ]; then
+    _avs "cloud-init NO desactivado: puede regenerar /etc/netplan/50-cloud-init.yaml (Fix: utiles/QuitaDHCPcloudinit.sh)"
+fi
+if [ -f /etc/netplan/50-cloud-init.yaml ]; then
+    _err "Existe /etc/netplan/50-cloud-init.yaml → con IP estática la interfaz tendrá también DHCP (Fix: utiles/QuitaDHCPcloudinit.sh)"
+else
+    _ok "Sin /etc/netplan/50-cloud-init.yaml"
+fi
+if systemctl is-system-running &>/dev/null 2>&1; then
+    for _dev in $(nmcli -t -f DEVICE,TYPE device status 2>/dev/null | awk -F: '$2=="ethernet"{print $1}'); do
+        _NIPS=$(ip -4 -o addr show dev "$_dev" 2>/dev/null | wc -l)
+        _LIPS=$(ip -4 -o addr show dev "$_dev" 2>/dev/null | awk '{printf "%s%s ", $4, ($0 ~ / dynamic /) ? "(dhcp)" : ""}')
+        if [ "$_NIPS" -gt 1 ]; then
+            _err "  $_dev tiene $_NIPS IPv4: $_LIPS"
+        elif [ "$_NIPS" -eq 1 ]; then
+            _ok "  $_dev: una sola IPv4 ($_LIPS)"
+        fi
+    done
 fi
 # ─────────────────────────────────────────────────────────────────────────────
 # 9. ZFS — solo si hay zpool. Desde 2026-09-27 ambos perfiles llevan rpool

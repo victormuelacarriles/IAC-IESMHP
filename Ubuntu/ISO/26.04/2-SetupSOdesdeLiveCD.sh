@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-VERSIONSCRIPT="23.10-20261005-headless"
+VERSIONSCRIPT="23.11-20261006-sincloudinit"
 
 # Variables comunes del proyecto (REPO, DISTRO, RAIZSCRIPTS, RAIZDISTRO,
 # RAIZLOG, versionDISTRO...). Único punto de definición: comun.sh (mismo
@@ -539,6 +539,26 @@ info "zfs list:"
 zfs list -o name,used,avail,refer,mountpoint 2>/dev/null | sed 's/^/  /' || info "  (zfs list no disponible)"
 
 fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+paso "Desactivar cloud-init (red gestionada solo por NetworkManager)"
+# ─────────────────────────────────────────────────────────────────────────────
+# Ubuntu 26.04 Desktop trae cloud-init (lo usa el instalador). En el primer
+# arranque del sistema instalado, sin datasource, aplica su configuración de
+# reserva y escribe /etc/netplan/50-cloud-init.yaml con 'eno1: dhcp4: true'.
+# Cuando NombreIP.sh pasa la conexión a IP estática, NM escribe
+# 90-NM-<uuid>.yaml SIN 'dhcp4' y netplan FUSIONA ambos: perfil 'auto' + IP
+# fija => la interfaz queda con DOS IPs (la fija y una de DHCP) en cada arranque
+# (SMRD-01, 2026-10-06; en VM no se ve porque en NAT no se pasa a estática).
+# El instalador oficial también deja cloud-init desactivado en el sistema
+# instalado. Sin él, NM crea su conexión cableada por defecto (DHCP) como en
+# cualquier Ubuntu Desktop, y NombreIP.sh la convierte a estática.
+mkdir -p /etc/cloud/cloud.cfg.d
+touch /etc/cloud/cloud-init.disabled
+echo 'network: {config: disabled}' > /etc/cloud/cloud.cfg.d/99-iac-disable-network-config.cfg
+rm -f /etc/netplan/50-cloud-init.yaml
+ok "cloud-init desactivado (cloud-init.disabled + network: {config: disabled}); 50-cloud-init.yaml eliminado si existía"
+info "/etc/netplan: $(ls /etc/netplan 2>/dev/null | tr '\n' ' ')"
 
 # ─────────────────────────────────────────────────────────────────────────────
 paso "MAC, hostname y claves SSH autorizadas"
