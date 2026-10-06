@@ -34,8 +34,11 @@
                       #autodescubre exports y los monta RO en /mnt/nasDepInfo (ver roles/clienteNAS/CLAUDE.md)
      - { role: DirtyFrag, tags: DirtyFrag } #Evalua y mitiga la vuln. "Dirty Frag" (CVE-2026-43284 ESP/IPsec + CVE-2026-43500 RxRPC): bloquea esp4/esp6/rxrpc
      - { role: Docker, tags: Docker } #Instalación de SISTEMA de Docker para uso ROOTLESS (la parte por usuario la hace rolesUsuario/DockerRootless)
-     - { role: vmware, tags: vmware } #sigue fallando la compilación. error raro de: "[Apploader] Use shipped Linux kernel AIO access library"
      - { role: preparaAD, tags: preparaAD } #Prerequisitos para unión a dominio Active Directory (realmd+SSSD+adcli). NO une al dominio: ver roles/preparaAD/CLAUDE.md
+     # vmware SIEMPRE el ÚLTIMO: compila vmmon/vmnet para TODOS los kernels instalados (incluido
+     # el que trae el full-upgrade del primer arranque) y deja hooks de kernel + servicio de arranque
+     # para que VMware NUNCA pida "Kernel Module Updater". Ver roles/vmware/CLAUDE.md
+     - { role: vmware, tags: vmware }
 
 
 #POR HACER:

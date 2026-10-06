@@ -41,21 +41,41 @@
   command: "/usr/lib/vmware/bin/vmware-setup-helper -e -o -u no -c no"
   when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
 
-# vmware-modconfig inicializa GTK aunque se use --console: sin DISPLAY (SSH /
-# Ansible / primer arranque) aborta con "cannot open display" y rc=1 antes de
-# compilar. xvfb-run le da una pantalla virtual. libaio1t64 evita el aviso
-# "An up-to-date libaio ... is preferred".
-- name: Instalar dependencias de vmware-modconfig (pantalla virtual + libaio)
+# ─────────────────────────────────────────────────────────────────────────────
+# Módulos vmmon/vmnet: VMware NUNCA debe pedir "Kernel Module Updater" (2026-10-06).
+# En el primer arranque, 3-SetupPrimerInicio.sh hace full-upgrade (kernel NUEVO)
+# y Ansible corre SIN reiniciar: compilar solo para ansible_kernel (el viejo)
+# hacía que, al arrancar con el nuevo, VMware pidiera compilar con sudo.
+# Solución (VMware no usa DKMS):
+#   1. cabeceras de TODOS los kernels instalados + linux-headers-generic;
+#   2. compilar para TODOS los kernels (iac-vmware-modulos.sh, sin GUI);
+#   3. hooks /etc/kernel/{postinst.d,header_postinst.d}/zz-iac-vmware para los
+#      kernels que lleguen en el futuro;
+#   4. iac-vmware-modulos.service: red de seguridad en cada arranque.
+# Todo esto se ejecuta SIEMPRE (idempotente): re-lanzar el rol arregla equipos
+# ya instalados (ansible-playbook ... --tags vmware).
+# ─────────────────────────────────────────────────────────────────────────────
+# libaio1t64 evita el aviso "An up-to-date libaio ... is preferred";
+# xvfb/xauth solo para el respaldo con vmware-modconfig (necesita pantalla).
+- name: Instalar dependencias de compilación de los módulos de VMware
   apt:
     name:
       - xvfb
       - xauth
       - libaio1t64
       - build-essential
-      - "linux-headers-{{ ansible_kernel }}"
+      - linux-headers-generic
     state: present
     update_cache: false
-  when: vmware_installed_version is not defined or vmware_installed_version != vmware_version
+
+- name: Instalar las cabeceras de TODOS los kernels instalados
+  shell: |
+    for k in $(ls /lib/modules); do
+      [ -d "/lib/modules/$k/build" ] && continue
+      apt-get install -y "linux-headers-$k" </dev/null && echo "instaladas: $k" || echo "no disponibles: $k"
+    done
+  register: vmware_headers
+  changed_when: "'instaladas:' in vmware_headers.stdout"
 
 # libaio1t64 (Ubuntu 24.04+) solo trae libaio.so.1t64; el AppLoader de VMware
 # busca libaio.so.1 y, si no lo ve, avisa "Use shipped Linux kernel AIO access
@@ -68,34 +88,51 @@
     force: false
   failed_when: false
 
-# El instalador de VMware 26 ya compila vmmon/vmnet; solo hace falta compilar
-# si faltan para el kernel en uso (p. ej. tras un upgrade de kernel).
-- name: Comprobar si existen los módulos vmmon/vmnet para el kernel actual
-  shell: "modinfo -k {{ ansible_kernel }} vmmon && modinfo -k {{ ansible_kernel }} vmnet"
+- name: Instalar script de compilación de módulos (iac-vmware-modulos.sh)
+  copy:
+    src: iac-vmware-modulos.sh
+    dest: /usr/local/sbin/iac-vmware-modulos.sh
+    mode: '0755'
+
+- name: Crear directorios de hooks de kernel
+  file:
+    path: "/etc/kernel/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - postinst.d
+    - header_postinst.d
+
+- name: Instalar hooks de kernel (kernels futuros)
+  copy:
+    src: zz-iac-vmware
+    dest: "/etc/kernel/{{ item }}/zz-iac-vmware"
+    mode: '0755'
+  loop:
+    - postinst.d
+    - header_postinst.d
+
+- name: Instalar servicio de comprobación en cada arranque
+  copy:
+    src: iac-vmware-modulos.service
+    dest: /etc/systemd/system/iac-vmware-modulos.service
+    mode: '0644'
+
+- name: Habilitar iac-vmware-modulos.service
+  systemd:
+    name: iac-vmware-modulos.service
+    enabled: true
+    daemon_reload: true
+
+- name: Compilar vmmon/vmnet para TODOS los kernels instalados
+  command: /usr/local/sbin/iac-vmware-modulos.sh
   register: vmware_modulos
-  changed_when: false
+  changed_when: "'compilado e instalado' in vmware_modulos.stdout"
   failed_when: false
 
-- name: Ejecutar post-instalación de VMware(2/2) (compilación)
-  # VMware 26 ya no admite --console ("Opción desconocida --console", rc=2).
-  command: "xvfb-run -a /usr/lib/vmware/bin/vmware-modconfig --install-all"
-  register: vmware_modconfig
-  when: vmware_modulos.rc != 0
-  ignore_errors: true
-
-# vmware-modconfig apenas escribe por stdout/stderr: el motivo real del fallo
-# está en su log de /tmp/vmware-root/. Lo mostramos para poder diagnosticar.
-- name: Mostrar el final del log de vmware-modconfig (si falló)
-  shell: "tail -n 40 \"$(ls -t /tmp/vmware-root/*.log 2>/dev/null | head -n 1)\""
-  register: vmware_modconfig_log
-  changed_when: false
-  failed_when: false
-  when: vmware_modconfig is defined and vmware_modconfig.rc is defined and vmware_modconfig.rc != 0
-
-- name: Log de vmware-modconfig
+- name: Resultado de la compilación de módulos (log en /var/log/IAC-IESMHP/Ubuntu/vmware-modulos.log)
   debug:
-    var: vmware_modconfig_log.stdout_lines
-  when: vmware_modconfig_log.stdout_lines is defined
+    var: vmware_modulos.stdout_lines
 
 # Comprobación final: VMware solo funciona si vmmon y vmnet están cargados.
 # Si están compilados pero no cargan, lo habitual es Secure Boot (módulos sin firmar).
@@ -104,6 +141,14 @@
     modprobe vmmon && modprobe vmnet; rc=$?
     lsmod | grep -E '^(vmmon|vmnet) '
     mokutil --sb-state 2>/dev/null
+    # Módulos presentes para CADA kernel instalado (el del próximo arranque incluido)
+    for k in $(ls /lib/modules); do
+      if modinfo -k "$k" vmmon >/dev/null 2>&1 && modinfo -k "$k" vmnet >/dev/null 2>&1; then
+        echo "kernel $k: vmmon/vmnet OK"
+      else
+        echo "kernel $k: FALTAN vmmon/vmnet"; rc=1
+      fi
+    done
     exit $rc
   register: vmware_final
   changed_when: false

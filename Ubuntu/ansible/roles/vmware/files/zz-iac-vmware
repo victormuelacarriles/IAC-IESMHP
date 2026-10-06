@@ -1,0 +1,8 @@
+#!/bin/sh
+# Hook de kernel (rol Ansible "vmware", IAC-IESMHP). Se instala en
+# /etc/kernel/postinst.d/ y /etc/kernel/header_postinst.d/: $1 = versión del
+# kernel recién instalado. Compila vmmon/vmnet para él SIN interfaz gráfica,
+# para que VMware no pida compilar al arrancar con el kernel nuevo.
+# Nunca falla (no debe romper apt).
+[ -x /usr/local/sbin/iac-vmware-modulos.sh ] && /usr/local/sbin/iac-vmware-modulos.sh "$1"
+exit 0

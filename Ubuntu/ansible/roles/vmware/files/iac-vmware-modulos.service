@@ -1,0 +1,20 @@
+# Rol Ansible "vmware" (IAC-IESMHP). Red de seguridad en CADA arranque: si
+# faltan vmmon/vmnet para el kernel en uso, los compila antes de que nadie abra
+# VMware. Si ya están, termina en un segundo.
+# Sin dependencias gráficas: no espera a graphical.target (requisito sin monitor);
+# solo se ordena ANTES de vmware.service y del gestor de pantalla.
+[Unit]
+Description=IAC-IESMHP: modulos vmmon/vmnet de VMware para el kernel en uso
+After=local-fs.target
+Before=vmware.service display-manager.service
+ConditionPathExists=/usr/lib/vmware
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/iac-vmware-modulos.sh --arranque
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
