@@ -1,9 +1,3 @@
-Pendiente:
-
-- sugerencia de David: 
-    hacer que el instalador no borre el /home de alumnos (si ya está formateado)
-
-
 
 
 sudo apt install xorriso mtools gdisk -y
@@ -14,8 +8,7 @@ chmod +x 00-create_custom_iso.sh
 
 
 #Ahora mismo (en el equipo de 140, como mi usuario, por ssh)
-cd ~/xIAC-IESMHP/Ubuntu/ISO/26.04
-git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh && sudo ./0a-CreaISO.sh ~/Descargas/ubuntu-26.04-desktop-amd64.iso 0b-Github.sh ~/Descargas/mi-ubuntu.iso
+cd ~/xIAC-IESMHP/Ubuntu/ISO/26.04 && git reset --hard origin/main && git pull && chmod +x ./0a-CreaISO.sh && sudo ./0a-CreaISO.sh ~/Descargas/ubuntu-26.04-desktop-amd64.iso 0b-Github.sh ~/Descargas/Mi-ubuntu-perso.iso
 
 #Despues , en vmware, arranco la máquina que está conectada
 # a esa iso (ubuntu auto)
