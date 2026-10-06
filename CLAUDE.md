@@ -24,6 +24,54 @@ los cambios de código a GitHub.**
 
 ---
 
+## 🖥️❌ Requisito principal: TODO debe funcionar SIN MONITOR (headless)
+
+**Característica principal del proyecto**: el despliegue completo tiene que
+terminar en un equipo **sin monitor conectado** (sin teclado ni ratón), igual que
+con monitor. En el aula los equipos se despliegan en serie, por red o en remoto, y
+**no hay nadie delante**. Si algo solo avanza cuando se enchufa una pantalla, es un
+**bug**, no un detalle.
+
+Cualquier cambio, en **cualquier línea** (Mint, Ubuntu, ThinStation, W11), debe
+revisarse contra estas reglas:
+
+1. **Nada en la cadena puede depender de la parte gráfica.** No ordenes servicios
+   después de `graphical.target`, `display-manager.service` ni de una sesión de
+   usuario iniciada. Sin monitor, GDM/gnome-shell (Wayland) puede no terminar de
+   arrancar y **nunca** llegar a `graphical.target`. Usa
+   `After=network-online.target` (+ `WantedBy=multi-user.target`). Tampoco pongas
+   `After=graphical.target` con `WantedBy=multi-user.target`: además, forma un
+   ciclo de ordenación.
+2. **Lo gráfico solo es opcional.** Avisos, ventanas `zenity`/`notify-send` y
+   fondos solo se muestran si hay sesión gráfica (`loginctl`); si no la hay, el
+   script **sigue igual**. Nunca debe bloquearse esperando a una pantalla o a un clic.
+3. **Acceso remoto lo antes posible.** SSH (o el equivalente en Windows) debe estar
+   **instalado y habilitado desde el primer arranque de cada fase**, antes de
+   cualquier paso que pueda quedarse colgado. Es la única forma de diagnosticar un
+   equipo sin monitor.
+4. **Ninguna pregunta interactiva en la cadena automática**: nada de `read -p`,
+   confirmaciones ni asistentes de bienvenida. El stdin de los scripts va a
+   `/dev/null`. Las únicas excepciones son las herramientas que lanza a mano el
+   operador, como `grub-nfs-live.sh`.
+5. **Los logs van a fichero/journal, no solo a pantalla**, para poder consultarlos
+   por SSH (`/var/log/IAC-IESMHP/...`, `journalctl`, `.log` junto al script en W11).
+6. **Arranque sin esperas infinitas.** GRUB/Plymouth/BIOS no pueden quedarse
+   esperando una tecla (cuidado con `recordfail`, `GRUB_TIMEOUT=-1`, `splash`
+   sin salida de vídeo, avisos de la BIOS por "no keyboard").
+7. **Validación**: un cambio no está terminado hasta probarlo **sin monitor**,
+   además de en la VM. Al diagnosticar un fallo que "se arregla al conectar el
+   monitor", sospecha primero de una dependencia gráfica.
+
+> **Caso real (2026-10-05, Ubuntu 26.04)**: sin monitor, tras el primer reinicio SSH
+> daba `Connection refused` y la instalación no seguía. Al conectar el monitor,
+> seguía sola. Causa: `3-SetupPrimerInicio.service` tenía `After=graphical.target`
+> y `openssh-server` solo se instalaba en ese script 3. **Fix** (v23.10 de
+> `2-SetupSOdesdeLiveCD.sh`, **comprobado que funciona**): unidad solo con
+> `After=network-online.target` + `openssh-server` instalado y habilitado ya en el
+> chroot. Detalle en `Ubuntu/RegistroDeCambios/20261005-Cambios.md`.
+
+---
+
 ## Propósito del proyecto
 
 **Infraestructura como código (IAC) para el IES Miguel Herrero (Torrelavega)**:

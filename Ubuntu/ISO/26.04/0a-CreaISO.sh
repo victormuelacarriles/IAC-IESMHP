@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-VERSIONSCRIPT="1.0-20260925"       #Versión del script
+VERSIONSCRIPT="1.1-20261006"       #Versión del script (1.1: actualiza paquetes del squashfs)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PARÁMETROS Y VARIABLES
@@ -43,8 +43,15 @@ err()   { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
 step()  { echo -e "\n${CYAN}━━━ $* ━━━${NC}"; }
 
 cleanup() {
+    # Primero desmontar el chroot de actualización (si un error lo dejó montado):
+    # un rm -rf con /dev, /proc o /sys montados dentro borraría el sistema host.
+    desmontar_chroot
+    if findmnt -rn -o TARGET | grep -q "^${WORK_DIR}"; then
+        warn "Quedan montajes bajo ${WORK_DIR}; no se borra (revísalo con: findmnt | grep ${WORK_DIR})"
+        return
+    fi
     log "Limpiando directorio temporal: ${WORK_DIR}"
-    rm -rf "${WORK_DIR}"
+    rm -rf --one-file-system "${WORK_DIR}"
 }
 trap cleanup EXIT
 
@@ -62,7 +69,7 @@ check_root() {
 check_deps() {
     step "Verificando dependencias"
     local missing=()
-    for dep in xorriso mtools file openssl sfdisk unsquashfs; do
+    for dep in xorriso mtools file openssl sfdisk unsquashfs mksquashfs chroot findmnt; do
         if command -v "$dep" &>/dev/null; then
             log "  $dep → OK"
         else
@@ -98,6 +105,150 @@ extract_iso() {
     xorriso -osirrox on -indev "$SOURCE_ISO" -extract / "${ISO_DIR}" 2>/dev/null || err "xorriso falló al extraer."
     chmod -R u+w "${ISO_DIR}"
     log "Extracción completada"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1b. ACTUALIZAR PAQUETES DEL SQUASHFS (opcional, por defecto activado)
+# ─────────────────────────────────────────────────────────────────────────────
+# Objetivo: que el full-upgrade de 3-SetupPrimerInicio.sh tenga poco o nada que
+# descargar en cada equipo. Se actualiza UNA vez aquí, en el equipo de desarrollo.
+#
+# Cómo: el sistema instalado es la unión (overlayfs) de las capas
+#   minimal.squashfs + minimal.standard.squashfs + minimal.standard.live.squashfs
+# (igual que hace 1-SetupLiveCD.sh antes del rsync). Se montan las capas
+# inferiores en solo lectura y la capa desempaquetada (${SQUASHFS_DIR}) como
+# UPPERDIR: todo lo que cambia apt queda escrito en esa capa, con el formato de
+# overlayfs (whiteouts/opaque) que ya usan las capas de Ubuntu. Después el flujo
+# normal la vuelve a empaquetar con mksquashfs.
+#
+# El KERNEL se retiene (apt-mark hold): el Live CD arranca con casper/vmlinuz
+# de la ISO y 2-SetupSOdesdeLiveCD.sh evita a propósito instalar kernels en el
+# chroot (cuelgues de postinst). El kernel nuevo lo trae 3-SetupPrimerInicio.sh.
+#
+# Desactivar : sudo ACTUALIZAR_PAQUETES=0 ./0a-CreaISO.sh ...
+# Con proxy  : sudo APT_PROXY=http://10.0.72.140:3128 ./0a-CreaISO.sh ...
+ACTUALIZAR_PAQUETES="${ACTUALIZAR_PAQUETES:-1}"
+APT_PROXY="${APT_PROXY:-}"
+CHROOT_DIR=""            # punto de montaje del chroot (lo usa cleanup)
+CHROOT_MOUNTS=()         # montajes a deshacer, en orden de creación
+
+desmontar_chroot() {
+    local i
+    for (( i=${#CHROOT_MOUNTS[@]}-1; i>=0; i-- )); do
+        umount -l "${CHROOT_MOUNTS[$i]}" 2>/dev/null || true
+    done
+    CHROOT_MOUNTS=()
+}
+
+montar() {   # montar <destino> <args de mount...>
+    local dest="$1"; shift
+    mount "$@" "$dest" || err "No se pudo montar ${dest}"
+    CHROOT_MOUNTS+=("$dest")
+}
+
+actualizar_paquetes_squashfs() {
+    local squashfs_path="$1"
+
+    if [[ "$ACTUALIZAR_PAQUETES" != "1" ]]; then
+        info "ACTUALIZAR_PAQUETES=${ACTUALIZAR_PAQUETES} → se omite la actualización de paquetes"
+        return 0
+    fi
+    step "Actualizando paquetes del sistema (chroot sobre las capas squashfs)"
+    local t0=$SECONDS
+
+    # ── Capas inferiores: prefijos del nombre de la capa elegida ──────────
+    #   minimal.standard.live.squashfs → minimal.standard.squashfs, minimal.squashfs
+    # Con un único filesystem.squashfs no hay capas inferiores.
+    local casper_dir base lower="" n=0
+    casper_dir="$(dirname "$squashfs_path")"
+    base="$(basename "$squashfs_path" .squashfs)"
+    while [[ "$base" == *.* ]]; do
+        base="${base%.*}"
+        local f="${casper_dir}/${base}.squashfs"
+        if [[ -f "$f" ]]; then
+            local mnt="${WORK_DIR}/lower${n}"
+            mkdir -p "$mnt"
+            montar "$mnt" -o loop,ro "$f"
+            lower="${lower:+${lower}:}${mnt}"     # más específica primero (izquierda)
+            log "  Capa inferior: $(basename "$f")"
+            (( n++ )) || true
+        fi
+    done
+
+    if [[ -n "$lower" ]]; then
+        CHROOT_DIR="${WORK_DIR}/merged"
+        mkdir -p "$CHROOT_DIR" "${WORK_DIR}/ovl_work"
+        # redirect_dir/index/metacopy off: la capa resultante debe ser una capa
+        # overlay "simple", válida para casper y para el overlay de 1-SetupLiveCD.sh.
+        montar "$CHROOT_DIR" -t overlay overlay \
+            -o "lowerdir=${lower},upperdir=${SQUASHFS_DIR},workdir=${WORK_DIR}/ovl_work,redirect_dir=off,index=off,metacopy=off"
+    else
+        CHROOT_DIR="${SQUASHFS_DIR}"
+    fi
+
+    # ── Sistemas de ficheros virtuales + DNS ───────────────────────────────
+    montar "${CHROOT_DIR}/proc"    -t proc  proc
+    montar "${CHROOT_DIR}/sys"     -t sysfs sysfs
+    montar "${CHROOT_DIR}/dev"     --bind /dev
+    montar "${CHROOT_DIR}/dev/pts" --bind /dev/pts
+    montar "${CHROOT_DIR}/run"     -t tmpfs tmpfs     # nada de /run acaba en la capa
+    # /etc/resolv.conf suele ser enlace a /run/systemd/resolve/stub-resolv.conf:
+    # se crea su destino en el tmpfs con el DNS del host.
+    local resolv_link
+    resolv_link="$(readlink "${CHROOT_DIR}/etc/resolv.conf" 2>/dev/null || true)"
+    if [[ "$resolv_link" == */run/* ]]; then
+        local resolv_dst="${CHROOT_DIR}/run/${resolv_link#*/run/}"
+        mkdir -p "$(dirname "$resolv_dst")"
+        cp -L /etc/resolv.conf "$resolv_dst"
+    else
+        [[ -f "${CHROOT_DIR}/etc/resolv.conf" ]] || touch "${CHROOT_DIR}/etc/resolv.conf"
+        montar "${CHROOT_DIR}/etc/resolv.conf" --bind "$(readlink -f /etc/resolv.conf)"
+    fi
+
+    # Que ningún postinst arranque servicios dentro del chroot
+    printf '#!/bin/sh\nexit 101\n' > "${CHROOT_DIR}/usr/sbin/policy-rc.d"
+    chmod +x "${CHROOT_DIR}/usr/sbin/policy-rc.d"
+
+    local apt_opts=(-y -o Dpkg::Options::="--force-confold" -o Dpkg::Options::="--force-confdef")
+    [[ -n "$APT_PROXY" ]] && apt_opts+=(-o Acquire::http::Proxy="$APT_PROXY") \
+                          && info "  Proxy apt: ${APT_PROXY}"
+    local en_chroot=(chroot "$CHROOT_DIR" /usr/bin/env -i
+        PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LANG=C.UTF-8
+        DEBIAN_FRONTEND=noninteractive)
+
+    local ok=1
+    if ! "${en_chroot[@]}" apt-get "${apt_opts[@]}" update </dev/null; then
+        warn "apt-get update falló (¿sin red/proxy?) → la ISO se genera SIN actualizar"
+        ok=0
+    fi
+
+    if [[ "$ok" -eq 1 ]]; then
+        # Retener kernel/módulos/cabeceras (ver cabecera de la sección)
+        local kernel_pkgs
+        mapfile -t kernel_pkgs < <("${en_chroot[@]}" dpkg-query -W -f='${Package}\n' \
+            | grep -E '^linux-(generic|image|headers|modules|signed|main-modules|hwe|tools|virtual)' || true)
+        if [[ ${#kernel_pkgs[@]} -gt 0 ]]; then
+            "${en_chroot[@]}" apt-mark hold "${kernel_pkgs[@]}" >/dev/null
+            log "  Kernel retenido (${#kernel_pkgs[@]} paquetes linux-*)"
+        fi
+
+        info "  Paquetes a actualizar: $("${en_chroot[@]}" apt-get -s "${apt_opts[@]}" full-upgrade </dev/null | grep -c '^Inst ' || true)"
+        "${en_chroot[@]}" apt-get "${apt_opts[@]}" full-upgrade </dev/null \
+            || { desmontar_chroot; err "apt-get full-upgrade falló en el chroot (capa a medio actualizar: no se genera la ISO)."; }
+        "${en_chroot[@]}" apt-get "${apt_opts[@]}" autoremove --purge </dev/null || true
+
+        [[ ${#kernel_pkgs[@]} -gt 0 ]] && "${en_chroot[@]}" apt-mark unhold "${kernel_pkgs[@]}" >/dev/null
+    fi
+
+    # ── Limpieza: que la capa no crezca con cachés ni restos del chroot ────
+    "${en_chroot[@]}" apt-get clean </dev/null || true
+    rm -f  "${CHROOT_DIR}/usr/sbin/policy-rc.d"
+    rm -rf "${CHROOT_DIR}"/var/lib/apt/lists/* "${CHROOT_DIR}"/tmp/* "${CHROOT_DIR}"/root/.bash_history
+    desmontar_chroot
+    CHROOT_DIR=""
+
+    [[ "$ok" -eq 1 ]] && log "Paquetes actualizados en $(( (SECONDS - t0) / 60 )) min $(( (SECONDS - t0) % 60 )) s"
+    return 0
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -158,6 +309,8 @@ customize_squashfs() {
 
     log "Desempaquetando SquashFS..."
     unsquashfs -d "${SQUASHFS_DIR}" "${squashfs_path}" || err "Fallo al desempaquetar SquashFS."
+
+    actualizar_paquetes_squashfs "${squashfs_path}"
 
     log "Copiando 0b-Github.sh al sistema Live"
     cp "${PERSO_SCRIPT}" "${SQUASHFS_DIR}/0b-Github.sh"
