@@ -15,6 +15,9 @@ hace `apt-get full-upgrade`, que instala un **kernel nuevo**, y Ansible corre
 módulos y VMware pedía compilarlos. VMware **no usa DKMS**, así que cualquier
 actualización de kernel posterior provocaba lo mismo.
 
+**Estado**: ✅ comprobado el 2026-10-06 con una reinstalación completa en SMRD-01 (VMware 26.0.1,
+kernels 7.0.0-14 y 7.0.0-38). Hay módulos para los dos kernels y no aparece el diálogo.
+
 ## Qué hace
 1. Comprueba si `vmware --version` responde y extrae la versión instalada.
 2. Si no está instalado o la versión no coincide con `vmware_version`:
