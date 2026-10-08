@@ -358,6 +358,34 @@ propiedades (`compression`, `dedup`, `recordsize`, `dedupratio`, feature
 
 ---
 
+## Reinstalación por red — `ISO/26.04/utiles/ArranquePorNFS/`
+
+Herramientas **manuales del operador**, fuera de la cadena automática, para
+arrancar el Live de instalación desde un **export NFS** del NAS
+(`10.0.72.253` / `10.0.32.253` / `10.0.1.253` en
+`/mnt/DiscosRapidos/LiveCDs/Ubuntu26.04-IESMHP`), que contiene el **contenido
+extraído** de la ISO (`casper/`), no el `.iso`. Parámetros de arranque:
+`boot=casper netboot=nfs nfsroot=<servidor:/ruta> ip=dhcp`.
+
+- **`grub-nfs-live.sh servidor:/ruta`** (opción A, equipo con Linux + SSH):
+  comprueba el NFS, pide confirmación (`read -p`, excepción permitida en la
+  regla 4 del `CLAUDE.md` raíz), copia `vmlinuz`/`initrd` a `/boot/live`, hace
+  copia de `/etc/default/grub` + `/etc/grub.d` en `/root/grub-backup-*.tar.gz`,
+  **desactiva todas las demás entradas de GRUB** y crea `/etc/grub.d/09_nfs_live`
+  como entrada por defecto (timeout 5 s). `--restaurar <copia>` lo deshace.
+- **`iso arranque por nfs/crea-iso-arranque-nfs.sh`** + `Pasos para generar una
+  iso autorrancable.md` (opción B): USB/ISO híbrida pequeña, solo UEFI (shim y
+  GRUB firmados de la ISO oficial), con un menú de servidores NFS; en BIOS muestra
+  un error y se apaga.
+- Kernel/initrd locales **deben coincidir** con el squashfs del NAS: si se
+  actualiza la imagen, hay que volver a copiarlos.
+- Ojo sin monitor: la instalación del Live IESMHP la lanza un autostart de GNOME,
+  y en la opción A un fallo del NFS deja el equipo en la shell de initramfs sin SSH.
+
+Detalle completo, observaciones y riesgos: `ISO/26.04/utiles/ArranquePorNFS/CLAUDE.md`.
+
+---
+
 ## Ficheros de datos
 
 - `macs.csv` — en raíz del repo (`/opt/IAC-IESMHP/macs.csv`). Formato: `MAC, Equipo, IPf, Comentario` (las líneas que empiezan por `#` son comentarios). Por la MAC se asigna el nombre del equipo (`prefijo-NN`, `-00` reservado al profesor) y, si la interfaz está en DHCP, se convierte a IP estática conservando máscara/gateway/DNS y cambiando solo el último octeto por `IPf`. Usado por `2-SetupSOdesdeLiveCD.sh` y `NombreIP.sh`.
