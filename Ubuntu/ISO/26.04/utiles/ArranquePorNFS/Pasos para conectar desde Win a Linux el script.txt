@@ -1,0 +1,33 @@
+Queremos copiar el script al equipo remoto (desde una terminal powershell Windows) y ejecutarlo . El equipo permite conectarse por certificado como root al Linux remoto.
+
+Desde un terminal en la carpeta Windows:
+
+$ip=Read-Host "IP Linux?"
+Get-Content .\grub-nfs-live.sh -Raw | ssh root@$ip "cat > grub-nfs-live.sh  && chmod +x grub-nfs-live.sh "
+ssh root@$ip
+
+
+Desde un terminal en la carpeta Linux:
+#!/bin/bash
+read -rp "IP Linux? " ip
+ssh root@"$ip" 'cat > grub-nfs-live.sh && chmod +x grub-nfs-live.sh' < grub-nfs-live.sh
+ssh root@"$ip"
+
+
+
+En linux de la maquina a formatear:
+./grub-nfs-live.sh 10.0.72.253:/mnt/DiscosRapidos/LiveCDs/Ubuntu26.04-IESMHP
+./nfsgrub.sh 10.0.32.253:/mnt/DiscosRapidos/LiveCDs/Ubuntu26.04-IESMHP
+
+
+
+
+Recordatorio: para ver que tiene publicado un servidor nfs
+showmount -e [ip]
+
+Ejemplo: 
+showmount -e 10.0.72.253
+Export list for 10.0.72.253:
+/mnt/DiscosRapidos/PruebaRapidosX3 *
+/mnt/DiscosRapidos/LiveCDs         (everyone)
+root@ld202609271157:~#

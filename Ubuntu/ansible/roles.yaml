@@ -28,7 +28,7 @@
      # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml
      - { role: certificados, tags: certificados }
      - { role: obs, tags: obs }
-     - { role: rdp, tags: rdp } # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
+     #- { role: rdp, tags: rdp } # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
      - { role: vscode, tags: vscode }
      - { role: clienteNAS, tags: clienteNAS } #Cliente NFS del NAS del DEPARTAMENTO: 
                       #autodescubre exports y los monta RO en /mnt/nasDepInfo (ver roles/clienteNAS/CLAUDE.md)
