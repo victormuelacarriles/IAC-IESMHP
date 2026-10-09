@@ -17,7 +17,10 @@ ssh root@"$ip"
 
 En linux de la maquina a formatear:
 ./grub-nfs-live.sh 10.0.72.253:/mnt/DiscosRapidos/LiveCDs/Ubuntu26.04-IESMHP
-./nfsgrub.sh 10.0.32.253:/mnt/DiscosRapidos/LiveCDs/Ubuntu26.04-IESMHP
+./grub-nfs-live 10.0.72.140:/srv/ubuntu-live 10.0.72.0/24
+
+
+./grub-nfs-live 10.0.32.253:/mnt/DiscosRapidos/LiveCDs/Ubuntu26.04-IESMHP
 
 
 
