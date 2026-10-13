@@ -62,7 +62,8 @@
   when: external_keys_stat.stat.exists
 - name: Convertir claves externas en lista
   set_fact:
-    external_keys: "{{ external_keys_raw.content | b64decode | splitlines() }}"
+    # splitlines es un método de str, no un filtro de Jinja; se descartan líneas vacías y comentarios
+    external_keys: "{{ (external_keys_raw.content | b64decode).splitlines() | map('trim') | reject('match', '^(#.*)?$') | list }}"
   when: external_keys_stat.stat.exists
 - name: Añadir claves externas a authorized_keys si no están
   lineinfile:
