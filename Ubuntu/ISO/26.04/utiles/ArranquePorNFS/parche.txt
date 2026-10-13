@@ -10,4 +10,14 @@ ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-
 
 #sh /opt/IAC-IESMHP/Ubuntu/ansible/roles.sh
 
-cat
+
+
+
+###
+IP=10.0.32.122 && ssh-keygen -f '/root/.ssh/known_hosts' -R $IP && ssh usuario@$IP -o StrictHostKeyChecking=no
+sudo su
+cd /opt
+rm -rf /opt/IAC-IESMHP
+git clone https://github.com/victormuelacarriles/IAC-IESMHP.git
+cd /opt/IAC-IESMHP/Ubuntu/ansible
+ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no" --tags "certificados"
