@@ -22,7 +22,9 @@
 
 - name: Convertir clave pública a string
   set_fact:
-    root_pubkey_str: "{{ root_pubkey.content | b64decode }}"
+    # trim: el .pub acaba en salto de línea y, con él, lineinfile nunca encuentra
+    # la línea ya escrita y la vuelve a añadir (más una línea vacía) en cada ejecución
+    root_pubkey_str: "{{ root_pubkey.content | b64decode | trim }}"
 
 - name: Añadir claves gerenada a authorized_keys si no están
   lineinfile:
@@ -77,4 +79,20 @@
   loop: "{{ external_keys }}"
   when: external_keys_stat.stat.exists
   ####################################################
+
+# Limpia lo que dejaron las ejecuciones anteriores (claves repetidas y líneas vacías).
+# Conserva el orden y la primera aparición de cada línea.
+- name: Quitar líneas vacías y duplicadas de authorized_keys
+  shell: |
+    f=/root/.ssh/authorized_keys
+    [ -f "$f" ] || exit 0
+    t=$(mktemp)
+    awk '{ sub(/[ \t\r]+$/, "") } NF && !visto[$0]++' "$f" > "$t"
+    if ! cmp -s "$f" "$t"; then
+      cat "$t" > "$f"
+      echo CAMBIADO
+    fi
+    rm -f "$t"
+  register: authorized_keys_limpieza
+  changed_when: "'CAMBIADO' in authorized_keys_limpieza.stdout"
 #TODO:  eliminar claves que no estén el fichero externo?  (controlar por variable)
