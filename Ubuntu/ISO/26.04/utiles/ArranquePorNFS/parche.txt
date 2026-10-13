@@ -1,0 +1,11 @@
+sh usuario@10.0.72.124
+sudo su
+sed -i 's/^#- { role: rdp, tags: rdp }/- { role: rdp, tags: rdp }/' /opt/IAC-IESMHP/Ubuntu/ansible/roles.yaml
+sed -i 's/^\([[:space:]]*\)#- { role: rdp, tags: rdp }/\1- { role: rdp, tags: rdp }/' /opt/IAC-IESMHP/Ubuntu/ansible/roles.yaml
+cat  /opt/IAC-IESMHP/Ubuntu/ansible/roles.yaml|grep rdp
+cd /opt/IAC-IESMHP/Ubuntu/ansible
+ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no" --tags "rdp"
+
+#sh /opt/IAC-IESMHP/Ubuntu/ansible/roles.sh
+
+cat
