@@ -1,4 +1,6 @@
-sh usuario@10.0.72.124
+
+IP=10.0.32.127 && ssh-keygen -f '/root/.ssh/known_hosts' -R $IP && ssh root@$IP -o StrictHostKeyChecking=no
+
 sudo su
 sed -i 's/^#- { role: rdp, tags: rdp }/- { role: rdp, tags: rdp }/' /opt/IAC-IESMHP/Ubuntu/ansible/roles.yaml
 sed -i 's/^\([[:space:]]*\)#- { role: rdp, tags: rdp }/\1- { role: rdp, tags: rdp }/' /opt/IAC-IESMHP/Ubuntu/ansible/roles.yaml
