@@ -11,9 +11,9 @@ Gestiona las claves SSH del usuario **root** del equipo:
 
 ## Estructura
 - `tasks/main.yml`
-- `defaults/main.yml` — `external_keys_file: "/root/extra_authorized_keys"` (comentada la alternativa `/opt/iesmhpMint/Autorizados.txt`).
+- `defaults/main.yml` — `external_keys_file: "/opt/IAC-IESMHP/Autorizados.txt"` 
 
 ## Avisos / TODO conocidos
 - El bloque *known_hosts* (tareas 4) está marcado como problemático en el propio fichero: `ssh-keygen -F` funciona pero la conexión SSH a sí mismo puede fallar. Mantener vigilado.
-- `external_keys_file` apunta a una ruta local (`/root/extra_authorized_keys`) que **no se actualiza desde GitHub** todavía (TODO en el código).
+
 - Pendiente: opción para *eliminar* de `authorized_keys` las claves que ya no estén en el fichero externo (controlado por variable).
