@@ -13,6 +13,10 @@ read -rp "IP Linux? " ip
 ssh root@"$ip" 'cat > grub-nfs-live.sh && chmod +x grub-nfs-live.sh' < grub-nfs-live.sh
 ssh root@"$ip"
 
+./grub-nfs-live.sh 10.0.32.253:/mnt/DiscosRapidos/LiveCDs/Ubuntu26.04-IESMHP
+
+122-138
+excepto 132
 
 
 En linux de la maquina a formatear:
@@ -20,7 +24,7 @@ En linux de la maquina a formatear:
 ./grub-nfs-live 10.0.72.140:/srv/ubuntu-live 10.0.72.0/24
 
 
-./grub-nfs-live 10.0.32.253:/mnt/DiscosRapidos/LiveCDs/Ubuntu26.04-IESMHP
+./grub-nfs-live.sh 10.0.32.253:/mnt/DiscosRapidos/LiveCDs/Ubuntu26.04-IESMHP
 
 
 
