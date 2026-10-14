@@ -253,13 +253,72 @@
           changed_when: false
           failed_when: false
 
-        # waitsync <intentos> <corrección máx> <skew> <intervalo>: bloquea hasta
-        # que el reloj quede dentro de 0.05 s o agote ~30 s (30×1 s). best-effort:
-        # si expira no falla el play; el resumen final dirá si quedó sincronizado.
-        - name: Esperar a que chrony sincronice el reloj (waitsync, máx ~30 s)
-          ansible.builtin.command: chronyc waitsync 30 0.05 0 1
+        # FALSA BANDERA (2026-10-14, SMRD-00 con Ubuntu 26.04): chrony puede
+        # tener muestras buenas del DC (Reach 377, desfase ~1 s) y aun así NO
+        # elegir fuente (`^-`, sin `*`) → NTPSynchronized=no para siempre y
+        # el antiguo `waitsync 30` quemaba 30 s en cada pase para nada. Lo que
+        # exige Kerberos no es esa bandera sino desfase < 5 min CON EL DC. Así
+        # que se sondea hasta que pase una de las dos cosas: el reloj queda
+        # sincronizado (SYNC) o el desfase medido contra el NTP del dominio es
+        # < preparaad_desfase_max (DC <s>). Sale en cuanto se cumple; si no,
+        # ~30 s. Salidas: "SYNC" | "DC <desfase_abs_s>" | "SINDC" (sin muestra
+        # del DC). chronyc -n → la columna 3 es la IP (preparaad_ntp en IPs).
+        - name: Esperar a que el reloj valga para Kerberos (chrony, máx ~30 s)
+          ansible.builtin.shell: |
+            if [ "$(timedatectl show -p NTPSynchronized --value)" = yes ]; then echo SYNC; exit 0; fi
+            chronyc -n -c sources | awk -F, -v ips="{{ preparaad_ntp | replace(' ', '') }}" '
+              BEGIN { n = split(ips, a, ","); for (i = 1; i <= n; i++) dc[a[i]] = 1 }
+              ($3 in dc) && $6 != 0 && $9 != "" { o = ($9 < 0 ? -$9 : $9); if (m == "" || o < m) m = o }
+              END { if (m == "") print "SINDC"; else printf "DC %.3f\n", m }'
+          register: preparaad_chrony_estado
+          until: >-
+            preparaad_chrony_estado.stdout == 'SYNC' or
+            (preparaad_chrony_estado.stdout.startswith('DC ') and
+             (preparaad_chrony_estado.stdout.split()[1] | float) < (preparaad_desfase_max | float))
+          retries: 10
+          delay: 3
           changed_when: false
           failed_when: false
+
+        # Rescate: el DC responde pero con desfase GRANDE y chrony sigue sin
+        # elegirlo (no dará el salto nunca). Se para chrony y se hace un salto
+        # único con `chronyd -q` SOLO contra el NTP del dominio: con directivas
+        # en la línea de órdenes chronyd NO lee chrony.conf (ni las fuentes NTS
+        # de Canonical de 26.04), así que la selección no se interfiere. Después
+        # se vuelve a arrancar chrony. best-effort (-t 20 = máx 20 s).
+        - name: Salto de rescate del reloj contra el DC (chronyd -q)
+          ansible.builtin.shell: |
+            systemctl stop {{ preparaad_chrony_svc }}
+            chronyd -q -t 20 {% for ntp in preparaad_ntp.split(',') %}'server {{ ntp | trim }} iburst' {% endfor %}'maxdistance 16.0'
+            rc=$?
+            systemctl start {{ preparaad_chrony_svc }}
+            exit $rc
+          register: preparaad_chrony_rescate
+          when: preparaad_chrony_estado.stdout | default('') is match('DC ')
+                and (preparaad_chrony_estado.stdout.split()[1] | float) >= (preparaad_desfase_max | float)
+          failed_when: false
+
+        - name: Releer el desfase con el DC tras el rescate
+          ansible.builtin.shell: |
+            if [ "$(timedatectl show -p NTPSynchronized --value)" = yes ]; then echo SYNC; exit 0; fi
+            chronyc -n -c sources | awk -F, -v ips="{{ preparaad_ntp | replace(' ', '') }}" '
+              BEGIN { n = split(ips, a, ","); for (i = 1; i <= n; i++) dc[a[i]] = 1 }
+              ($3 in dc) && $6 != 0 && $9 != "" { o = ($9 < 0 ? -$9 : $9); if (m == "" || o < m) m = o }
+              END { if (m == "") print "SINDC"; else printf "DC %.3f\n", m }'
+          # Nombre distinto a propósito: un register en una tarea SALTADA pisa
+          # la variable con el resultado "skipped".
+          register: preparaad_chrony_estado_post
+          until: preparaad_chrony_estado_post.stdout != 'SINDC'
+          retries: 5
+          delay: 3
+          changed_when: false
+          failed_when: false
+          when: preparaad_chrony_rescate is not skipped
+
+        - name: Quedarse con el último estado del reloj (chrony)
+          ansible.builtin.set_fact:
+            preparaad_chrony_estado: "{{ preparaad_chrony_estado_post }}"
+          when: preparaad_chrony_estado_post is not skipped
 
     # --- systemd-timesyncd (Ubuntu Desktop por defecto) -----------------
     - name: Apuntar systemd-timesyncd al NTP del dominio
@@ -324,6 +383,27 @@
   register: preparaad_ntpsync
   changed_when: false
   failed_when: false
+  tags: [preparaad, ad]
+
+# Veredicto ÚNICO del reloj (lo usan la unión y el resumen). Válido si
+# NTPSynchronized=yes o, con chrony, si el desfase medido contra el DC es
+# < preparaad_desfase_max aunque chrony no haya elegido fuente (falsa bandera).
+- name: Decidir si el reloj vale para Kerberos
+  ansible.builtin.set_fact:
+    preparaad_reloj_ok: >-
+      {{ (preparaad_ntpsync.stdout | default('')) == 'yes' or
+         (_estado.startswith('DC ') and (_estado.split()[1] | float) < (preparaad_desfase_max | float)) }}
+    preparaad_reloj_detalle: >-
+      {{ 'SÍ (sincronizado por NTP)' if (preparaad_ntpsync.stdout | default('')) == 'yes'
+         else ('SÍ — desfase con el DC ' + _estado.split()[1] + ' s (< ' + (preparaad_desfase_max | string)
+               + ' s); chrony no ha elegido fuente (falsa bandera NTPSynchronized=no, ver chronyc selectdata)'
+               if _estado.startswith('DC ') and (_estado.split()[1] | float) < (preparaad_desfase_max | float)
+               else ('NO — desfase con el DC ' + _estado.split()[1] + ' s' if _estado.startswith('DC ')
+                     else 'NO — sin muestra del NTP del dominio')
+                    + '; Kerberos fallará si supera 5 min. Revisa NTP/conectividad'
+                    + ((' (NTP=' + preparaad_ntp + ')') if preparaad_ntp != '' else ' (preparaad_ntp VACÍO — fíjalo en entornoAD.yml)')) }}
+  vars:
+    _estado: "{{ preparaad_chrony_estado.stdout | default('') }}"
   tags: [preparaad, ad]
 
 # AD trunca el nombre de equipo a 15 caracteres (NetBIOS): dos hostnames que
@@ -484,6 +564,14 @@
     - preparaad_password_union != ''
   tags: [preparaad, ad]
   block:
+    # Misma red de seguridad que 3-UneAlDominio.sh: con el reloj desfasado,
+    # realm join crea la cuenta de equipo (LDAP) y falla al final (Kerberos)
+    # → objeto HUÉRFANO en la OU. Mejor no intentarlo en este equipo.
+    - name: Comprobar que el reloj vale para Kerberos antes de unir
+      ansible.builtin.fail:
+        msg: "No se une al dominio: reloj NO válido para Kerberos — {{ preparaad_reloj_detalle | trim }}"
+      when: not (preparaad_reloj_ok | bool)
+
     # realm join lee la contraseña por stdin con --unattended (sin tty).
     # Escribe /etc/sssd/sssd.conf, crea la cuenta de equipo + keytab
     # (/etc/krb5.keytab) y habilita+arranca sssd.service él mismo.
@@ -607,5 +695,5 @@
       - "Dominio visible por DNS: {{ 'SÍ' if (preparaad_discover.rc | default(-1)) == 0 else ('no comprobado' if preparaad_discover is skipped or preparaad_dominio == '' else ('NO — ni con split-DNS hacia ' + preparaad_dominio_dnss + ' (¿se llega a esas IPs?)' if preparaad_dns_dropin is defined and preparaad_dns_dropin is not skipped else 'NO — el DNS del equipo no resuelve el dominio (la unión fallará)')) }}"
       - "Split-DNS hacia los DC: {{ 'no comprobado (sin dominio)' if preparaad_dominio == '' else ('ACTIVO → ' + preparaad_dominio_dnss if preparaad_dns_dropin is defined and preparaad_dns_dropin is not skipped else 'no aplicado en este pase (el dominio ya resuelve — puede venir de un drop-in anterior)') }}"
       - "nsswitch hosts (.local/mDNS): {{ 'AJUSTADO en este pase (dns antepuesto a mdns4_minimal)' if (preparaad_nsswitch is defined and preparaad_nsswitch is changed) else ('AVISO: mdns4_minimal sigue ANTES de dns (línea no estándar — ajustar a mano: ping a *.local fallará)' if (preparaad_nsswitch_linea.stdout | default('')) is search('mdns4_minimal.* dns') else 'OK') }}"
-      - "Reloj sincronizado por NTP: {{ 'SÍ' if (preparaad_ntpsync.stdout | default('')) == 'yes' else ('NO — Kerberos fallará por desfase >5 min con el DC; revisa NTP/conectividad' + ((' (NTP=' + preparaad_ntp + ')') if preparaad_ntp != '' else ' (preparaad_ntp VACÍO — fíjalo en entornoAD.yml)')) }}"
+      - "Reloj válido para Kerberos: {{ preparaad_reloj_detalle | trim }}"
   tags: [preparaad, ad]

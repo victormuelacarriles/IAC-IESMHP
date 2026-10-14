@@ -42,10 +42,18 @@ Cumple el TODO `predominio` de `roles.yaml`. Sigue la doc oficial de Ubuntu:
    - **chrony** (Mint/Debian; no traen timesyncd): añade `server <ntp> iburst
      prefer trust` **+ `maxdistance 16.0`** a `chrony.conf` (bloque marcado,
      idempotente), reinicia el servicio, **arma el salto** (`chronyc makestep
-     0.1 3` — step, no slew, en las próximas muestras) y **espera** (`chronyc
-     waitsync 30 0.05 0 1`, máx ~30 s). OJO: un `chronyc makestep` lanzado al
-     instante tras el restart es un **no-op** (chrony aún no tiene muestras del
-     NTP); de ahí el armar+esperar. **El `maxdistance` es imprescindible con DC
+     0.1 3` — step, no slew, en las próximas muestras) y **sondea** (máx ~30 s,
+     10×3 s) hasta que el reloj esté sincronizado **o** el desfase medido
+     contra el DC (`chronyc -n -c sources`) sea `< preparaad_desfase_max` (60
+     s): sale en cuanto se cumple (sustituye al antiguo `waitsync 30`, que con
+     la *falsa bandera* —ver Estado/Notas— esperaba siempre 30 s para nada). Si
+     el DC responde pero el desfase es **≥ 60 s** y chrony no lo corrige, hace
+     un **salto de rescate**: para chrony, `chronyd -q -t 20 'server <ntp>
+     iburst' 'maxdistance 16.0'` (con directivas en la línea de órdenes no lee
+     `chrony.conf`, así que solo consulta el DC) y lo vuelve a arrancar. OJO: un
+     `chronyc makestep` lanzado al instante tras el restart es un **no-op**
+     (chrony aún no tiene muestras del NTP); de ahí el armar+sondear.
+     `preparaad_ntp` debe ir en **IPs** (con `-n` chronyc muestra IPs). **El `maxdistance` es imprescindible con DC
      Windows**: w32time anuncia una *distancia de raíz* alta (~10 s) y el
      `maxdistance` por defecto de chrony (3 s) marca la fuente `^?`
      (inutilizable) → chrony **nunca la selecciona** y `makestep`/`waitsync` se
@@ -58,8 +66,11 @@ Cumple el TODO `predominio` de `roles.yaml`. Sigue la doc oficial de Ubuntu:
      `/etc/systemd/timesyncd.conf.d/50-iac-ad.conf`, lo reinicia y **sondea**
      `timedatectl … NTPSynchronized` hasta `yes` o ~30 s.
    - Si no hay ninguno de los dos, avisa (`debug`) y no toca el reloj.
-   El resumen final muestra SÍ/NO con pista accionable (NTP/conectividad al DC)
-   leyendo `timedatectl … NTPSynchronized`.
+   Veredicto único `preparaad_reloj_ok` (+ `preparaad_reloj_detalle`):
+   `NTPSynchronized=yes` **o** desfase con el DC `< preparaad_desfase_max`. Lo
+   usan la unión (si es falso, no se lanza `realm join`) y la línea "Reloj
+   válido para Kerberos" del resumen, que distingue sincronizado / falsa
+   bandera (con el desfase) / NO (con pista accionable).
 4. **Hostname**: aviso si supera 15 caracteres (límite NetBIOS de la cuenta
    de equipo en AD). Los `IABD-NN`/`SMRD-NN` van sobrados.
 5. **`/etc/krb5.conf`** (solo si se conoce el dominio): realm por defecto en
@@ -144,6 +155,7 @@ Todas se pueden pisar puntualmente con `-e` (extra-vars > include_vars).
 | Variable | Por defecto | Para qué |
 |----------|-------------|----------|
 | `preparaad_arregla_nsswitch` | `true` | En dominios `.local`: anteponer `dns` a `mdns4_minimal` en `/etc/nsswitch.conf` (sin esto, ping/kinit/adcli no resuelven `*.local` aunque el split-DNS funcione) |
+| `preparaad_desfase_max` | `60` | Desfase máximo (s) con el NTP del dominio para dar el reloj por bueno aunque `NTPSynchronized=no` (falsa bandera de chrony). Por encima, salto de rescate con `chronyd -q`. Kerberos admite 300 s. `3-UneAlDominio.sh` usa el mismo umbral fijo |
 | `preparaad_paquetes` | lista | Stack a instalar |
 | `preparaad_unir` | `false` | Intentar la unión en este pase |
 | `preparaad_password_union` | `""` | Contraseña de la cuenta de unión — **solo vía vault (`utilesAD/2-CreaVault.sh`) o `-e`** |
@@ -251,10 +263,22 @@ Verificar cada una por separado: `resolvectl query iesmhp.local` (resolved) y
   de equipo por LDAP pero falla la finalización Kerberos (keytab/auth de
   máquina) → el equipo **aparece unido** pero la **autenticación falla** y queda
   un objeto huérfano en la OU. Síntoma del mensaje "posible fallo de
-  sincronización de reloj". Por eso el rol ahora **espera** a la sincronización
-  (chrony `waitsync` / sondeo de timesyncd) y `3-UneAlDominio.sh` aborta si el
-  reloj no está OK. Limpiar un objeto huérfano: `adcli delete-computer
-  --domain=DOMINIO --login-user=svc-union-linux HOSTNAME`.
+  sincronización de reloj". Por eso el rol **espera** a que el reloj valga
+  (sondeo chrony / timesyncd), la unión desatendida (`preparaad_unir=true`)
+  **falla antes de `realm join`** si `preparaad_reloj_ok` es falso, y
+  `3-UneAlDominio.sh` aborta igual. Limpiar un objeto huérfano: `adcli
+  delete-computer --domain=DOMINIO --login-user=svc-union-linux HOSTNAME`.
+- **Falsa bandera `NTPSynchronized=no` (2026-10-14, SMRD-00, Ubuntu 26.04)**:
+  chrony tenía muestras buenas del DC (`^- belgica1 … 377 … -997ms`) pero **no
+  elegía fuente** (ninguna `*`, `Reference ID 00000000`) → `NTPSynchronized=no`
+  para siempre aunque el desfase era ~1 s. El `waitsync 30` gastaba 30 s en
+  cada pase y `3-UneAlDominio.sh` abortaba sin motivo. Desde entonces el
+  criterio es el **desfase medido contra el DC** (`chronyc -n -c sources`,
+  columna 9) `< preparaad_desfase_max` (60 s), no solo la bandera. **Causa de
+  fondo aún sin confirmar** (sospechas: selección de chrony con las fuentes NTS
+  de Canonical que trae 26.04 —`authselectmode`— o el estado que anuncia el
+  w32time del DC). Para averiguarla: `chronyc selectdata` (la letra de estado da
+  el motivo) y `chronyc ntpdata <IP_DC>`.
 - **VMware — sincronizar la hora con el host (recomendado)**: en una máquina
   virtual VMware, activar **Settings → Options → VMware Tools → "Synchronize
   guest time with host"**. En las aulas el **UDP 123 (NTP)** suele estar filtrado

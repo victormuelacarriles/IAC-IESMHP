@@ -25,6 +25,13 @@
 # legítimos, impresora.local..., siguen funcionando como fallback).
 preparaad_arregla_nsswitch: true
 
+# Desfase máximo (s) con el NTP del dominio para dar el reloj por bueno
+# aunque NTPSynchronized=no (chrony con muestras del DC pero sin elegir
+# fuente: "falsa bandera", 2026-10-14). Kerberos admite 300 s; 60 deja
+# margen. Por encima, el rol intenta un salto de rescate (chronyd -q).
+# 3-UneAlDominio.sh usa el mismo umbral (60 s, fijo en el script).
+preparaad_desfase_max: 60
+
 # Stack de unión a dominio. Núcleo según la doc oficial de Ubuntu
 # (https://ubuntu.com/server/docs/how-to/sssd/with-active-directory/):
 # sssd-ad + sssd-tools + realmd + adcli. El resto son apoyos.

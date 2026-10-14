@@ -72,21 +72,12 @@ echo "[OK] Dominio visible por DNS."
 # confuso ("posible fallo de sincronización"). Mejor abortar ANTES, sin pedir
 # credenciales ni ensuciar el dominio.
 clock_ok() { [[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" == "yes" ]]; }
-if ! clock_ok; then
-    echo "[AVISO] El reloj NO está sincronizado por NTP. Forzando ajuste${NTP:+ (NTP=$NTP)}..."
-    if command -v chronyc >/dev/null; then
-        chronyc makestep 0.1 3      >/dev/null 2>&1 || true
-        chronyc waitsync 30 0.05 0 1 >/dev/null 2>&1 || true
-    else
-        systemctl restart systemd-timesyncd 2>/dev/null || true
-        for _ in $(seq 1 10); do clock_ok && break; sleep 3; done
-    fi
-fi
 # Plan B (chrony): NTPSynchronized=no solo dice que chrony no ha ELEGIDO fuente
 # (p. ej. el DC sale '^-' por la selección de chrony), no que el reloj esté mal.
 # Lo que exige Kerberos es <5 min de desfase CON EL DC: si chrony tiene una
 # muestra reciente del NTP del dominio (Reach≠0) y el desfase medido es < 60 s
-# (margen amplio bajo los 5 min), se continúa con un aviso.
+# (margen amplio bajo los 5 min), se continúa con un aviso. Mismo umbral que
+# preparaad_desfase_max del rol (que además ya intentó el salto de rescate).
 desfase_dc_ok() {
     command -v chronyc >/dev/null && [[ -n "${NTP:-}" ]] || return 1
     local ip linea
@@ -103,6 +94,18 @@ desfase_dc_ok() {
     done
     return 1
 }
+# Se mira el desfase con el DC ANTES del waitsync: con la falsa bandera, el
+# waitsync solo quemaba 30 s para nada.
+if ! clock_ok && ! desfase_dc_ok; then
+    echo "[AVISO] El reloj NO está sincronizado por NTP. Forzando ajuste${NTP:+ (NTP=$NTP)}..."
+    if command -v chronyc >/dev/null; then
+        chronyc makestep 0.1 3      >/dev/null 2>&1 || true
+        chronyc waitsync 30 0.05 0 1 >/dev/null 2>&1 || true
+    else
+        systemctl restart systemd-timesyncd 2>/dev/null || true
+        for _ in $(seq 1 10); do clock_ok && break; sleep 3; done
+    fi
+fi
 if ! clock_ok && ! desfase_dc_ok; then
     echo "[ERR] El reloj sigue SIN sincronizar (timedatectl: NTPSynchronized=no)."
     echo "      Kerberos exige <5 min de desfase con el DC; 'realm join' fallaría"
