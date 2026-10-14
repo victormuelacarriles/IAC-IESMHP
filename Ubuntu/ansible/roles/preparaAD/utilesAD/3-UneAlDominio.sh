@@ -82,7 +82,28 @@ if ! clock_ok; then
         for _ in $(seq 1 10); do clock_ok && break; sleep 3; done
     fi
 fi
-if ! clock_ok; then
+# Plan B (chrony): NTPSynchronized=no solo dice que chrony no ha ELEGIDO fuente
+# (p. ej. el DC sale '^-' por la selección de chrony), no que el reloj esté mal.
+# Lo que exige Kerberos es <5 min de desfase CON EL DC: si chrony tiene una
+# muestra reciente del NTP del dominio (Reach≠0) y el desfase medido es < 60 s
+# (margen amplio bajo los 5 min), se continúa con un aviso.
+desfase_dc_ok() {
+    command -v chronyc >/dev/null && [[ -n "${NTP:-}" ]] || return 1
+    local ip linea
+    for ip in ${NTP//,/ }; do
+        # CSV: modo,estado,nombre,estrato,poll,reach,lastrx,offset_aj,offset_med,error
+        linea="$(chronyc -n -c sources 2>/dev/null | awk -F, -v ip="$ip" '$3==ip' | head -n1)"
+        [[ -n "$linea" ]] || continue
+        if awk -F, '$6!=0 && $9!="" && ($9<0?-$9:$9) < 60 {ok=1} END{exit !ok}' <<<"$linea"; then
+            echo "[AVISO] chrony no ha seleccionado fuente, pero el desfase con el DC ($ip)"
+            echo "        es de $(awk -F, '{printf "%.3f", $9}' <<<"$linea") s (< 60 s): suficiente para Kerberos (<5 min)."
+            echo "        Diagnóstico de la selección: chronyc selectdata"
+            return 0
+        fi
+    done
+    return 1
+}
+if ! clock_ok && ! desfase_dc_ok; then
     echo "[ERR] El reloj sigue SIN sincronizar (timedatectl: NTPSynchronized=no)."
     echo "      Kerberos exige <5 min de desfase con el DC; 'realm join' fallaría"
     echo "      tras crear la cuenta de equipo (objeto huérfano en la OU)."
@@ -92,7 +113,7 @@ if ! clock_ok; then
     echo "        chronyc sources -v      # ¿se alcanza el NTP del dominio?"
     exit 1
 fi
-echo "[OK] Reloj sincronizado por NTP."
+echo "[OK] Reloj válido para Kerberos."
 
 # Contraseña en blanco = la cuenta delegada no está disponible → se ofrece
 # unir con OTRO usuario del dominio con permisos de unión (p. ej. un admin).
