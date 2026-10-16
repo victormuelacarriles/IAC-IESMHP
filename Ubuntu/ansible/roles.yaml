@@ -1,16 +1,5 @@
 ---
-
-# Para ejecutar este playbook:     (en la carpeta donde se encuentra)
-#  cd /opt/iesmhpMint/Mint/ansible/
-#    ansible-playbook -i ./equiposIABD.ini roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no"
-#    ansible-playbook -i ./equiposIABD.ini roles.yaml -l IABD-17
-#    ansible-playbook -i localhost, --connection=local roles.yaml 
-
-#Utiles
-#    ansible all -i ./equiposIABD.ini -m ping -l                      #Ping a todo el mundo
-#    ansible all -i ./equiposIABD.ini -m reboot -l 'all:!IABD-01'     #Reinicia todos menos uno
-#    ansible all -i ./equiposIABD.ini -m shell -a "sh /opt/iesmhpMint/Mint/utiles/actualizaGit.sh" 
-
+#Puedes ver ejemplos de uso en /opt/IAC-IESMHP/Ubuntu/ansible/utilesGesionAula
 
 - hosts: all
   become: yes
@@ -42,9 +31,8 @@
 
 
 #POR HACER:
-#      - hashicorp     #[terraform, packer, vagrant]
-#      - clienteOnedrive
-#      - ¿anaconda? ¿dbeaver?#   
+#      - apt cache [tirando de cabina si la tiene a tiro. Como está configurado en 10.0.72.140]
+#      - hashicorp     #[terraform, packer]
 
 
 
