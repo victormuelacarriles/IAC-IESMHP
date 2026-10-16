@@ -5,9 +5,10 @@ import struct
 import subprocess
 import platform
 import getpass
+import ipaddress
 from ldap3 import Server, Connection, ALL, NTLM
 
-VERSION="2026.10.16 13:56"  # Cargados los alumnos de distancia a fecha de la carga
+VERSION="2026.10.16 14:30"  # WoL por broadcast dirigido a la red destino (antes 255.255.255.255)
 
 # --- CONFIGURACIÓN ---   (ver al final del fichero explicaciones)
 # Matriz de datos: [Usuario, NombreEquipo, IP, MAC]
@@ -86,6 +87,11 @@ DATOS_USUARIOS = [
 DOMINIO = "iesmhp.local" # Cambiar por tu dominio
 SERVIDOR_AD = "10.0.1.48" # IP del Controlador de Dominio
 
+# Wake-on-LAN: el paquete mágico se envía al broadcast de la red del equipo
+# destino (IP/PREFIJO_RED_WOL). Ej.: 10.0.32.120 -> 10.0.32.255
+PREFIJO_RED_WOL = 24
+PUERTO_WOL = 9
+
 # --- FUNCIONES ---
 
 def verificar_credenciales(usuario, password):
@@ -131,10 +137,21 @@ def hacer_ping(ip):
     respuesta = subprocess.call(comando, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return respuesta == 0
 
-def enviar_wol(mac_address):
+def broadcast_de_red(ip, prefijo=PREFIJO_RED_WOL):
+    """
+    Devuelve la dirección de broadcast de la red a la que pertenece la IP.
+    Ej.: 10.0.32.120 con /24 -> red 10.0.32.0/24 -> broadcast 10.0.32.255
+    """
+    red = ipaddress.ip_network(f"{ip}/{prefijo}", strict=False)
+    return str(red.broadcast_address)
+
+def enviar_wol(mac_address, ip_destino):
     """
     Envía un paquete mágico (Wake-on-LAN) a la dirección MAC.
     Esto sustituye a la utilidad externa para mayor compatibilidad.
+    El paquete se manda como broadcast dirigido a la red del equipo destino
+    (10.0.32.120 -> 10.0.32.255), no a 255.255.255.255, para que llegue aunque
+    esta máquina esté en otra red (el router debe permitir broadcast dirigido).
     """
     # Limpiar formato MAC
     mac_clean = mac_address.replace(":", "").replace("-", "")
@@ -143,11 +160,13 @@ def enviar_wol(mac_address):
         raise ValueError("Dirección MAC incorrecta")
 
     data = bytes.fromhex('FF' * 6 + mac_clean * 16)
+    broadcast = broadcast_de_red(ip_destino)
 
-    # Enviar paquete broadcast
+    # Enviar paquete broadcast dirigido a la red destino
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.sendto(data, ("255.255.255.255", 9))
+        sock.sendto(data, (broadcast, PUERTO_WOL))
+    return broadcast
 
 # --- FLUJO PRINCIPAL ---
 
@@ -192,8 +211,8 @@ def main():
             for fila in DATOS_USUARIOS:
                 if fila[5].upper() == "A" and fila[2].startswith(prefijo_ip):
                     try:
-                        print(f"    WoL para {fila[1]} ({fila[2]}) - MAC: {fila[3]} ->{fila[0]}({fila[4]}) ")
-                        enviar_wol(fila[3])
+                        broadcast = enviar_wol(fila[3], fila[2])
+                        print(f"    WoL para {fila[1]} ({fila[2]}) - MAC: {fila[3]} -> {broadcast} ->{fila[0]}({fila[4]}) ")
                     except Exception as e:
                         print(f"    [X] Error enviando WoL a {fila[1]}: {e}")
             print("[OK] Señales WoL enviadas a todos los equipos asignados de la clase.")
@@ -205,9 +224,9 @@ def main():
         return
 
     # 5. Encender equipo
-    print(f"[...] El equipo está apagado. Enviando señal Wake-on-LAN a {mac_equipo}...")
+    print(f"[...] El equipo está apagado. Enviando señal Wake-on-LAN a {mac_equipo} (red {broadcast_de_red(ip_equipo)})...")
     try:
-        enviar_wol(mac_equipo)
+        enviar_wol(mac_equipo, ip_equipo)
         # Si prefieres usar la utilidad externa instalada, comenta la línea de arriba y usa:
         # subprocess.run(["wakeonlan", mac_equipo])
     except Exception as e:

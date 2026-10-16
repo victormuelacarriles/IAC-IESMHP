@@ -1,3 +1,9 @@
+#!/bin/bash
+# WoL por broadcast dirigido a la red del aula SMRD (10.0.32.0/24): funciona aunque
+# la VM de control esté en otra subred (el router debe permitir directed broadcast).
+# MACs: fuente de verdad /opt/IAC-IESMHP/macs.csv
+BROADCAST=10.0.32.255
+
 declare -A macs=(
     ["SMRD-00"]="bc:fc:e7:05:76:08"
     ["SMRD-01"]="08:bf:b8:40:09:82"
@@ -15,13 +21,13 @@ declare -A macs=(
     ["SMRD-13"]="bc:fc:e7:05:75:7e"
     ["SMRD-14"]="bc:fc:e7:05:73:63"
     ["SMRD-15"]="bc:fc:e7:05:73:c8"
-    ["SMRD-16"]="bc:fc:e7:05:73:41"
+    ["SMRD-16"]="bc:fc:e7:04:30:c0"
     ["SMRD-17"]="bc:fc:e7:05:73:d0"
     ["SMRD-18"]="bc:fc:e7:05:73:d5"
 )
 
 for i in "${!macs[@]}"
 do
-   wakeonlan ${macs[$i]} >null
+   wakeonlan -i "$BROADCAST" ${macs[$i]} >/dev/null
    echo "Llamando a $i -> ${macs[$i]}"
 done

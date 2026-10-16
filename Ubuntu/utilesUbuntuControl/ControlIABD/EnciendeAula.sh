@@ -1,3 +1,8 @@
+#!/bin/bash
+# WoL por broadcast dirigido a la red del aula IABD (10.0.72.0/24): funciona aunque
+# la VM de control esté en otra subred (el router debe permitir directed broadcast).
+BROADCAST=10.0.72.255
+
 declare -A macs=(
     ["IABD-00"]="d8:bb:c1:35:f1:dd"
     ["IABD-01"]="d8:bb:c1:38:71:6f"
@@ -24,7 +29,7 @@ declare -A macs=(
 
 for i in "${!macs[@]}"
 do
-   wakeonlan ${macs[$i]} >null
+   wakeonlan -i "$BROADCAST" ${macs[$i]} >/dev/null
    echo "Llamando a $i -> ${macs[$i]}"
 done
 

@@ -226,6 +226,7 @@ de verdad; este fichero raíz solo da el contexto general):
   - `Ubuntu/ansible/rolesUsuario/CLAUDE.md` — configuración por usuario (no root), en construcción.
 - **Utilidades**
   - [`Ubuntu/ISO/26.04/utiles/ArranquePorNFS/CLAUDE.md`](Ubuntu/ISO/26.04/utiles/ArranquePorNFS/CLAUDE.md) — reinstalar por red: arrancar el Live de Ubuntu desde un NFS del NAS, reescribiendo el GRUB de un equipo ya instalado (`grub-nfs-live.sh`, en remoto por SSH) o con un USB/ISO UEFI de arranque por NFS (`crea-iso-arranque-nfs.sh`). Herramientas manuales, fuera de la cadena automática.
+  - [`Ubuntu/utilesUbuntuControl/CLAUDE.md`](Ubuntu/utilesUbuntuControl/CLAUDE.md) — control de aulas ya desplegadas desde una VM: encender (WoL) / apagar IABD y SMRD, Ansible ad-hoc, y `EnciendeAlumno.py` (encendido del equipo propio por SSH + AD). Fuera de la cadena automática.
   - [`W11/Utiles/Compacta/CLAUDE.md`](W11/Utiles/Compacta/CLAUDE.md) — limpieza dentro de la VM (`LimpiaW11.ps1`) + compactado del VMDK en el host (`CompactaW11.sh`).
 
 > **Estado vigente de cada rol Ansible** (activo / comentado / legacy): la tabla del
