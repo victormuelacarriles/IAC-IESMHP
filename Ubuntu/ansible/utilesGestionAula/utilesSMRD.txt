@@ -25,6 +25,6 @@
 rm -rf /opt/IAC-IESMHP
 cd /opt
 git clone https://github.com/victormuelacarriles/IAC-IESMHP.git
-cd /opt/IAC-IESMHP/Ubuntu/ansible/roles/preparaAD/utilesAD
+cd /opt/IAC-IESMHP/Ubuntu/utilesUbuntuControl/ControlIABD
 bash 3-UneAlDominio.sh
 
