@@ -25,5 +25,6 @@
 rm -rf /opt/IAC-IESMHP
 cd /opt
 git clone https://github.com/victormuelacarriles/IAC-IESMHP.git
-cd /opt/IAC-IESMHP/Ubuntu/ansible/
-ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no" --tags "certificados"
+cd /opt/IAC-IESMHP/Ubuntu/ansible/roles/preparaAD/utilesAD
+bash 3-UneAlDominio.sh
+
