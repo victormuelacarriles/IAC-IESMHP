@@ -1,4 +1,4 @@
-# IAC-IESMHP  vs 1.0
+# IAC-IESMHP  vs 2.0
 IES Miguel Herrero - ficheros de configuración automatizada de equipos
 
 sudo su
