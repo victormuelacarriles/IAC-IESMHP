@@ -17,7 +17,7 @@ declare -A USUARIOS=(
   [10.0.72.130]="CEGSIABD06"
   [10.0.72.131]="CEGSIABD04"
 )
-
+ 
 for IP in "${!USUARIOS[@]}"; do
   USER="${USUARIOS[$IP]}"
   echo "==> $IP  (usuario: $USER)"
