@@ -16,7 +16,7 @@
 #    ansible all -i ./equiposIABD.ini -m ping | awk '/\|/ {print $1, $3}' | sort -V | column -t -N "EQUIPO,ESTADO"  #Resultado en forma de tabla
 
 #Copiamos directorio de NAS 
-#ansible all -i ./equiposIABD.ini -l 'all:!IABD-00' --forks 1 -m command \
+#ansible all -i ./equiposIABD.ini -l 'IABD-00' --forks 1 -m command \
   -a "rsync -a --chown=root:root /mnt/nasDepInfo/PruebaRapidosX3/SMRV/VMWARE-Plantillas/Win11 /datos/" \
   -B 7200 -P 30
 #ansible all -i ./equiposIABD.ini  -b -m file -a "path=/datos/Win11 state=directory recurse=yes mode=a+rwX"
