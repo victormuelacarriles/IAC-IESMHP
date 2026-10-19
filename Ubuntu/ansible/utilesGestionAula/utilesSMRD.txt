@@ -5,11 +5,25 @@
 #    ansible-playbook -i ./equiposSMRD.ini roles.yaml -l IABD-17
 #    ansible-playbook -i localhost, --connection=local roles.yaml 
 
-#Utiles
+#Utiles SMRD
 #    ansible all -i ./equiposSMRD.ini -m ping                       #Ping a todo el mundo
 #    ansible all -i ./equiposSMRD.ini -m ping | awk '/\|/ {print $1, $3}' | sort -V | column -t -N "EQUIPO,ESTADO"  #Resultado en forma de tabla
-
 #    ansible all -i ./equiposSMRD.ini -m reboot -l 'all:!SMRD-18'     #Reinicia todos menos uno
 
-#   Copia de ficheros 
-#   ansible all -i ./equiposSMRD.ini -m copy -a "src=/ruta/carpetaorigen dest=/ruta/carpetaDestino owner=root group=root mode
+
+#Utiles IABD
+#    ansible all -i ./equiposIABD.ini -m ping                       #Ping a todo el mundo
+#    ansible all -i ./equiposIABD.ini -m ping | awk '/\|/ {print $1, $3}' | sort -V | column -t -N "EQUIPO,ESTADO"  #Resultado en forma de tabla
+
+#Copiamos directorio de NAS 
+#ansible all -i ./equiposIABD.ini -l 'all:!IABD-00' --forks 1 -m command \
+  -a "rsync -a --chown=root:root /mnt/nasDepInfo/PruebaRapidosX3/SMRV/VMWARE-Plantillas/Win11 /datos/" \
+  -B 7200 -P 30
+#ansible all -i ./equiposIABD.ini  -b -m file -a "path=/datos/Win11 state=directory recurse=yes mode=a+rwX"
+
+
+rm -rf /opt/IAC-IESMHP
+cd /opt
+git clone https://github.com/victormuelacarriles/IAC-IESMHP.git
+cd /opt/IAC-IESMHP/Ubuntu/ansible/
+ansible-playbook -i localhost, --connection=local roles.yaml --ssh-extra-args="-o StrictHostKeyChecking=no" --tags "certificados"
