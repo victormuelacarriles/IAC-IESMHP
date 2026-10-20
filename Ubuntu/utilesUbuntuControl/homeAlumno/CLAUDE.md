@@ -13,10 +13,13 @@ en el `home` del usuario **`alumno`** de la VM de control. Contexto general en
 3. Pide la contraseña (`getpass`) y la valida contra el **AD** por LDAP
    (`ldap3`, bind simple `usuario@iesmhp.local` contra `10.0.1.48`; NTLM se
    descartó porque fallaba en SMRD).
-4. Si es **profesor**, ofrece encender **todos los equipos de alumnos** cuya IP
-   comparte los tres primeros octetos con la de su equipo (su aula).
-5. Hace `ping` a su equipo; si ya responde, termina.
-6. Si no, envía **Wake-on-LAN** y comprueba con `ping` cada 10 s durante 5 min.
+4. Elige el equipo (`elegir_equipo`): si el usuario tiene **uno**, se usa sin
+   preguntar; si tiene **varios** (profesor en varias aulas), los lista y pide cuál.
+5. Hace `ping` al equipo elegido; si no responde, envía **Wake-on-LAN**.
+6. Si es **profesor** (con uno o varios equipos), ofrece encender el **aula del
+   equipo elegido** (`encender_aula`): todos los equipos de `DATOS_USUARIOS`
+   (alumnos y profesores) de la misma red `/24`, **solo esa aula**, un WoL por MAC.
+7. Si el equipo no estaba encendido, comprueba con `ping` cada 10 s durante 5 min.
 
 ## Wake-on-LAN (broadcast dirigido)
 
@@ -32,7 +35,10 @@ el broadcast dirigido** hacia esa red. Constantes: `PREFIJO_RED_WOL = 24`,
 - **Datos duplicados a mano**: `DATOS_USUARIOS` repite MACs/IPs de
   [`macs.csv`](../../../macs.csv). Un mismo equipo puede estar asignado a
   varios alumnos (turnos) y un profesor puede aparecer en dos aulas (p. ej.
-  `vmuela`); `buscar_datos_usuario` devuelve **la primera coincidencia**.
+  `vmuela`); `buscar_datos_usuario` devuelve **todas sus filas**. Los equipos de
+  `macs.csv` sin usuario están en la matriz **comentados** (usuario `-`): al
+  descomentarlos entran en el encendido del aula. Ante discrepancias de MAC, manda
+  `macs.csv` (se comprueba a mano; el script no lo lee).
 - Cada cambio actualiza la constante `VERSION` (fecha + motivo), que se muestra
   en la cabecera.
 - **La copia en `/home/alumno/` es la que se ejecuta** y puede ser más nueva que

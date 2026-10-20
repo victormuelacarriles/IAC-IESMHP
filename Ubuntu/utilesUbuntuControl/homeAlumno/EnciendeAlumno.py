@@ -8,7 +8,7 @@ import getpass
 import ipaddress
 from ldap3 import Server, Connection, ALL, NTLM
 
-VERSION="2026.10.16 14:30"  # WoL por broadcast dirigido a la red destino (antes 255.255.255.255)
+VERSION="2026.10.20 12:30"  # Encendido de aula: una línea por usuario del equipo "WoL EQ (IP)[MAC]->BCAST -> [id] Nombre"
 
 # --- CONFIGURACIÓN ---   (ver al final del fichero explicaciones)
 # Matriz de datos: [Usuario, NombreEquipo, IP, MAC]
@@ -60,6 +60,9 @@ DATOS_USUARIOS = [
     ["SMRV32", "SMRD-05", "10.0.32.125", "bc:fc:e7:05:71:4a", "Jonatan Torrejón Asencio", "A"],
     ["SMRV09", "SMRD-06", "10.0.32.126", "bc:fc:e7:04:bb:57", "Olga Vidal Obispo", "A"],
     ["SMRV26", "SMRD-01", "10.0.32.121", "08:bf:b8:40:09:82", "Jorge Zaton Pérez", "A"],
+    # Equipos de macs.csv sin usuario asignado (descomentar y poner usuario si se usan)
+    # ["-", "SMRD-12", "10.0.32.132", "bc:fc:e7:05:73:cc", "Sin asignar", "A"],
+    # ["-", "SMRD-17", "10.0.32.137", "bc:fc:e7:05:73:d0", "Sin asignar", "A"],
 
     ########################################################################################## Alumnos CEIABD
     ["CEGSIABD09","IABD-01", "10.0.72.121", "d8:bb:c1:38:71:6f", "Canales De la Hera, María del Carmen","A"],
@@ -75,11 +78,16 @@ DATOS_USUARIOS = [
     ["CEGSIABD17","IABD-16", "10.0.72.136", "74:56:3C:95:EC:10", "Pérez Castro, Javier","A"],
     ["CEGSIABD08","IABD-18", "10.0.72.138", "74:56:3C:95:EA:81", "San Juan Rodrigo, Álvaro","A"],
     ["CEGSIABD05","IABD-19", "10.0.72.139", "74:56:3c:95:eb:d5", "Sierra Corral, Jesús","A"],
+    # Equipos de macs.csv sin usuario asignado (descomentar y poner usuario si se usan)
+    # ["-", "IABD-05", "10.0.72.125", "d8:bb:c1:38:93:b1", "Sin asignar", "A"],
+    # ["-", "IABD-08", "10.0.72.128", "d8:bb:c1:38:93:8a", "Sin asignar", "A"],
+    # ["-", "IABD-11", "10.0.72.131", "74:56:3C:65:5D:51", "Sin asignar", "A"],
+    # ["-", "IABD-13", "10.0.72.133", "74:56:3C:95:EA:3C", "Sin asignar", "A"],
+    # ["-", "IABD-15", "10.0.72.135", "74:56:3C:95:EB:55", "Sin asignar", "A"],
+    # ["-", "IABD-17", "10.0.72.137", "74:56:3C:95:EB:87", "Sin asignar", "A"],
     ################################################################################# Profesores CEIABD
-    ["omunillaf", "IABD-00", "10.0.72.120", "d8:bb:c1:35:f1:dd", "Óscar Munilla Fernández","P"],
-    ["dblancog",  "IABD-00", "10.0.72.120", "d8:bb:c1:35:f1:dd", "David Blanco González","P"],
-    ["paguirrej", "IABD-00", "10.0.72.120", "d8:bb:c1:35:f1:dd", "Pedro Aguirre Inchaurbe","P"],
-    ["larce",     "IABD-00", "10.0.72.120", "d8:bb:c1:35:f1:dd", "Lorenzo  Arce Gómez","P"],
+    ["vgrandec",  "IABD-19", "10.0.72.139", "74:56:3c:95:eb:d5", "Grande Cantero, Victor ","P"],
+    ["jbahilloc", "IABD-00", "10.0.72.120", "d8:bb:c1:35:f1:dd", "Jairo Bahillo Calvo", "P"],
     ["vmuela",    "IABD-20", "10.0.72.140", "74:56:3c:95:eb:57", "Víctor","P"]
 ]
 
@@ -118,11 +126,51 @@ def verificar_credenciales(usuario, password):
         return False
 
 def buscar_datos_usuario(usuario_input):
-    """Busca el usuario en la matriz y devuelve sus datos."""
+    """
+    Busca el usuario en la matriz y devuelve TODAS sus filas
+    (un profesor puede tener equipo en varias aulas, p. ej. SMRD e IABD).
+    Cada fila: [User, Host, IP, MAC, NombreReal, TipoUsuario]
+    """
+    return [fila for fila in DATOS_USUARIOS if fila[0].lower() == usuario_input.lower()]
+
+def elegir_equipo(filas):
+    """Si hay un solo equipo lo devuelve; si hay varios, pregunta cuál encender."""
+    if len(filas) == 1:
+        return filas[0]
+    print("\nTiene varios equipos asignados:")
+    for i, fila in enumerate(filas, 1):
+        print(f"   {i}) {fila[1]} ({fila[2]})")
+    while True:
+        opcion = input(f"¿Qué equipo desea encender? (1-{len(filas)}): ").strip()
+        if opcion.isdigit() and 1 <= int(opcion) <= len(filas):
+            return filas[int(opcion) - 1]
+        print("[!] Opción no válida.")
+
+def encender_aula(ip_equipo, mac_excluida):
+    """
+    Envía WoL a todos los equipos de DATOS_USUARIOS (alumnos y profesores) que
+    están en la misma red (IP/PREFIJO_RED_WOL) que ip_equipo. Solo esa aula.
+    Un mismo equipo puede aparecer en varias filas: se envía una vez por MAC y
+    se muestra una línea por cada usuario asociado a ese equipo.
+    """
+    red = ipaddress.ip_network(f"{ip_equipo}/{PREFIJO_RED_WOL}", strict=False)
+    excluida = mac_excluida.lower().replace("-", ":")
+    # Agrupar filas por MAC (conservando el orden de DATOS_USUARIOS)
+    equipos = {}
     for fila in DATOS_USUARIOS:
-        if fila[0].lower() == usuario_input.lower():
-            return fila # Retorna [User, Host, IP, MAC, NombreReal, TipoUsuario]
-    return None
+        mac = fila[3].lower().replace("-", ":")
+        if mac != excluida and ipaddress.ip_address(fila[2]) in red:
+            equipos.setdefault(mac, []).append(fila)
+    print(f"[...] Encendiendo los equipos del aula {red}...")
+    for filas in equipos.values():
+        equipo, ip, mac = filas[0][1], filas[0][2], filas[0][3]
+        try:
+            broadcast = enviar_wol(mac, ip)
+            for fila in filas:
+                print(f"WoL {equipo} ({ip})[{mac}]->{broadcast} -> [{fila[0]}] {fila[4]}")
+        except Exception as e:
+            print(f"    [X] Error enviando WoL a {equipo}: {e}")
+    print("[OK] Señales WoL enviadas a los equipos del aula.")
 
 def hacer_ping(ip):
     """
@@ -177,19 +225,17 @@ def main():
     usuario_input = input("Introduzca su nombre de usuario de dominio: ").strip()
 
     # 2. Verificar si el usuario tiene equipo asignado antes de pedir pass (opcional, por seguridad)
-    datos_equipo = buscar_datos_usuario(usuario_input)
+    filas_usuario = buscar_datos_usuario(usuario_input)
 
-    if not datos_equipo:
+    if not filas_usuario:
         print("[X] Error: El usuario no tiene un equipo asociado en la base de datos.")
         return
 
-    nombre_equipo = datos_equipo[1]
-    ip_equipo = datos_equipo[2]
-    mac_equipo = datos_equipo[3]
-    nombre_real = datos_equipo[4]
-    tipo_usuario = datos_equipo[5]
+    nombre_real = filas_usuario[0][4]
+    tipo_usuario = filas_usuario[0][5]
+    equipos_txt = ", ".join(f"{f[1]} ({f[2]})" for f in filas_usuario)
 
-    print(f"[OK] Usuario encontrado: {nombre_real} ({tipo_usuario}). Equipo asignado: {nombre_equipo} ({ip_equipo})")
+    print(f"[OK] Usuario encontrado: {nombre_real} ({tipo_usuario}). Equipo(s) asignado(s): {equipos_txt}")
 
 
     # 3. Pedir contraseña y verificar dominio
@@ -200,40 +246,38 @@ def main():
         print("[X] Error: Contraseña incorrecta o error de dominio.")
         return
 
-    print(f"[OK] Credenciales válidas. Equipo asociado: {nombre_equipo} ({ip_equipo})")
+    # 4. Elegir equipo (un profesor puede tener varios; con uno solo no se pregunta)
+    datos_equipo = elegir_equipo(filas_usuario)
+    nombre_equipo = datos_equipo[1]
+    ip_equipo = datos_equipo[2]
+    mac_equipo = datos_equipo[3]
 
-    #Si el tipo de usuario es profesor, preguntar si quiere encender todos los equipos de su clase, donde clase se define como todos los alumnos (tipo "A"), cuya IP empiece por los mismos primeros que la IP física del equipo actual.
-    if tipo_usuario.upper() == "P":
-        respuesta = input("¿Desea encender todos los equipos de su clase? (s/n): [n]").strip().lower()
-        if respuesta == 's':
-            prefijo_ip = '.'.join(ip_equipo.split('.')[:3]) + '.'
-            print(f"[...] Encendiendo todos los equipos de la clase con prefijo IP {prefijo_ip}...")
-            for fila in DATOS_USUARIOS:
-                if fila[5].upper() == "A" and fila[2].startswith(prefijo_ip):
-                    try:
-                        broadcast = enviar_wol(fila[3], fila[2])
-                        print(f"    WoL para {fila[1]} ({fila[2]}) - MAC: {fila[3]} -> {broadcast} ->{fila[0]}({fila[4]}) ")
-                    except Exception as e:
-                        print(f"    [X] Error enviando WoL a {fila[1]}: {e}")
-            print("[OK] Señales WoL enviadas a todos los equipos asignados de la clase.")
+    print(f"[OK] Credenciales válidas. Equipo seleccionado: {nombre_equipo} ({ip_equipo})")
 
-
-    # 4. Comprobar estado actual
-    if hacer_ping(ip_equipo):
+    # 5. Encender equipo (si no lo está ya)
+    ya_encendido = hacer_ping(ip_equipo)
+    if ya_encendido:
         print(f"[!] El equipo {nombre_equipo} ya está encendido y respondiendo.")
+    else:
+        print(f"[...] El equipo está apagado. Enviando señal Wake-on-LAN a {mac_equipo} (red {broadcast_de_red(ip_equipo)})...")
+        try:
+            enviar_wol(mac_equipo, ip_equipo)
+            # Si prefieres usar la utilidad externa instalada, comenta la línea de arriba y usa:
+            # subprocess.run(["wakeonlan", mac_equipo])
+        except Exception as e:
+            print(f"[X] Error enviando WoL: {e}")
+            return
+
+    # Profesor: ofrecer encender el aula del equipo elegido (solo los equipos de esa red)
+    if tipo_usuario.upper() == "P":
+        respuesta = input(f"¿Desea encender todos los equipos del aula de {nombre_equipo}? (s/n): [n] ").strip().lower()
+        if respuesta == 's':
+            encender_aula(ip_equipo, mac_equipo)
+
+    if ya_encendido:
         return
 
-    # 5. Encender equipo
-    print(f"[...] El equipo está apagado. Enviando señal Wake-on-LAN a {mac_equipo} (red {broadcast_de_red(ip_equipo)})...")
-    try:
-        enviar_wol(mac_equipo, ip_equipo)
-        # Si prefieres usar la utilidad externa instalada, comenta la línea de arriba y usa:
-        # subprocess.run(["wakeonlan", mac_equipo])
-    except Exception as e:
-        print(f"[X] Error enviando WoL: {e}")
-        return
-
-    # 6. Bucle de espera (Timeout 5 min = 300 seg)
+    # 6. Bucle de espera del equipo seleccionado (Timeout 5 min = 300 seg)
     print("[...] Esperando arranque. Primera comprobación en 10 segundos.")
     time.sleep(10) # Espera inicial obligatoria
 
