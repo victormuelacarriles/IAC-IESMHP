@@ -29,7 +29,9 @@
 # Lógica en cada ejecución:
 #   0. Se autoregistra en el crontab del usuario:
 #        * * * * * /ruta/real/MapeaOneDriveSSH.sh --desatendido
-#   1. Si el equipo no responde por SSH, no hace nada.
+#   1. Si el equipo no responde por SSH (Windows apagado), desmonta la
+#      carpeta (matando el rclone que la sirve) para que no se cuelgue el
+#      escritorio; si no estaba montada, no hace nada.
 #   2. Si ya está montado por SFTP con esa ruta y responde, no hace nada.
 #   3. Si está montado por otra vía (p. ej. un montaje SMB) o colgado, lo desmonta.
 #   4. Monta con "rclone mount" (backend sftp, FUSE de usuario, sin sudo).
@@ -286,24 +288,70 @@ else
     log "AVISO: no existe el comando crontab; no se puede autoregistrar."
 fi
 
-# --- 0c. Si se cambió la carpeta de montaje, quitar el montaje anterior (si era nuestro) ---
-if [[ -n "$MONTAJE_ANTERIOR" && "$MONTAJE_ANTERIOR" != "$FINAL_PATH" ]]; then
-    ANT_SOURCE="$(findmnt -n -o SOURCE --mountpoint "$MONTAJE_ANTERIOR" 2>/dev/null || true)"
-    if [[ "$ANT_SOURCE" == "${REMOTE_NAME}"[:{]* ]]; then
-        "$FUSERMOUNT" -u "$MONTAJE_ANTERIOR" 2>/dev/null || "$FUSERMOUNT" -uz "$MONTAJE_ANTERIOR" 2>/dev/null || true
-        log "Desmontado el montaje anterior en $MONTAJE_ANTERIOR (carpeta de montaje cambiada)."
+# --- Utilidades de montaje ---
+# Ojo: con el equipo apagado, cualquier acceso a la carpeta montada (stat, ls,
+# mountpoint -q...) se queda colgado. Por eso se usa findmnt, que solo lee
+# /proc/self/mountinfo y nunca toca el sistema de ficheros montado.
+origen_montaje() { findmnt -n -o SOURCE --mountpoint "$1" 2>/dev/null || true; }
+montado()        { [[ -n "$(origen_montaje "$1")" ]]; }
+es_nuestro()     { [[ "$(origen_montaje "$1")" == "${REMOTE_NAME}"[:{]* ]]; }
+
+# PIDs de los rclone de este usuario que sirven el montaje $1
+pids_rclone() {
+    local pid arg
+    for pid in $(pgrep -u "$(id -u)" -x rclone 2>/dev/null); do
+        while IFS= read -r -d '' arg; do
+            [[ "$arg" == "$1" ]] && { echo "$pid"; break; }
+        done < "/proc/$pid/cmdline" 2>/dev/null || true
+    done
+}
+
+# Desmonta $1 aunque esté colgado: primero mata el rclone que lo sirve (así el
+# kernel corta la conexión FUSE y los programas que esperaban, como Archivos,
+# reciben un error en vez de quedarse bloqueados) y después desmonta.
+desmonta() {
+    local punto="$1" pids
+    pids="$(pids_rclone "$punto")"
+    if [[ -n "$pids" ]]; then
+        # shellcheck disable=SC2086
+        kill $pids 2>/dev/null || true
+        for _ in {1..5}; do
+            pids="$(pids_rclone "$punto")"; [[ -z "$pids" ]] && break; sleep 1
+        done
+        # shellcheck disable=SC2086
+        [[ -n "$pids" ]] && { kill -9 $pids 2>/dev/null || true; }
     fi
+    if montado "$punto"; then
+        "$FUSERMOUNT" -u "$punto" 2>/dev/null || "$FUSERMOUNT" -uz "$punto" 2>/dev/null || true
+    fi
+    for _ in {1..10}; do montado "$punto" || return 0; sleep 1; done
+    return 1
+}
+
+# --- 0c. Si se cambió la carpeta de montaje, quitar el montaje anterior (si era nuestro) ---
+if [[ -n "$MONTAJE_ANTERIOR" && "$MONTAJE_ANTERIOR" != "$FINAL_PATH" ]] && es_nuestro "$MONTAJE_ANTERIOR"; then
+    desmonta "$MONTAJE_ANTERIOR" || true
+    log "Desmontado el montaje anterior en $MONTAJE_ANTERIOR (carpeta de montaje cambiada)."
 fi
 
 # --- 1. ¿Está el equipo accesible por SSH? ---
+# Si no lo está (Windows apagado), se desconecta nuestro montaje para que el
+# escritorio no se bloquee al tocar la carpeta.
 if ! timeout 3 bash -c "</dev/tcp/$VM_IP/$SSH_PORT" 2>/dev/null; then
-    info "El equipo ($VM_IP:$SSH_PORT) no responde por SSH. No se hace nada."
+    if es_nuestro "$FINAL_PATH"; then
+        if desmonta "$FINAL_PATH"; then
+            log "El equipo ($VM_IP:$SSH_PORT) no responde: desmontado $FINAL_PATH para evitar bloqueos."
+        else
+            log "ERROR: el equipo ($VM_IP:$SSH_PORT) no responde y no se pudo desmontar $FINAL_PATH."
+        fi
+    else
+        info "El equipo ($VM_IP:$SSH_PORT) no responde por SSH. No hay nada montado."
+    fi
     exit 0
 fi
 
 # --- 2. ¿Qué hay montado ahora en el destino? ---
-mkdir -p "$FINAL_PATH"
-CUR_SOURCE="$(findmnt -n -o SOURCE --mountpoint "$FINAL_PATH" 2>/dev/null || true)"
+CUR_SOURCE="$(origen_montaje "$FINAL_PATH")"
 
 if [[ -n "$CUR_SOURCE" ]]; then
     # rclone puede añadir un sufijo al nombre: "onedrivessh{hYZNR}:/E:/..."
@@ -313,22 +361,15 @@ if [[ -n "$CUR_SOURCE" ]]; then
         exit 0
     fi
 
-    # --- 3. Montado por otra vía (SMB, otra ruta) o SFTP colgado: desmontar ---
+    # --- 3. Montado por otra vía (SMB, otra ruta) o colgado: desmontar ---
     log "Desmontando montaje anterior: $CUR_SOURCE"
-    if ! "$FUSERMOUNT" -u "$FINAL_PATH" 2>/dev/null; then
-        log "Desmontaje normal fallido (¿ocupado?); se fuerza desmontaje diferido."
-        if ! "$FUSERMOUNT" -uz "$FINAL_PATH" 2>/dev/null; then
-            log "ERROR: no se pudo desmontar $FINAL_PATH."
-            log "Si es un montaje de kernel (cifs), ejecuta: sudo umount $FINAL_PATH"
-            exit 1
-        fi
+    if ! desmonta "$FINAL_PATH"; then
+        log "ERROR: no se pudo desmontar $FINAL_PATH."
+        log "Si es un montaje de kernel (cifs), ejecuta: sudo umount $FINAL_PATH"
+        exit 1
     fi
-    # Esperar a que desaparezca el montaje
-    for _ in {1..10}; do
-        mountpoint -q "$FINAL_PATH" 2>/dev/null || break
-        sleep 1
-    done
 fi
+mkdir -p "$FINAL_PATH"
 
 # --- 4. Definir el remoto SFTP por variables de entorno (sin fichero de rclone) ---
 ENV_PREFIX="RCLONE_CONFIG_${REMOTE_NAME^^}"
@@ -342,20 +383,24 @@ export "${ENV_PREFIX}_SHELL_TYPE=cmd"           # OpenSSH de Windows
 export "${ENV_PREFIX}_DISABLE_HASHCHECK=true"   # sin md5sum/sha1sum en Windows
 
 # --- 5. Montar (FUSE, sin sudo; sin allow-other/allow-root => solo este usuario) ---
+# --contimeout/--timeout: si Windows se apaga, las operaciones fallan en
+# segundos en vez de esperar los 5 min por defecto (hasta que cron desmonte).
 if rclone mount "${REMOTE_NAME}:${REMOTE_PATH}" "$FINAL_PATH" \
     --config="" \
     --daemon \
     --vfs-cache-mode=writes \
     --dir-cache-time=30s \
+    --contimeout=5s \
+    --timeout=30s \
     --log-file="$LOG_FILE" --log-level=NOTICE; then
     # rclone --daemon puede volver antes de que el montaje esté listo
     for _ in {1..15}; do
-        mountpoint -q "$FINAL_PATH" 2>/dev/null && break
+        montado "$FINAL_PATH" && break
         sleep 1
     done
 fi
 
-if mountpoint -q "$FINAL_PATH" 2>/dev/null; then
+if es_nuestro "$FINAL_PATH"; then
     log "Montado por SSH: $SSH_USER@$VM_IP:$REMOTE_PATH -> $FINAL_PATH"
 else
     log "ERROR al montar con rclone (sftp). Revisa $LOG_FILE"
