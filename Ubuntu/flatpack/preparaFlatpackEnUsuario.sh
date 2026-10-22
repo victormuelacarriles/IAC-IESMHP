@@ -41,6 +41,7 @@ APPS_RECOMENDADAS=(
     org.shotcut.Shotcut           # Shotcut
     com.microsoft.Edge            # Microsoft Edge
     com.obsproject.Studio         # OBS Studio
+    org.videolan.VLC              # VLC
 )
 
 LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/IAC-IESMHP"
