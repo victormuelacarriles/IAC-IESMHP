@@ -29,7 +29,7 @@ Esta carpeta contiene la **configuración automática del equipo ya instalado**,
 | [`flatpak`](roles/flatpak/CLAUDE.md) | ✅ activo | Soporte Flatpak + repo Flathub |
 | [`DesinstalaLibreOffice`](roles/DesinstalaLibreOffice/CLAUDE.md) | ⛔ comentado (por defecto no se usa) | Purga el LibreOffice nativo (`.deb` `libreoffice*` + snap si lo hay) y deja un pin APT para que no vuelva; los usuarios usan el Flatpak. Playbook propio `DesinstalaLibreOffice.yaml` para lanzarlo a mano (2026-10-22) |
 | [`certificados`](roles/certificados/CLAUDE.md) | ✅ activo | Claves SSH de root + authorized_keys |
-| [`obs`](roles/obs/CLAUDE.md) | ✅ activo | OBS Studio |
+| [`obs`](roles/obs/CLAUDE.md) | ⛔ comentado (2026-10-22) | OBS Studio como `.deb` de sistema. Se recomienda el Flatpak de usuario `com.obsproject.Studio`. Playbook propio `obs.yaml` para instalarlo a mano |
 | [`rdp`](roles/rdp/CLAUDE.md) | ✅ activo | Servidor RDP **nativo de GNOME** (`grdctl --system`); sustituye a `xrdp` |
 | [`vscode`](roles/vscode/CLAUDE.md) | ✅ activo | VS Code desde .deb oficial; instala o **actualiza** a la última estable |
 | [`vmware`](roles/vmware/CLAUDE.md) | ✅ activo (**último**) | VMware Workstation desde .bundle. Compila vmmon/vmnet para **todos** los kernels instalados y deja hooks de kernel + `iac-vmware-modulos.service`: VMware **nunca** debe pedir compilar (2026-10-06) |
@@ -67,8 +67,9 @@ ansible all -i ./equiposIABD.ini -m ping
 ansible all -i ./equiposIABD.ini -m reboot -l 'all:!IABD-01'   # reinicia todos menos uno
 ```
 
-Pasar versión concreta a un rol que lo soporte (p. ej. OBS):
-`ansible-playbook ... -e obs_version=30.0.2`
+Pasar versión concreta a un rol que lo soporte (p. ej. OBS, con su playbook propio
+porque está comentado en `roles.yaml`):
+`sudo ansible-playbook -i localhost, --connection=local roles/obs/obs.yaml -e obs_version=32.1.0`
 
 ## Convenciones del proyecto
 

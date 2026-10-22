@@ -1,0 +1,23 @@
+---
+# Playbook independiente del rol obs (no depende de roles.yaml).
+# El rol está COMENTADO en roles.yaml (2026-10-22): OBS se recomienda como
+# Flatpak de usuario (com.obsproject.Studio). Esto sirve para instalar el
+# .deb de sistema a mano si algún día hace falta.
+#
+# Desde esta carpeta:
+#   sudo ansible-playbook -i localhost, --connection=local obs.yaml
+#   sudo ansible-playbook -i localhost, --connection=local obs.yaml -e obs_version=32.1.0
+#   ansible-playbook -i ../../equiposIABD.ini obs.yaml          # aula por SSH
+#   ansible-playbook -i ../../equiposIABD.ini obs.yaml -l IABD-17
+#   ... --check   → solo muestra qué haría
+
+- hosts: all
+  become: yes
+
+  pre_tasks:
+    - name: Actualizar cache apt
+      ansible.builtin.apt:
+        update_cache: yes
+
+  roles:
+    - role: "{{ playbook_dir }}"   # esta misma carpeta es el rol

@@ -1,6 +1,6 @@
 
 
-- name: Comprobar si el binario de VS Code existe
+- name: Comprobar si el binario de OBS existe
   ansible.builtin.stat:
     path: /usr/bin/obs
   register: obs_instalado
@@ -9,6 +9,7 @@
   command: obs --version
   register: obs_check
   changed_when: false
+  check_mode: false
   ignore_errors: true
   when: obs_instalado.stat.exists
 
@@ -26,6 +27,7 @@
   shell: apt-cache policy obs-studio | grep Candidat
   register: obs_version_info
   changed_when: false
+  check_mode: false
  
 
 - name: Mostramos la versión candidata de OBS Studio

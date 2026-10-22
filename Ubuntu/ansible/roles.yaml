@@ -17,7 +17,7 @@
      #- { role: DesinstalaLibreOffice, tags: DesinstalaLibreOffice } #DESACTIVADO por defecto: purga el LibreOffice nativo (.deb/snap) + pin APT para que cada usuario use el Flatpak. Ver roles/DesinstalaLibreOffice/CLAUDE.md
      # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml
      - { role: certificados, tags: certificados }
-     - { role: obs, tags: obs }
+     #- { role: obs, tags: obs } # Mejor instarlo via flatpak (ver roles/flatpak/CLAUDE.md)
      - { role: rdp, tags: rdp } # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
      - { role: vscode, tags: vscode }
      - { role: clienteNAS, tags: clienteNAS } #Cliente NFS del NAS del DEPARTAMENTO: 

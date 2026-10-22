@@ -26,3 +26,9 @@ aplicaciones Flatpak (desde GNOME Software o por línea de comandos).
 - Tras aplicar el rol, instalar apps con, p. ej.:
   `flatpak install flathub org.videolan.VLC`. Puede requerir cerrar y reabrir
   la sesión para que GNOME Software muestre el origen Flathub.
+- **Apps recomendadas como Flatpak de usuario** (2026-10-22): LibreOffice,
+  Shotcut, Edge y OBS Studio. Cada usuario las prepara con
+  `Ubuntu/flatpack/preparaFlatpackEnUsuario.sh` (lista en el array
+  `APPS_RECOMENDADAS`). Por eso el rol [`obs`](../obs/CLAUDE.md) está comentado
+  en `roles.yaml`, y [`DesinstalaLibreOffice`](../DesinstalaLibreOffice/CLAUDE.md)
+  quita el LibreOffice nativo si se activa.
