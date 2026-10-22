@@ -79,6 +79,8 @@ Si persiste, comprueba que llegas al servidor con `curl -I https://dl.flathub.or
 
 ### B2. Instalar las aplicaciones
 
+Para LibreOffice hay un script que lo hace todo: `bash instalaLibreOffice.sh` (en esta misma carpeta). Prepara Flathub, instala o actualiza el Flatpak y, si hay un LibreOffice nativo, aplica el apartado B5. Con `--solo-lanzadores` solo hace el B5.
+
 ```bash
 flatpak install --user flathub com.microsoft.Edge com.google.Chrome org.libreoffice.LibreOffice org.openshot.OpenShot org.shotcut.Shotcut
 ```
@@ -103,7 +105,7 @@ flatpak update --user
 
 ### B5. Ocultar LibreOffice nativo si sigue instalado
 
-Si el administrador no desinstaló el LibreOffice `.deb` (paso A3), el usuario ve dos juegos de iconos: los nativos (`libreoffice-*.desktop`) y los Flatpak (`org.libreoffice.LibreOffice.*.desktop`). Estos pasos ocultan los nativos **solo en el perfil del usuario**, sin `sudo` y sin tocar el sistema.
+`instalaLibreOffice.sh` hace estos pasos automáticamente. Si el administrador no desinstaló el LibreOffice `.deb` (paso A3), el usuario ve dos juegos de iconos: los nativos (`libreoffice-*.desktop`) y los Flatpak (`org.libreoffice.LibreOffice.*.desktop`). Estos pasos ocultan los nativos **solo en el perfil del usuario**, sin `sudo` y sin tocar el sistema.
 
 1. Copiar los lanzadores nativos a `~/.local/share/applications` con `NoDisplay=true`. Esa carpeta tiene prioridad sobre `/usr/share/applications`:
 
