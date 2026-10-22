@@ -1,0 +1,20 @@
+---
+# Playbook independiente del rol vscode (no depende de roles.yaml).
+# Instala VS Code o lo actualiza a la última estable.
+#
+# Desde esta carpeta:
+#   sudo ansible-playbook -i localhost, --connection=local vscode.yaml
+#   ansible-playbook -i ../../equiposIABD.ini vscode.yaml          # aula por SSH
+#   ansible-playbook -i ../../equiposIABD.ini vscode.yaml -l IABD-17
+#   ... --check   → solo muestra qué haría
+
+- hosts: all
+  become: yes
+
+  pre_tasks:
+    - name: Actualizar cache apt
+      ansible.builtin.apt:
+        update_cache: yes
+
+  roles:
+    - role: "{{ playbook_dir }}"   # esta misma carpeta es el rol

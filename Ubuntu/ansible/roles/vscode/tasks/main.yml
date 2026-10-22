@@ -1,53 +1,75 @@
+---
+# Instala VS Code o lo actualiza si la versión instalada es más vieja que la
+# última estable publicada por Microsoft.
 
-
-- name: Comprobar si el binario de VS Code existe
-  ansible.builtin.stat:
-    path: /usr/bin/code
-  register: code_instalado
-
-- name: Comprobar si VSCode ya está instalado
-  command: code --no-sandbox --version --user-data-dir /tmp
-  register: code_check
+- name: Versión de VS Code instalada (dpkg)
+  ansible.builtin.shell: dpkg-query -W -f='${Version}' code 2>/dev/null | cut -d- -f1
+  register: code_dpkg
   changed_when: false
-  ignore_errors: true
-  when: code_instalado.stat.exists
+  failed_when: false
+  check_mode: false
 
-- name: Mostrar versión instalada (si hay)
-  debug:
-    msg: "VS Code ya está instalado: {{ code_check.stdout_lines[0] if code_check.rc == 0 else 'no' }}"
-  when: code_instalado.stat.exists
+- name: Consultar la última versión estable de VS Code
+  ansible.builtin.uri:
+    url: https://update.code.visualstudio.com/api/update/linux-deb-x64/stable/latest
+    return_content: true
+  register: code_latest
+  failed_when: false
+  check_mode: false
 
-- name : Hago una copia de los repositoros actualmente configurados
-  shell: cp -r /etc/apt /etc/apt.preVSCODE.bak
-  when: not code_instalado.stat.exists
-  
-- name: Descargar último paquete .deb de VSCode
-  get_url:
-    url: https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64
-    dest: /tmp/vscode_latest.deb
-    mode: '0644'
-  when: not code_instalado.stat.exists
+- name: Calcular si hay que instalar o actualizar
+  ansible.builtin.set_fact:
+    code_actual: "{{ code_dpkg.stdout | trim }}"
+    code_ultima: "{{ code_latest.json.productVersion | default('') }}"
+    code_url: "{{ code_latest.json.url | default('https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64') }}"
+    code_sha256: "{{ code_latest.json.sha256hash | default('') }}"
 
-- name: Instalar VSCode
-  apt:
-    deb: /tmp/vscode_latest.deb
-  when: not code_instalado.stat.exists
+- name: Decidir acción
+  ansible.builtin.set_fact:
+    # Sin instalar -> instalar. Instalado -> actualizar solo si conocemos la
+    # última versión y es mayor que la instalada (si la API falla, no se toca).
+    code_hay_que_instalar: >-
+      {{ code_actual == '' or
+         (code_ultima != '' and code_ultima is version(code_actual, '>')) }}
 
-- name: Eliminar el .deb descargado
-  file:
-    path: /tmp/vscode_latest.deb
-    state: absent
-  when: not code_instalado.stat.exists
+- name: Mostrar estado de VS Code
+  ansible.builtin.debug:
+    msg: >-
+      VS Code instalado: {{ code_actual if code_actual else 'no' }} |
+      última estable: {{ code_ultima if code_ultima else 'desconocida (API no accesible)' }} |
+      acción: {{ ('instalar' if code_actual == '' else 'actualizar') if code_hay_que_instalar | bool else 'ninguna' }}
 
-- name : Recupero la copia de los repositoros antes de vscode
-  shell: rm -r /etc/apt && cp -r /etc/apt.preVSCODE.bak /etc/apt
-  when: not code_instalado.stat.exists
+- name: Instalar / actualizar VS Code
+  when: code_hay_que_instalar | bool
+  block:
+    # Copia de /etc/apt: el postinst del .deb añade el repo de Microsoft y
+    # lo deshacemos al final para no romper el proxy apt del aula.
+    - name: Copia de seguridad de los repositorios actuales
+      ansible.builtin.shell: rm -rf /etc/apt.preVSCODE.bak && cp -a /etc/apt /etc/apt.preVSCODE.bak
 
-- name: Actualizamos la caché de APT
-  apt:
-    update_cache: yes
-  when: not code_instalado.stat.exists
-  
-  
+    - name: Descargar el .deb de VS Code {{ code_ultima }}
+      ansible.builtin.get_url:
+        url: "{{ code_url }}"
+        dest: /tmp/vscode_latest.deb
+        mode: '0644'
+        force: true
+        checksum: "{{ ('sha256:' + code_sha256) if code_sha256 else omit }}"
 
+    - name: Instalar el .deb de VS Code
+      ansible.builtin.apt:
+        deb: /tmp/vscode_latest.deb
 
+  always:
+    - name: Eliminar el .deb descargado
+      ansible.builtin.file:
+        path: /tmp/vscode_latest.deb
+        state: absent
+
+    - name: Restaurar los repositorios previos a VS Code
+      ansible.builtin.shell: >-
+        if [ -d /etc/apt.preVSCODE.bak ]; then
+        rm -rf /etc/apt && cp -a /etc/apt.preVSCODE.bak /etc/apt; fi
+
+    - name: Actualizar la caché de APT
+      ansible.builtin.apt:
+        update_cache: true
