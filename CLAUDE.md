@@ -224,8 +224,10 @@ bash Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini -l IAB
 FORKS=20 bash Reclona-IAC-IESMHP.sh <inventario>                   # más equipos en paralelo
 ```
 
-- Clona primero en `/opt/IAC-IESMHP.nuevo`; solo si sale bien borra el viejo y
-  lo sustituye. Si falla la red, el equipo conserva su copia.
+- Clona primero en `/opt/IAC-IESMHP.nuevo`; solo si sale bien vacía el
+  contenido de `/opt/IAC-IESMHP` y mete dentro el clon nuevo. Si falla la red,
+  el equipo conserva su copia. El directorio en sí no se borra, así que una
+  terminal que esté dentro sigue viendo el repo sin hacer `cd`.
 - Equipo `controlubuntu`: repo completo. Resto: `git sparse-checkout set <SO>`
   según `/etc/os-release` (`ubuntu`→`Ubuntu`, `linuxmint`→`Mint`); SO
   desconocido → repo completo con aviso. Para volver a tenerlo todo en un

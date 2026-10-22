@@ -135,9 +135,15 @@ modo_local() {
         fi
     fi
 
-    log "Borrando $DESTDIR y colocando el clon nuevo..."
-    rm -rf "${DESTDIR:?}"
-    mv "$nuevo" "$DESTDIR"
+    # Se vacía el CONTENIDO de $DESTDIR y se mete dentro el clon nuevo, sin
+    # borrar el directorio en sí: una terminal que estuviera dentro de
+    # /opt/IAC-IESMHP sigue viendo el repo (si se borrara el directorio, vería
+    # uno vacío y "borrado" hasta hacer cd de nuevo).
+    log "Vaciando $DESTDIR y colocando el clon nuevo..."
+    mkdir -p "$DESTDIR"
+    find "${DESTDIR:?}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    find "$nuevo" -mindepth 1 -maxdepth 1 -exec mv -t "$DESTDIR" {} +
+    rmdir "$nuevo"
 
     log "Contenido de $DESTDIR: $(ls "$DESTDIR" | tr '\n' ' ')"
     log "Último commit: $(git -C "$DESTDIR" log -1 --oneline 2>/dev/null || echo '?')"
