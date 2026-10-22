@@ -14,6 +14,7 @@
      - { role: horaHTTP, tags: horaHTTP } #Sincroniza la hora en CADA arranque (NTP y, si está filtrado el UDP 123, fallback HTTP). service+timer. Ver roles/horaHTTP/CLAUDE.md
      - { role: nvidia, tags: nvidia }
      - { role: flatpak, tags: flatpak } #Instala el soporte de flatpak y el repositorio de Flathub
+     #- { role: DesinstalaLibreOffice, tags: DesinstalaLibreOffice } #DESACTIVADO por defecto: purga el LibreOffice nativo (.deb/snap) + pin APT para que cada usuario use el Flatpak. Ver roles/DesinstalaLibreOffice/CLAUDE.md
      # Para añadir nuevas aulas: editar roles/comparteaula/defaults/main.yml
      - { role: certificados, tags: certificados }
      - { role: obs, tags: obs }

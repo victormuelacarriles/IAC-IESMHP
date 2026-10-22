@@ -60,6 +60,8 @@ No borres el repositorio de Microsoft si lo usa otra aplicación que mantengas i
 
 ### B1. Añadir Flathub para el usuario
 
+Lo hace automáticamente `bash preparaFlatpackEnUsuario.sh` (en esta misma carpeta): comprueba que `flatpak` está instalado, añade Flathub si falta, lo prueba y, si falla, lo recrea. Deja el log en `~/.local/state/IAC-IESMHP/`. A mano:
+
 ```bash
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak update --user --appstream

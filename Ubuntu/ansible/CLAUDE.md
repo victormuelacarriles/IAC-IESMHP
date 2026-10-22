@@ -27,6 +27,7 @@ Esta carpeta contiene la **configuración automática del equipo ya instalado**,
 | [`comparteaula72`](roles/comparteaula72/CLAUDE.md) | legacy (no listado) | NFS servidor/cliente aula IABD |
 | [`nvidia`](roles/nvidia/CLAUDE.md) | ✅ activo | Driver NVIDIA si hay GPU |
 | [`flatpak`](roles/flatpak/CLAUDE.md) | ✅ activo | Soporte Flatpak + repo Flathub |
+| [`DesinstalaLibreOffice`](roles/DesinstalaLibreOffice/CLAUDE.md) | ⛔ comentado (por defecto no se usa) | Purga el LibreOffice nativo (`.deb` `libreoffice*` + snap si lo hay) y deja un pin APT para que no vuelva; los usuarios usan el Flatpak. Playbook propio `DesinstalaLibreOffice.yaml` para lanzarlo a mano (2026-10-22) |
 | [`certificados`](roles/certificados/CLAUDE.md) | ✅ activo | Claves SSH de root + authorized_keys |
 | [`obs`](roles/obs/CLAUDE.md) | ✅ activo | OBS Studio |
 | [`rdp`](roles/rdp/CLAUDE.md) | ✅ activo | Servidor RDP **nativo de GNOME** (`grdctl --system`); sustituye a `xrdp` |

@@ -1,0 +1,21 @@
+---
+# Playbook independiente del rol DesinstalaLibreOffice (no depende de roles.yaml).
+# Purga el LibreOffice nativo (.deb/snap) y deja un pin de APT para que no vuelva.
+#
+# Desde esta carpeta:
+#   sudo ansible-playbook -i localhost, --connection=local DesinstalaLibreOffice.yaml
+#   ansible-playbook -i ../../equiposIABD.ini DesinstalaLibreOffice.yaml          # aula por SSH
+#   ansible-playbook -i ../../equiposIABD.ini DesinstalaLibreOffice.yaml -l IABD-17
+#   ... --check                                  → solo muestra qué haría
+#   ... -e desinstalalibreoffice_bloquear=false  → quita el pin (permite reinstalar)
+
+- hosts: all
+  become: yes
+
+  pre_tasks:
+    - name: Actualizar cache apt
+      ansible.builtin.apt:
+        update_cache: yes
+
+  roles:
+    - role: "{{ playbook_dir }}"   # esta misma carpeta es el rol

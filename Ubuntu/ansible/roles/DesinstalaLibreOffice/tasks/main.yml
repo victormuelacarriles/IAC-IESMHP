@@ -1,0 +1,62 @@
+---
+# Desinstala el LibreOffice nativo (.deb y, si lo hay, snap) para que cada
+# usuario instale el suyo como Flatpak. No toca los Flatpak ni los perfiles.
+
+- name: Paquetes .deb de LibreOffice presentes (instalados o con configuración residual)
+  ansible.builtin.shell: >-
+    dpkg-query -W -f='${binary:Package} ${db:Status-Abbrev}\n'
+    {% for p in desinstalalibreoffice_patrones %}'{{ p }}' {% endfor %}
+    2>/dev/null | awk '$2 ~ /^(ii|iU|iF|iH|rc)/ {print $1}'
+  register: lo_debs
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: ¿Hay snap de LibreOffice?
+  ansible.builtin.command: snap list libreoffice
+  register: lo_snap
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: desinstalalibreoffice_snap | bool
+
+- name: Mostrar estado de LibreOffice nativo
+  ansible.builtin.debug:
+    msg: >-
+      Paquetes .deb: {{ lo_debs.stdout_lines | length }}
+      {{ ('(' + (lo_debs.stdout_lines | join(' ')) + ')') if lo_debs.stdout_lines else '' }} |
+      snap: {{ 'sí' if (lo_snap.rc | default(1)) == 0 else 'no' }} |
+      acción: {{ 'desinstalar' if (lo_debs.stdout_lines or (lo_snap.rc | default(1)) == 0) else 'ninguna' }}
+
+- name: Purgar los paquetes .deb de LibreOffice
+  ansible.builtin.apt:
+    name: "{{ lo_debs.stdout_lines }}"
+    state: absent
+    purge: true
+    autoremove: "{{ desinstalalibreoffice_autoremove | bool }}"
+  when: lo_debs.stdout_lines | length > 0
+
+- name: Quitar el snap de LibreOffice
+  ansible.builtin.command: snap remove --purge libreoffice
+  when:
+    - desinstalalibreoffice_snap | bool
+    - (lo_snap.rc | default(1)) == 0
+
+- name: Impedir que APT vuelva a instalar LibreOffice (pin -1)
+  ansible.builtin.copy:
+    dest: "{{ desinstalalibreoffice_pin }}"
+    mode: '0644'
+    content: |
+      # Gestionado por Ansible (rol DesinstalaLibreOffice). LibreOffice va por Flatpak.
+      # Para permitirlo de nuevo: borrar este fichero o aplicar el rol con
+      # desinstalalibreoffice_bloquear=false.
+      Package: libreoffice*
+      Pin: release *
+      Pin-Priority: -1
+  when: desinstalalibreoffice_bloquear | bool
+
+- name: Quitar el pin si no se quiere bloquear
+  ansible.builtin.file:
+    path: "{{ desinstalalibreoffice_pin }}"
+    state: absent
+  when: not (desinstalalibreoffice_bloquear | bool)

@@ -1,0 +1,17 @@
+---
+# Paquetes .deb a purgar (patrones de dpkg-query). python3-uno depende de
+# libreoffice-core y se iría igualmente; se pone explícito para que salga en el listado.
+desinstalalibreoffice_patrones:
+  - 'libreoffice*'
+  - 'python3-uno'
+
+# Quitar después las dependencias que ya nadie usa (ure, libuno-*, ...).
+desinstalalibreoffice_autoremove: true
+
+# Quitar también el snap "libreoffice" si estuviera instalado.
+desinstalalibreoffice_snap: true
+
+# Pin de APT para que ningún upgrade/metapaquete lo vuelva a instalar.
+# false → se borra el pin (vuelve a poder instalarse con apt).
+desinstalalibreoffice_bloquear: true
+desinstalalibreoffice_pin: /etc/apt/preferences.d/iac-sin-libreoffice
