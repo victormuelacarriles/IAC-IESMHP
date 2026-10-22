@@ -21,7 +21,8 @@ con un inventario propio. Contexto general en [`../CLAUDE.md`](../CLAUDE.md).
   `ApagaEquiposSinConexion.sh`) es
   `0 1,3,5,7,21,23 * * * bash /opt/IAC-IESMHP/Ubuntu/utilesUbuntuControl/ControlSMRD/ApagaEquiposSinConexion.sh`.
   Antes apuntaba a `Mint/ControlSMRD/` (ruta que ya no existe tras el traslado).
-  Se lanza con `bash` porque el fichero está en git **sin bit de ejecución**.
+  Se lanza con `bash` (desde el 2026-10-22 el fichero ya tiene bit de ejecución
+  en git, pero el `bash` delante no estorba).
   **El `crontab` real de `10.0.32.119` hay que cambiarlo a mano** (`crontab -e`).
 - **MAC de `SMRD-16`** corregida el 2026-10-16 en `EnciendeSMRD.sh`
   (`bc:fc:e7:05:73:41` → `bc:fc:e7:04:30:c0`, la de `macs.csv`). Manda `macs.csv`.

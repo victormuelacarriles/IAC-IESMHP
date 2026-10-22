@@ -28,7 +28,9 @@ control** (Linux) con acceso de red a las aulas.
   broadcast dirigido** a la red del aula (`10.0.32.255` / `10.0.72.255`), tanto los
   scripts Bash (`wakeonlan -i`) como `EnciendeAlumno.py`. Desde **otra subred**, el
   router debe dejar pasar ese broadcast dirigido; desde la misma subred funciona sin más.
-- Los scripts están en git **sin bit de ejecución**: lanzarlos con `bash script.sh`.
+- Desde el 2026-10-22 todos los `.sh` del repo llevan **bit de ejecución** en git
+  (`./script.sh` funciona tras clonar). `bash script.sh` sigue valiendo. Los `.sh`
+  nuevos nacen sin él: `chmod +x` antes de su primer commit.
 
 ## Convenciones / datos
 

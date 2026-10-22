@@ -24,8 +24,8 @@ la VM de control. Contexto general en [`../CLAUDE.md`](../CLAUDE.md).
   `255.255.255.255` y solo funcionaban desde la misma red.
 - Salidas descartadas con `/dev/null` (antes `>null` y `UserKnownHostsFile=NUL`/`NULL`,
   herencia de Windows que en Linux creaba ficheros `null`/`NUL`/`NULL`).
-- Llevan `#!/bin/bash` (el `declare -A` no funciona en `sh`/`dash`). En git están
-  **sin bit de ejecución**: lanzarlos con `bash script.sh`.
+- Llevan `#!/bin/bash` (el `declare -A` no funciona en `sh`/`dash`). Desde el
+  2026-10-22 llevan **bit de ejecución** en git (`./script.sh` o `bash script.sh`).
 - Las MACs están duplicadas a mano; la fuente de verdad es [`macs.csv`](../../../macs.csv)
   (revisadas el 2026-10-16: todas coinciden).
 - Comentarios del tipo "Explicación (bing chat)" son solo didácticos.
