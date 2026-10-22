@@ -16,7 +16,9 @@
 #   PARTE 2 — Docker rootless para ESTE usuario:
 #     4. Da por hecha la parte de sistema (rol roles/Docker como root:
 #        paquetes, repo, daemon de sistema desactivado). Completa lo que
-#        cabe en permisos del usuario (equivale al rol DockerRootless):
+#        cabe en permisos del usuario. Normalmente NO hace falta: el rol
+#        roles/Docker ya lo configura solo en cada login (hook PAM + servicio
+#        de usuario global). Sirve como reparación manual:
 #        subuid/subgid (escritos A FICHERO, válido también para usuarios del
 #        DOMINIO; delega en el helper del rol Docker si está) + lingering,
 #        instala el daemon rootless del usuario (dockerd-rootless-setuptool.sh install),
@@ -155,9 +157,11 @@ fi
 # ====================================================================
 # PARTE 2 — Docker rootless para ESTE usuario
 # --------------------------------------------------------------------
-# Equivale al rol `rolesUsuario/roles/DockerRootless`, pero en bash y
-# autosuficiente: si faltan subuid/subgid o el lingering (cosas que
-# normalmente deja `roles/Docker` como root) los completa con sudo.
+# Reparación manual: el rol `roles/Docker` ya configura el Docker rootless
+# de cada usuario automáticamente en cada login (hook PAM + servicio de
+# usuario global). Esta parte es autosuficiente: si faltan subuid/subgid o
+# el lingering (cosas que normalmente deja `roles/Docker` como root) los
+# completa con sudo.
 #
 # Por qué un usuario NUEVO falla con
 #   "failed to connect to the docker API at unix:///var/run/docker.sock":

@@ -19,6 +19,8 @@
 #   - --configurar: vuelve a preguntar todo (propone los valores guardados).
 #   - --desatendido: NUNCA pregunta; usa el .env. Es el modo de cron.
 #     Sin terminal (cron, ssh sin -t) se comporta igual aunque no se indique.
+#   - --desconfigura: quita la línea del crontab y desmonta. Conserva el .env;
+#     para reactivarlo basta con volver a ejecutarlo sin ese parámetro.
 #
 # Ejemplos:
 #   ./MapeaOneDriveSSH.sh
@@ -68,10 +70,55 @@ Uso: $(basename "$SELF") [opciones]
   -m, --montaje DIR     Carpeta local donde montar (por defecto ~/OneDrive)
   -c, --configurar      Volver a preguntar todos los valores
   -d, --desatendido     No preguntar nada; usar la configuración guardada (cron)
+      --desconfigura    Quitar la línea del crontab y desmontar (conserva el .env)
   -h, --ayuda           Esta ayuda
 
 Configuración guardada en: $ENV_FILE
 FIN
+}
+
+# Nombre del remoto de rclone (solo minúsculas/números, se usa en variables de entorno)
+REMOTE_NAME="onedrivessh"
+FUSERMOUNT="$(command -v fusermount3 || command -v fusermount || true)"
+
+# --- Utilidades de montaje ---
+# Ojo: con el equipo apagado, cualquier acceso a la carpeta montada (stat, ls,
+# mountpoint -q...) se queda colgado. Por eso se usa findmnt, que solo lee
+# /proc/self/mountinfo y nunca toca el sistema de ficheros montado.
+origen_montaje() { findmnt -n -o SOURCE --mountpoint "$1" 2>/dev/null || true; }
+montado()        { [[ -n "$(origen_montaje "$1")" ]]; }
+es_nuestro()     { [[ "$(origen_montaje "$1")" == "${REMOTE_NAME}"[:{]* ]]; }
+
+# PIDs de los rclone de este usuario que sirven el montaje $1
+pids_rclone() {
+    local pid arg
+    for pid in $(pgrep -u "$(id -u)" -x rclone 2>/dev/null); do
+        while IFS= read -r -d '' arg; do
+            [[ "$arg" == "$1" ]] && { echo "$pid"; break; }
+        done < "/proc/$pid/cmdline" 2>/dev/null || true
+    done
+}
+
+# Desmonta $1 aunque esté colgado: primero mata el rclone que lo sirve (así el
+# kernel corta la conexión FUSE y los programas que esperaban, como Archivos,
+# reciben un error en vez de quedarse bloqueados) y después desmonta.
+desmonta() {
+    local punto="$1" pids
+    pids="$(pids_rclone "$punto")"
+    if [[ -n "$pids" ]]; then
+        # shellcheck disable=SC2086
+        kill $pids 2>/dev/null || true
+        for _ in {1..5}; do
+            pids="$(pids_rclone "$punto")"; [[ -z "$pids" ]] && break; sleep 1
+        done
+        # shellcheck disable=SC2086
+        [[ -n "$pids" ]] && { kill -9 $pids 2>/dev/null || true; }
+    fi
+    if montado "$punto"; then
+        "$FUSERMOUNT" -u "$punto" 2>/dev/null || "$FUSERMOUNT" -uz "$punto" 2>/dev/null || true
+    fi
+    for _ in {1..10}; do montado "$punto" || return 0; sleep 1; done
+    return 1
 }
 
 # --- Fichero .env: SIEMPRE en el perfil del usuario ---
@@ -87,6 +134,7 @@ MONTAJE_ANTERIOR="${FINAL_PATH/#\~/$HOME}"   # para desmontarlo si se cambia
 HAY_VALORES=0      # se pasó algún valor de configuración
 CONFIGURAR=0
 DESATENDIDO=0
+DESCONFIGURA=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -e|--equipo)      VM_IP="${2:?Falta el valor de $1}";       HAY_VALORES=1; shift ;;
@@ -97,11 +145,40 @@ while [[ $# -gt 0 ]]; do
         -m|--montaje)     FINAL_PATH="${2:?Falta el valor de $1}";  HAY_VALORES=1; shift ;;
         -c|--configurar)  CONFIGURAR=1 ;;
         -d|--desatendido) DESATENDIDO=1 ;;
+        --desconfigura)   DESCONFIGURA=1 ;;
         -h|--ayuda)       uso; exit 0 ;;
         *) echo "Opción desconocida: $1" >&2; uso >&2; exit 2 ;;
     esac
     shift
 done
+
+# --- --desconfigura: quitar del crontab y desmontar, sin preguntar nada ---
+if [[ $DESCONFIGURA -eq 1 ]]; then
+    if command -v crontab > /dev/null 2>&1; then
+        CRON_ACTUAL="$(crontab -l 2>/dev/null || true)"
+        PATRON="^[[:space:]]*[^#].*/$(basename "$SELF" | sed 's/\./\\./g')([[:space:]]|$)"
+        if grep -qE "$PATRON" <<< "$CRON_ACTUAL"; then
+            { grep -vE "$PATRON" <<< "$CRON_ACTUAL" || true; } | crontab -
+            log "Quitado del crontab de $USUARIO_LOCAL."
+        else
+            log "No estaba en el crontab de $USUARIO_LOCAL."
+        fi
+    fi
+    PUNTO="${FINAL_PATH:-$HOME/OneDrive}"; PUNTO="${PUNTO/#\~/$HOME}"
+    if es_nuestro "$PUNTO"; then
+        if desmonta "$PUNTO"; then
+            log "Desmontado $PUNTO."
+        else
+            log "ERROR: no se pudo desmontar $PUNTO."
+            exit 1
+        fi
+    else
+        log "$PUNTO no estaba montado por este script."
+    fi
+    [[ -f "$ENV_FILE" ]] && log "Se conserva la configuración en $ENV_FILE (bórrala a mano si no la quieres)."
+    log "Para volver a activarlo, ejecuta el script sin --desconfigura."
+    exit 0
+fi
 
 # Sin terminal (cron, ssh sin -t...) nunca se pregunta: modo desatendido
 if ! { : < /dev/tty; } 2>/dev/null; then
@@ -241,8 +318,6 @@ if [[ $GUARDAR -eq 1 ]]; then
     log "Configuración guardada en $ENV_FILE"
 fi
 
-# Nombre del remoto de rclone (solo minúsculas/números, se usa en variables de entorno)
-REMOTE_NAME="onedrivessh"
 
 # --- 0. Comprobaciones previas ---
 if ! command -v rclone > /dev/null 2>&1; then
@@ -253,7 +328,6 @@ if [[ ! -f "$SSH_KEY" ]]; then
     log "ERROR: no existe la clave SSH $SSH_KEY"
     exit 1
 fi
-FUSERMOUNT="$(command -v fusermount3 || command -v fusermount || true)"
 if [[ -z "$FUSERMOUNT" ]]; then
     log "ERROR: falta fusermount. Ejecuta: sudo apt install fuse3"
     exit 1
@@ -287,46 +361,6 @@ if command -v crontab > /dev/null 2>&1; then
 else
     log "AVISO: no existe el comando crontab; no se puede autoregistrar."
 fi
-
-# --- Utilidades de montaje ---
-# Ojo: con el equipo apagado, cualquier acceso a la carpeta montada (stat, ls,
-# mountpoint -q...) se queda colgado. Por eso se usa findmnt, que solo lee
-# /proc/self/mountinfo y nunca toca el sistema de ficheros montado.
-origen_montaje() { findmnt -n -o SOURCE --mountpoint "$1" 2>/dev/null || true; }
-montado()        { [[ -n "$(origen_montaje "$1")" ]]; }
-es_nuestro()     { [[ "$(origen_montaje "$1")" == "${REMOTE_NAME}"[:{]* ]]; }
-
-# PIDs de los rclone de este usuario que sirven el montaje $1
-pids_rclone() {
-    local pid arg
-    for pid in $(pgrep -u "$(id -u)" -x rclone 2>/dev/null); do
-        while IFS= read -r -d '' arg; do
-            [[ "$arg" == "$1" ]] && { echo "$pid"; break; }
-        done < "/proc/$pid/cmdline" 2>/dev/null || true
-    done
-}
-
-# Desmonta $1 aunque esté colgado: primero mata el rclone que lo sirve (así el
-# kernel corta la conexión FUSE y los programas que esperaban, como Archivos,
-# reciben un error en vez de quedarse bloqueados) y después desmonta.
-desmonta() {
-    local punto="$1" pids
-    pids="$(pids_rclone "$punto")"
-    if [[ -n "$pids" ]]; then
-        # shellcheck disable=SC2086
-        kill $pids 2>/dev/null || true
-        for _ in {1..5}; do
-            pids="$(pids_rclone "$punto")"; [[ -z "$pids" ]] && break; sleep 1
-        done
-        # shellcheck disable=SC2086
-        [[ -n "$pids" ]] && { kill -9 $pids 2>/dev/null || true; }
-    fi
-    if montado "$punto"; then
-        "$FUSERMOUNT" -u "$punto" 2>/dev/null || "$FUSERMOUNT" -uz "$punto" 2>/dev/null || true
-    fi
-    for _ in {1..10}; do montado "$punto" || return 0; sleep 1; done
-    return 1
-}
 
 # --- 0c. Si se cambió la carpeta de montaje, quitar el montaje anterior (si era nuestro) ---
 if [[ -n "$MONTAJE_ANTERIOR" && "$MONTAJE_ANTERIOR" != "$FINAL_PATH" ]] && es_nuestro "$MONTAJE_ANTERIOR"; then
@@ -404,5 +438,13 @@ if es_nuestro "$FINAL_PATH"; then
     log "Montado por SSH: $SSH_USER@$VM_IP:$REMOTE_PATH -> $FINAL_PATH"
 else
     log "ERROR al montar con rclone (sftp). Revisa $LOG_FILE"
+    if tail -n 5 "$LOG_FILE" | grep -q 'knownhosts: key mismatch'; then
+        # rclone (Go) puede negociar un tipo de clave de servidor (ecdsa, rsa)
+        # distinto del guardado en known_hosts y lo da como "mismatch".
+        log "PISTA: en $KNOWN_HOSTS faltan claves de $VM_IP o han cambiado."
+        log "       Comprueba la huella con: ssh -p $SSH_PORT $SSH_USER@$VM_IP"
+        log "       y, si es correcta, añade todas sus claves:"
+        log "       ssh-keyscan -p $SSH_PORT $VM_IP >> $KNOWN_HOSTS"
+    fi
     exit 1
 fi

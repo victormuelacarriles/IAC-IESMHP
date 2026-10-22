@@ -1,10 +1,11 @@
 # Rol `Docker`
 
 ## Qué hace
-Instalación de **sistema** (como root) que deja el equipo preparado para que
-usuarios **sin privilegios** usen **Docker en modo rootless**. Hace **solo la
-parte que requiere root**; la configuración por usuario la completa el rol
-[`rolesUsuario/roles/DockerRootless`](../../rolesUsuario/roles/DockerRootless/CLAUDE.md).
+Deja **Docker en modo rootless listo para TODOS los usuarios** (UID ≥ 1000,
+locales y del dominio AD) sin intervención: instala el sistema como root y,
+mediante un hook PAM + un servicio de usuario global (sección 6), configura el
+daemon rootless de cada usuario **automáticamente al abrir sesión**. No hay que
+lanzar nada por usuario.
 
 Sigue la guía oficial <https://docs.docker.com/engine/security/rootless/>.
 
@@ -13,14 +14,21 @@ Se aplica desde [`../../roles.yaml`](../../roles.yaml) (play `hosts: all`,
 
 ## Reparto de responsabilidades (root vs usuario)
 
-| Parte | Rol | Se ejecuta como |
-|-------|-----|-----------------|
-| Repo + paquetes, daemon de sistema, subuid/subgid, lingering | **`roles/Docker`** (este) | root |
-| `dockerd-rootless-setuptool.sh`, `DOCKER_HOST`, `systemctl --user` | `rolesUsuario/roles/DockerRootless` | el propio usuario |
+| Parte | Pieza | Se ejecuta como | Cuándo |
+|-------|-------|-----------------|--------|
+| Repo + paquetes, `ip_forward`, `nf_tables`, daemon de sistema desactivado | `tasks/main.yml` (pasos 1-4) | root | al aplicar el rol |
+| subuid/subgid + lingering | `iac-docker-rootless-prep.sh` (hook PAM) | root | en cada login |
+| `dockerd-rootless-setuptool.sh install`, `systemctl --user`, contexto `rootless` | `iac-docker-rootless-user.sh` (servicio de usuario global) | el propio usuario | al arrancar su gestor systemd |
+
+> El antiguo rol manual `rolesUsuario/roles/DockerRootless` se **eliminó el
+> 2026-10-21** (redundante con la sección 6). Como reparación manual sigue
+> existiendo la PARTE 2 de
+> [`rolesUsuario/0-ConfiguracionInicial.sh`](../../rolesUsuario/CLAUDE.md), o
+> simplemente `iac-docker-rootless-user.sh` lanzado por el usuario.
 
 ## Automatización por usuario en cada login (local **y dominio AD**)
 
-> **Novedad 2026-06-16.** Antes la parte de usuario (`DockerRootless` /
+> **Novedad 2026-06-16.** Antes la parte de usuario (antiguo rol `DockerRootless` /
 > `0-ConfiguracionInicial.sh` PARTE 2) había que lanzarla **a mano** por cada
 > usuario, así que un usuario nuevo o del **dominio** veía
 > `failed to connect to the docker API at unix:///var/run/docker.sock` (el
@@ -45,9 +53,19 @@ Dos piezas que reproducen el mismo reparto root/usuario:
   (login, no-login, gnome-terminal) y en apps gráficas, sin depender de que se
   cargue `~/.bashrc`. (Si un usuario ya tiene `DOCKER_HOST` exportado de una
   ejecución previa, no estorba: apunta al mismo socket.)
-- **Race del primer login**: el servicio de usuario espera hasta ~15 s a que el
-  hook `pam_exec` haya escrito el subuid; si no, se reintenta en el siguiente
-  login (el lingering garantiza que en el próximo boot ya está todo).
+- **Orden en el primer login**: el perfil PAM tiene `Priority: 128`, así que
+  `pam_exec` queda en `common-session` **antes** de `pam_systemd` (prioridad 0):
+  el subuid ya está escrito cuando arranca el gestor systemd del usuario. Por si
+  acaso, el servicio de usuario espera hasta ~15 s al subuid; si no aparece, se
+  reintenta en el siguiente login (el lingering garantiza que en el próximo boot
+  ya está todo).
+- **Solo usuarios reales**: el helper de usuario sale enseguida si el UID es
+  menor que `docker_rootless_min_uid` (p. ej. `gdm`, `gdm-greeter`), para no
+  retrasar ~15 s su `default.target` esperando un subuid que nunca tendrán.
+- **Un daemon por usuario en el arranque**: el lingering se activa para todo
+  usuario que haya entrado alguna vez, así que al arrancar el equipo se levanta
+  un `dockerd` rootless por cada uno (RAM + imágenes en `~/.local/share/docker`).
+  Tenerlo en cuenta en aulas con muchos usuarios del dominio.
 - **Seguridad**: NO se concede sudo a los usuarios; la parte root la hace el
   hook PAM. El perfil usa `optional` + `quiet`, así que un fallo del helper
   **nunca bloquea el login**.
@@ -96,8 +114,8 @@ Dos piezas que reproducen el mismo reparto root/usuario:
 | `docker_enable_ip_forward` | `true` | Activar `net.ipv4.ip_forward` (fix del aviso de red de `docker compose`) |
 | `docker_rootless_users` | `[usuario]` | Usuarios a preparar explícitamente en el rol (subuid/subgid + lingering) |
 | `docker_subid_range` | `100000-165535` | Rango subuid/subgid si falta (ver aviso) |
-| `docker_rootless_auto` | `true` | Sección 6: hook PAM + servicio de usuario global (automatiza el rootless en cada login, incl. dominio). `false` ⇒ flujo manual de `DockerRootless` |
-| `docker_rootless_min_uid` | `1000` | UID mínimo para preparar a un usuario automáticamente (salta root/sistema) |
+| `docker_rootless_auto` | `true` | Sección 6: hook PAM + servicio de usuario global (automatiza el rootless en cada login, incl. dominio). `false` ⇒ cada usuario debe lanzar a mano la PARTE 2 de `rolesUsuario/0-ConfiguracionInicial.sh` |
+| `docker_rootless_min_uid` | `1000` | UID mínimo para preparar a un usuario automáticamente (salta root/sistema); lo usan los dos helpers |
 | `docker_subid_block_size` | `65536` | Tamaño del bloque subuid/subgid del helper ROOT |
 | `docker_subid_block_start` | `100000` | Primer subuid/subgid disponible (rangos consecutivos sin solape) |
 
@@ -110,8 +128,9 @@ ansible-playbook -i localhost, --connection=local roles.yaml --tags docker
 # Preparar usuarios concretos:
 ansible-playbook ... roles.yaml --tags docker -e '{"docker_rootless_users":["usuario","alvaro"]}'
 ```
-Después, **cada usuario** completa su Docker rootless con el rol
-`DockerRootless` (ver su CLAUDE.md).
+No hace falta nada más: cada usuario tiene su Docker rootless al abrir sesión
+(en el primer login puede tardar unos segundos en quedar listo). Comprobar como
+el usuario: `docker context show` → `rootless` y `docker run hello-world`.
 
 ## Issues conocidos
 - **`Missing system requirements … modprobe nf_tables` al instalar el daemon
@@ -156,5 +175,6 @@ Después, **cada usuario** completa su Docker rootless con el rol
 ## Relación con otros roles
 - Sustituye al antiguo rol `contenedores` (borrado), que estaba incompleto y
   comentado y dependía de sub-roles externos.
-- Su contrapartida por usuario es
-  [`rolesUsuario/roles/DockerRootless`](../../rolesUsuario/roles/DockerRootless/CLAUDE.md).
+- Sustituye también al antiguo rol por usuario `rolesUsuario/roles/DockerRootless`
+  (eliminado el 2026-10-21; su trabajo lo hace la sección 6 en cada login).
+  Reparación manual: PARTE 2 de `rolesUsuario/0-ConfiguracionInicial.sh`.

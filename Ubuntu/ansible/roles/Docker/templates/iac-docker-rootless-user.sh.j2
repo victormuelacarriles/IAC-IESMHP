@@ -23,6 +23,10 @@
 set -u
 
 [ "$(id -u)" -eq 0 ] && exit 0                                   # nunca para root
+# Solo usuarios reales: gdm, gdm-greeter y demás cuentas de sistema nunca tendrán
+# subuid, y esperarlo retrasaría ~15 s su default.target.
+[ "$(id -u)" -ge {{ docker_rootless_min_uid }} ] || exit 0
+[ "$(id -u)" -ne 65534 ] || exit 0                               # nobody
 command -v dockerd-rootless-setuptool.sh >/dev/null 2>&1 || exit 0   # falta la parte de sistema
 
 UID_ACT="$(id -u)"

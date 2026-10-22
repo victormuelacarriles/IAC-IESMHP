@@ -6,9 +6,9 @@
 #   - repositorio oficial de Docker + paquetes (stack + prerrequisitos rootless)
 #   - desactiva el daemon de Docker de sistema (recomendado para rootless)
 #   - subuid/subgid + lingering de los usuarios objetivo
-#
-# La parte que ejecuta cada usuario (dockerd-rootless-setuptool.sh, DOCKER_HOST,
-# systemctl --user) vive en rolesUsuario/roles/DockerRootless.
+#   - sección 6: hook PAM + servicio de usuario global que configuran el daemon
+#     rootless de CADA usuario (local o de dominio) automáticamente al abrir
+#     sesión. No hay que lanzar nada por usuario.
 #
 # roles.yaml corre con become: yes, así que aquí NO hace falta become puntual.
 # Guía oficial: https://docs.docker.com/engine/security/rootless/

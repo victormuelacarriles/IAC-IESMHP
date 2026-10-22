@@ -1,8 +1,8 @@
 # Variables del rol Docker (instalación de SISTEMA, como root)
 # ---------------------------------------------------------------------------
 # Este rol deja Docker LISTO para usarse en modo ROOTLESS por usuarios SIN
-# privilegios. Hace toda la parte que requiere root; la parte que ejecuta cada
-# usuario la completa el rol rolesUsuario/roles/DockerRootless (ver su CLAUDE.md).
+# privilegios. Hace la parte de root y, con docker_rootless_auto (sección 6),
+# también configura el daemon rootless de cada usuario al abrir sesión.
 
 # Repositorio oficial de Docker (download.docker.com).
 docker_arch: amd64
@@ -69,7 +69,8 @@ docker_enable_ip_forward: true
 # (usermod no sirve: solo conoce /etc/passwd, no SSSD).
 
 # Interruptor maestro. A false: no se instala el hook PAM ni el servicio de
-# usuario global (se vuelve al flujo manual de rolesUsuario/DockerRootless).
+# usuario global; cada usuario tendría que lanzar a mano la PARTE 2 de
+# rolesUsuario/0-ConfiguracionInicial.sh).
 docker_rootless_auto: true
 
 # UID mínimo para preparar a un usuario automáticamente (salta cuentas de

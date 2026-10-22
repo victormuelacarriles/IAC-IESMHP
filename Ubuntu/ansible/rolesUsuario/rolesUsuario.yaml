@@ -16,7 +16,11 @@
 #         tareas marcadas con become: yes. El resto corre sin privilegios.
 #
 # Limitar a un rol concreto:
-#   ansible-playbook -i localhost, --connection=local -K rolesUsuario.yaml --tags docker
+#   ansible-playbook -i localhost, --connection=local -K rolesUsuario.yaml --tags <rol>
+#
+# 2026-10-21: se eliminó el rol DockerRootless (único rol hasta ahora). El
+# Docker rootless de cada usuario lo configura ya el rol de sistema
+# ../roles/Docker automáticamente en cada login (hook PAM + servicio de usuario).
 # ===========================================================================
 
 - name: Configuración del perfil de usuario
@@ -25,5 +29,5 @@
   become: no
   gather_facts: yes
 
-  roles:
-    - DockerRootless    # Instala Docker en modo rootless para el usuario actual
+  # Sin roles por ahora (ver nota de la cabecera). Añadirlos en roles/<rol>.
+  roles: []

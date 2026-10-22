@@ -31,11 +31,13 @@ cd /opt/IAC-IESMHP/Ubuntu/ansible/rolesUsuario
 ansible-playbook -i localhost, --connection=local -K rolesUsuario.yaml
 ```
 
-Roles actuales:
+Roles actuales: **ninguno** (`roles: []`).
 
-| Rol | Estado | Qué hace |
-|-----|--------|----------|
-| [`DockerRootless`](roles/DockerRootless/CLAUDE.md) | ✅ activo (1º) | Completa Docker **rootless** para el usuario actual (socket en `/run/user/<uid>/docker.sock`). La parte de sistema la hace [`../roles/Docker`](../roles/Docker/CLAUDE.md) como root |
+> **2026-10-21**: se eliminó el rol `DockerRootless` (era el único). El Docker
+> rootless de **cada usuario** (local o de dominio) lo configura ya el rol de
+> sistema [`../roles/Docker`](../roles/Docker/CLAUDE.md) **automáticamente en
+> cada login** (hook PAM + servicio de usuario global, su sección 6), así que el
+> rol manual era redundante.
 
 ### `0-ConfiguracionInicial.sh`
 Configuración por usuario en **dos partes**. **Se ejecuta como el usuario, no
@@ -61,8 +63,10 @@ como root** (aborta si detecta `uid 0`). Es idempotente.
 
 **PARTE 2 — Docker rootless para ESTE usuario (añadida 2026-06-09):**
 
-Equivalente en bash al rol [`DockerRootless`](roles/DockerRootless/CLAUDE.md),
-pero **autosuficiente**: da por hecha la parte de sistema (rol
+> Normalmente **no hace falta**: el rol [`../roles/Docker`](../roles/Docker/CLAUDE.md)
+> lo configura solo en cada login. Queda como **reparación manual**.
+
+Es **autosuficiente**: da por hecha la parte de sistema (rol
 [`../roles/Docker`](../roles/Docker/CLAUDE.md), como root) y completa lo que cabe
 en permisos del usuario, resolviendo lo que falta con `sudo`.
 
@@ -92,8 +96,9 @@ en permisos del usuario, resolviendo lo que falta con `sudo`.
    `~/.config/systemd/user/docker.service`).
 10. **`~/.bashrc`**: añade un bloque marcado
     (`# >>> IAC-IESMHP DockerRootless >>>`) con `export PATH=/usr/bin:$PATH` y
-    `export DOCKER_HOST=unix:///run/user/<uid>/docker.sock`. Mismo formato que el
-    rol `DockerRootless` (que usa `blockinfile`), por lo que **no se duplica**.
+    `export DOCKER_HOST=unix:///run/user/<uid>/docker.sock`. El marcador es el
+    mismo que usaba el antiguo rol `DockerRootless` (`blockinfile`), así que en
+    perfiles donde ya existía **no se duplica**.
 11. **Arranca el servicio**: `systemctl --user enable --now docker.service` y
     verifica con `docker info`.
 
@@ -117,8 +122,8 @@ bash 0-ConfiguracionInicial.sh        # como el usuario actual
 ```
 
 **Relación con el rol `certificados`**: aquel hace lo mismo que la PARTE 1 pero
-**para root** (`/root/.ssh`), vía Ansible. La PARTE 2 es la versión en bash del
-rol [`DockerRootless`](roles/DockerRootless/CLAUDE.md). Ver también
+**para root** (`/root/.ssh`), vía Ansible. La PARTE 2 es la reparación manual
+de lo que hace solo el rol [`../roles/Docker`](../roles/Docker/CLAUDE.md). Ver también
 [../roles/certificados/CLAUDE.md](../roles/certificados/CLAUDE.md).
 
 ---
