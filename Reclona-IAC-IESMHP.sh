@@ -5,6 +5,7 @@
 #  Uso:
 #    sudo bash Reclona-IAC-IESMHP.sh                         # en el equipo local
 #    bash Reclona-IAC-IESMHP.sh <inventario.ini> [args ansible...]   # en remoto
+#    bash Reclona-IAC-IESMHP.sh --help | -? | --ayuda      # ayuda
 #
 #  Ejemplos:
 #    sudo bash Reclona-IAC-IESMHP.sh
@@ -58,22 +59,58 @@ modo_inventario() {
 
     cp "$inv" "$tmp/inventario.ini"
     cp "$(readlink -f "${BASH_SOURCE[0]}")" "$tmp/Reclona-IAC-IESMHP.sh"
-    log "Inventario copiado a $tmp/inventario.ini"
 
     # Por si el inventario está dentro de /opt/IAC-IESMHP y el propio equipo de
     # control aparece en él: que no nos quedemos en un directorio borrado.
     cd /
 
-    local rc=0
-    ANSIBLE_HOST_KEY_CHECKING=False \
-        ansible all -i "$tmp/inventario.ini" -f "$FORKS" \
-        -m ansible.builtin.script -a "$tmp/Reclona-IAC-IESMHP.sh" "$@" </dev/null || rc=$?
+    # Salida completa de Ansible a un log; en pantalla solo OK/ERROR por equipo.
+    local detalle="${LOGDIR}/Reclona-IAC-IESMHP-inventario.log"
+    mkdir -p "$LOGDIR" 2>/dev/null && touch "$detalle" 2>/dev/null \
+        || detalle="${HOME}/Reclona-IAC-IESMHP-inventario.log"
 
-    if [[ $rc -eq 0 ]]; then
-        log "Terminado en todos los equipos."
-    else
-        warn "Ansible terminó con código $rc (algún equipo falló o no respondió)."
-    fi
+    # Equipos a los que se va a lanzar (respeta -l y demás argumentos extra).
+    ansible all -i "$tmp/inventario.ini" "$@" --list-hosts 2>/dev/null \
+        | tail -n +2 | awk 'NF{print $1}' > "$tmp/equipos.txt" || true
+    log "Lanzando en $(wc -l < "$tmp/equipos.txt") equipos (detalle en $detalle)..."
+
+    # El callback 'tree' deja un JSON por equipo en $tmp/arbol/<equipo>.
+    ANSIBLE_HOST_KEY_CHECKING=False \
+        ansible all -i "$tmp/inventario.ini" -f "$FORKS" -t "$tmp/arbol" \
+        -m ansible.builtin.script -a "$tmp/Reclona-IAC-IESMHP.sh" "$@" \
+        </dev/null >"$detalle" 2>&1 || true
+
+    local rc=0
+    python3 -I - "$tmp/equipos.txt" "$tmp/arbol" <<'PYEOF' || rc=$?
+import json, os, sys
+equipos = [l.strip() for l in open(sys.argv[1]) if l.strip()]
+arbol = sys.argv[2]
+ok = mal = 0
+for eq in sorted(equipos):
+    f = os.path.join(arbol, eq)
+    try:
+        r = json.load(open(f))
+    except Exception:
+        r = None
+    if r is None:
+        estado, motivo = "ERROR", "sin resultado"
+    elif r.get("unreachable"):
+        estado, motivo = "ERROR", "no responde por SSH"
+    elif r.get("failed") or r.get("rc", 0) != 0:
+        lineas = (r.get("stderr_lines") or []) + (r.get("stdout_lines") or [])
+        lineas = [l for l in lineas if "[ERR" in l] or lineas or [r.get("msg", "")]
+        estado, motivo = "ERROR", f"rc={r.get('rc', '?')}: {lineas[-1].strip()}"
+    else:
+        estado, motivo = "OK", ""
+    if estado == "OK":
+        ok += 1
+    else:
+        mal += 1
+    print(f"{eq:<16} {estado}" + (f"  ({motivo})" if motivo else ""))
+print(f"--- OK: {ok}   ERROR: {mal}")
+sys.exit(1 if mal else 0)
+PYEOF
+
     exit "$rc"   # el trap borra el temporal
 }
 
@@ -150,7 +187,55 @@ modo_local() {
     log "=== Terminado ==="
 }
 
+# ─────────────── Ayuda ───────────────
+ayuda() {
+    local yo
+    yo="$(basename "$0")"
+    cat <<EOF
+$yo — Borra ${DESTDIR} y lo vuelve a clonar desde GitHub
+(${GITREPO}).
+
+USO
+  sudo $yo                          En este equipo.
+  $yo <inventario.ini> [args]       En todos los equipos del inventario (Ansible).
+  $yo --help | -? | --ayuda         Muestra esta ayuda.
+
+QUÉ HACE EN CADA EQUIPO
+  1. Clona el repo en ${DESTDIR}.nuevo. Si falla (red, GitHub...), no toca nada.
+  2. Si el equipo NO se llama "${EQUIPO_CONTROL}", deja solo la carpeta de su
+     sistema (Ubuntu o Mint, según /etc/os-release) y los ficheros de la raíz,
+     con git sparse-checkout. En "${EQUIPO_CONTROL}" queda el repo completo.
+  3. Vacía ${DESTDIR} y mete dentro el clon nuevo.
+  Log: ${LOG}
+
+PARÁMETROS
+  (ninguno)         Modo local. Requiere root.
+  <inventario.ini>  Modo remoto: copia el inventario y este script a /tmp, los
+                    lanza con Ansible (módulo script) y borra el temporal.
+                    Muestra una línea OK/ERROR por equipo y un total.
+                    Detalle: ${LOGDIR}/Reclona-IAC-IESMHP-inventario.log
+  [args]            Lo que vaya tras el inventario se pasa a ansible
+                    (p. ej. -l SMRD-05 para un solo equipo, -v...).
+
+VARIABLES DE ENTORNO
+  FORKS=<n>         Equipos en paralelo en modo remoto (por defecto ${FORKS}).
+
+EJEMPLOS
+  sudo $yo
+  $yo /opt/IAC-IESMHP/Ubuntu/ansible/equiposSMRD.ini
+  $yo /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini -l IABD-05
+  FORKS=20 $yo /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini
+
+Para recuperar el repo completo en un equipo recortado:
+  git -C ${DESTDIR} sparse-checkout disable
+EOF
+}
+
 # ─────────────── Principal ───────────────
+case "${1:-}" in
+    --help|'-?'|--ayuda|-h) ayuda; exit 0 ;;
+esac
+
 if [[ $# -ge 1 ]]; then
     modo_inventario "$@"
 else

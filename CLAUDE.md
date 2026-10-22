@@ -222,6 +222,7 @@ sudo bash Reclona-IAC-IESMHP.sh                                    # equipo loca
 bash Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini          # aula
 bash Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini -l IABD-05  # un equipo
 FORKS=20 bash Reclona-IAC-IESMHP.sh <inventario>                   # más equipos en paralelo
+./Reclona-IAC-IESMHP.sh --help          # ayuda (también -? y --ayuda)
 ```
 
 - Clona primero en `/opt/IAC-IESMHP.nuevo`; solo si sale bien vacía el
@@ -233,6 +234,12 @@ FORKS=20 bash Reclona-IAC-IESMHP.sh <inventario>                   # más equipo
   desconocido → repo completo con aviso. Para volver a tenerlo todo en un
   equipo: `git -C /opt/IAC-IESMHP sparse-checkout disable`.
 - Los argumentos tras el inventario se pasan a `ansible` (`-l`, `-v`...).
+- Con inventario, en pantalla sale **una línea por equipo** (`OK` o `ERROR` con el
+  motivo: «no responde por SSH» o la línea `[ERR]` del script) y un total. La
+  salida completa de Ansible queda en
+  `/var/log/IAC-IESMHP/Reclona-IAC-IESMHP-inventario.log` (se sobrescribe en cada
+  ejecución). Usa el callback `tree` de ansible-core (`-t`). Código de salida 1 si
+  algún equipo da ERROR.
 - Log local: `/var/log/IAC-IESMHP/Reclona-IAC-IESMHP.log`. Sin preguntas (headless).
 
 ---
