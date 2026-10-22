@@ -32,3 +32,6 @@ aplicaciones Flatpak (desde GNOME Software o por línea de comandos).
   `APPS_RECOMENDADAS`). Por eso el rol [`obs`](../obs/CLAUDE.md) está comentado
   en `roles.yaml`, y [`DesinstalaLibreOffice`](../DesinstalaLibreOffice/CLAUDE.md)
   quita el LibreOffice nativo si se activa.
+  `Ubuntu/flatpack/instalaLibreOffice.sh` instala/actualiza el LibreOffice
+  Flatpak del usuario y, si hay LibreOffice nativo, oculta sus lanzadores y
+  asocia los documentos al Flatpak (solo en el perfil del usuario).
