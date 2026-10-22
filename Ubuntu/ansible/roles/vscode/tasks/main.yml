@@ -73,3 +73,70 @@
     - name: Actualizar la caché de APT
       ansible.builtin.apt:
         update_cache: true
+
+# ── Actualización automática diaria ──────────────────────────────────────────
+# Timer que, {{ vscode_autoactualiza_espera }} después de encender (y cada
+# {{ vscode_autoactualiza_intervalo }} si sigue encendido), vuelve a lanzar este
+# rol en local; el script solo lo hace una vez al día.
+# OJO: aquí NO se arranca el .service (state: started): cuando este rol lo lanza
+# el propio service, esperaría a sí mismo y se quedaría bloqueado.
+
+- name: Actualización automática de VS Code
+  when: vscode_autoactualiza | bool
+  block:
+    - name: Instalar el script de actualización automática
+      ansible.builtin.template:
+        src: iac-actualiza-vscode.sh.j2
+        dest: "{{ vscode_autoactualiza_script }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Instalar las unidades service y timer
+      ansible.builtin.template:
+        src: "iac-actualiza-vscode.{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ vscode_autoactualiza_unidad }}.{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: [service, timer]
+
+    # Antes de arrancar el timer: si el equipo lleva más de
+    # {{ vscode_autoactualiza_espera }} encendido, systemd lo dispara al momento y
+    # lanzaría otro ansible en paralelo (p. ej. con roles.yaml en el primer
+    # arranque). Con la marca de hoy, el script sale sin hacer nada.
+    - name: Marcar que hoy ya se ha comprobado VS Code
+      ansible.builtin.shell: >-
+        mkdir -p "$(dirname {{ vscode_autoactualiza_marca }})" &&
+        date +%F > {{ vscode_autoactualiza_marca }}
+      changed_when: false
+
+    - name: Habilitar y arrancar el timer
+      ansible.builtin.systemd:
+        name: "{{ vscode_autoactualiza_unidad }}.timer"
+        enabled: true
+        state: started
+        daemon_reload: true
+
+- name: Quitar la actualización automática de VS Code
+  when: not (vscode_autoactualiza | bool)
+  block:
+    - name: Parar y deshabilitar el timer
+      ansible.builtin.systemd:
+        name: "{{ vscode_autoactualiza_unidad }}.timer"
+        enabled: false
+        state: stopped
+      failed_when: false
+
+    - name: Borrar script y unidades
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ vscode_autoactualiza_script }}"
+        - "/etc/systemd/system/{{ vscode_autoactualiza_unidad }}.service"
+        - "/etc/systemd/system/{{ vscode_autoactualiza_unidad }}.timer"
+
+    - name: Recargar systemd
+      ansible.builtin.systemd:
+        daemon_reload: true

@@ -1,0 +1,21 @@
+# Variables del rol vscode
+# El rol instala/actualiza VS Code y deja un timer que lo vuelve a lanzar solo
+# (una vez al día, a los 5 min de encender el equipo).
+
+# Activar la actualización automática diaria (false → se quitan timer/service/script)
+vscode_autoactualiza: true
+
+# Espera tras el arranque antes de comprobar (formato systemd OnBootSec)
+vscode_autoactualiza_espera: 5min
+
+# Equipos que se quedan encendidos: repetir cada... (formato systemd OnUnitActiveSec)
+vscode_autoactualiza_intervalo: 1d
+
+# Playbook que lanza el timer (el clon del repo en el equipo, ver comun.sh)
+vscode_autoactualiza_playbook: /opt/IAC-IESMHP/Ubuntu/ansible/roles/vscode/vscode.yaml
+
+# Rutas / nombres de los artefactos instalados (no suele hacer falta cambiarlos)
+vscode_autoactualiza_script: /usr/local/sbin/iac-actualiza-vscode.sh
+vscode_autoactualiza_unidad: iac-actualiza-vscode
+vscode_autoactualiza_log: /var/log/IAC-IESMHP/Ubuntu/iac-actualiza-vscode.log
+vscode_autoactualiza_marca: /var/lib/IAC-IESMHP/vscode-ultima-comprobacion

@@ -1,0 +1,16 @@
+[Unit]
+# {{ ansible_managed }}
+# Sin dependencias gráficas: funciona igual sin monitor (headless).
+Description=IAC-IESMHP - Instala/actualiza VS Code (rol Ansible vscode)
+Documentation=file://{{ vscode_autoactualiza_script }}
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{ vscode_autoactualiza_script }}
+StandardInput=null
+# Prioridad baja: no molestar al alumno que ya está trabajando
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=30min

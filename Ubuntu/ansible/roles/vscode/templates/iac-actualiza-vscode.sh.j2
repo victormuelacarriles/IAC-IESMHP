@@ -1,0 +1,53 @@
+#!/bin/bash
+# =============================================================================
+#  iac-actualiza-vscode.sh   ({{ ansible_managed }})
+#  Instalado por el rol Ansible 'vscode'. NO editar a mano: lo regenera el rol.
+#
+#  Lanza el playbook del rol vscode en local, como mucho una vez al día:
+#  si VS Code está en la última estable no hace nada; si no, lo actualiza.
+#  Lo lanza {{ vscode_autoactualiza_unidad }}.timer {{ vscode_autoactualiza_espera }} después de arrancar
+#  (y cada {{ vscode_autoactualiza_intervalo }} si el equipo sigue encendido).
+#
+#  Log: {{ vscode_autoactualiza_log }} (y journalctl -u {{ vscode_autoactualiza_unidad }})
+#  Forzar una comprobación ya:  sudo rm -f {{ vscode_autoactualiza_marca }}; sudo systemctl start {{ vscode_autoactualiza_unidad }}
+# =============================================================================
+set -u
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin"
+
+PLAYBOOK="{{ vscode_autoactualiza_playbook }}"
+LOG="{{ vscode_autoactualiza_log }}"
+MARCA="{{ vscode_autoactualiza_marca }}"
+HOY="$(date +%F)"
+
+mkdir -p "$(dirname "$LOG")" "$(dirname "$MARCA")"
+# Rotación mínima: si pasa de 1 MB, se guarda como .1 y se empieza de nuevo
+[ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" -gt 1048576 ] && mv -f "$LOG" "$LOG.1"
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; logger -t iac-vscode "$*"; }
+
+if [ "$(cat "$MARCA" 2>/dev/null)" = "$HOY" ]; then
+    log "Ya se comprobó hoy ($HOY); nada que hacer."
+    exit 0
+fi
+
+if [ ! -f "$PLAYBOOK" ]; then
+    log "[ERR] No existe $PLAYBOOK (¿falta el clon del repo?)."
+    exit 1
+fi
+if ! command -v ansible-playbook >/dev/null 2>&1; then
+    log "[ERR] ansible-playbook no está instalado."
+    exit 1
+fi
+
+log "Comprobando VS Code con $PLAYBOOK ..."
+ANSIBLE_NOCOLOR=1 ansible-playbook -i localhost, --connection=local "$PLAYBOOK" \
+    </dev/null >> "$LOG" 2>&1
+RC=$?
+
+if [ $RC -eq 0 ]; then
+    echo "$HOY" > "$MARCA"
+    log "OK: $(dpkg-query -W -f='VS Code ${Version}' code 2>/dev/null)"
+else
+    # Sin marca: se reintenta en el próximo arranque o en el próximo disparo del timer
+    log "[ERR] ansible-playbook devolvió rc=$RC (ver arriba en este log)."
+fi
+exit $RC

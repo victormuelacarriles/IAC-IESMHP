@@ -3,14 +3,14 @@
 #  Reclona-IAC-IESMHP.sh — Borra /opt/IAC-IESMHP y lo vuelve a clonar desde GitHub.
 #
 #  Uso:
-#    sudo bash Reclona-IAC-IESMHP.sh                         # en el equipo local
-#    bash Reclona-IAC-IESMHP.sh <inventario.ini> [args ansible...]   # en remoto
-#    bash Reclona-IAC-IESMHP.sh --help | -? | --ayuda      # ayuda
+#    sudo ./Reclona-IAC-IESMHP.sh                         # en el equipo local
+#    ./Reclona-IAC-IESMHP.sh <inventario.ini> [args ansible...]   # en remoto
+#    ./Reclona-IAC-IESMHP.sh --help | -? | --ayuda      # ayuda
 #
 #  Ejemplos:
-#    sudo bash Reclona-IAC-IESMHP.sh
-#    bash Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini
-#    bash Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini -l IABD-05
+#    sudo ./Reclona-IAC-IESMHP.sh
+#    ./Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini
+#    ./Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini -l IABD-05
 #
 #  Modo local:
 #    - Clona el repo en una carpeta temporal y, solo si el clon sale bien,
@@ -222,9 +222,9 @@ VARIABLES DE ENTORNO
 
 EJEMPLOS
   sudo $yo
-  $yo /opt/IAC-IESMHP/Ubuntu/ansible/equiposSMRD.ini
-  $yo /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini -l IABD-05
-  FORKS=20 $yo /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini
+  .$yo /opt/IAC-IESMHP/Ubuntu/ansible/equiposSMRD.ini
+  .$yo /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini -l IABD-05
+  FORKS=20 .$yo /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini
 
 Para recuperar el repo completo en un equipo recortado:
   git -C ${DESTDIR} sparse-checkout disable

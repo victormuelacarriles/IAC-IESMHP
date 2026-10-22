@@ -1,0 +1,12 @@
+[Unit]
+# {{ ansible_managed }}
+Description=IAC-IESMHP - Comprueba y actualiza VS Code ({{ vscode_autoactualiza_espera }} tras arrancar y cada {{ vscode_autoactualiza_intervalo }})
+
+[Timer]
+OnBootSec={{ vscode_autoactualiza_espera }}
+OnUnitActiveSec={{ vscode_autoactualiza_intervalo }}
+# Que no coincidan todos los equipos del aula en el mismo segundo
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
