@@ -21,17 +21,29 @@ escritorio, etc.).
 ## Contenido
 
 ### `rolesUsuario.yaml` — playbook por usuario
-Playbook Ansible análogo a `../roles.yaml` pero **scoped al perfil del usuario**:
-`hosts: localhost`, `connection: local`, **`become: no` global**. Solo las tareas
-que necesitan root usan `become: yes` puntual (por eso se lanza con `-K`). Sus
-roles viven en `rolesUsuario/roles/`.
+Playbook Ansible análogo a `../roles.yaml` pero trabajando con el **usuario** de
+cada equipo: `hosts: all`, **`become: no`**, `gather_facts: no` (desde
+2026-10-22; antes era `hosts: localhost`). Sus roles viven en
+`rolesUsuario/roles/`. Se lanza contra los inventarios de alumnos de esta
+carpeta (un host por alumno, con su equipo y su usuario) o en local:
 
 ```bash
 cd /opt/IAC-IESMHP/Ubuntu/ansible/rolesUsuario
-ansible-playbook -i localhost, --connection=local -K rolesUsuario.yaml
+ansible-playbook -i EquiposSMRD-alumnos2627.ini rolesUsuario.yaml      # SMRD
+ansible-playbook -i equiposIABD-alumnos2627.ini rolesUsuario.yaml      # IABD
+ansible-playbook -i localhost, --connection=local rolesUsuario.yaml    # local
 ```
 
-Roles actuales: **ninguno** (`roles: []`).
+Inventarios de alumnos (formatos distintos, el rol acepta los dos):
+- `EquiposSMRD-alumnos2627.ini`: `ansible_user=SMRV08@iesmhp.local` por host.
+- `equiposIABD-alumnos2627.ini`: `usuario=CEGSIABD14` por host (el rol le añade
+  `@iesmhp.local`) y `ansible_user=root` en el grupo.
+
+Roles actuales:
+
+| Rol | Qué hace |
+|-----|----------|
+| [`compruebaUsuario`](roles/compruebaUsuario/CLAUDE.md) | Entra por SSH como el usuario asignado a cada equipo y dice `OK` / `NO ACCEDE` / `APAGADO`. No cambia nada (2026-10-22) |
 
 > **2026-10-21**: se eliminó el rol `DockerRootless` (era el único). El Docker
 > rootless de **cada usuario** (local o de dominio) lo configura ya el rol de

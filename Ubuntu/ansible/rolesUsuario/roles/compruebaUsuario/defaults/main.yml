@@ -1,0 +1,8 @@
+---
+# Dominio que se añade a la variable `usuario` del inventario (formato IABD:
+# usuario=CEGSIABD14). Si el host trae ya ansible_user=SMRV08@iesmhp.local
+# (formato SMRD) se usa tal cual.
+compruebaUsuario_dominio: iesmhp.local
+
+# Segundos de espera al comprobar si el equipo tiene el puerto SSH abierto.
+compruebaUsuario_timeout: 5

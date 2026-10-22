@@ -7,6 +7,9 @@
 
 #IABD
 #Desde el servidor de Ansible (remotamente)
-ansible-playbook -i ./EquiposIABD-alumnos2627.ini rolesUsuario.yaml 
+ansible-playbook -i ./equiposIABD-alumnos2627.ini rolesUsuario.yaml
+
+#SMRD
+ansible-playbook -i ./EquiposSMRD-alumnos2627.ini rolesUsuario.yaml
 
 ############################################################################################################

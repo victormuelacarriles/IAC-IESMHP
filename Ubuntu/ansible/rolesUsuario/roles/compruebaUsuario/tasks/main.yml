@@ -1,0 +1,68 @@
+---
+# compruebaUsuario — ¿puede entrar por SSH el usuario asignado a cada equipo?
+#
+# Resultado por equipo:
+#   OK          → entra como el usuario (el usuario existe y tiene acceso).
+#   NO ACCEDE   → el equipo responde en el 22, pero el usuario no entra
+#                 (no existe, no tiene la clave/contraseña o falla el dominio).
+#   APAGADO     → el equipo no tiene el puerto 22 abierto.
+#
+# No toca nada en el equipo: solo ejecuta `id -un` con `raw` (sin Python ni
+# directorio temporal, que fallaría si el usuario de dominio aún no tiene $HOME).
+
+# set_fact corre en el controlador (no conecta), así que se puede calcular el
+# usuario antes de sustituir ansible_user en las tareas siguientes.
+- name: Usuario a comprobar en {{ inventory_hostname }}
+  ansible.builtin.set_fact:
+    compruebaUsuario_usuario: >-
+      {{ (usuario ~ '@' ~ compruebaUsuario_dominio)
+         if (usuario is defined and usuario | length > 0)
+         else (ansible_user | default(lookup('env', 'USER'))) }}
+    # Se calcula aquí: con delegate_to, el `when` vería las variables de localhost.
+    compruebaUsuario_local: "{{ ansible_connection | default('ssh') == 'local' }}"
+  tags: [compruebaUsuario]
+
+- name: ¿Equipo encendido? (puerto 22 de {{ ansible_host | default(inventory_hostname) }})
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: 22
+    timeout: "{{ compruebaUsuario_timeout }}"
+  delegate_to: localhost
+  register: compruebaUsuario_puerto
+  ignore_errors: true          # puerto cerrado = equipo apagado, no es un fallo
+  when: not compruebaUsuario_local | bool
+  tags: [compruebaUsuario]
+
+- name: Entrar como {{ compruebaUsuario_usuario }}
+  ansible.builtin.raw: id -un
+  vars:
+    ansible_user: "{{ compruebaUsuario_usuario }}"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
+  register: compruebaUsuario_login
+  ignore_unreachable: true
+  failed_when: false
+  changed_when: false
+  when: compruebaUsuario_puerto is not failed
+  tags: [compruebaUsuario]
+
+- name: Resultado
+  ansible.builtin.set_fact:
+    compruebaUsuario_estado: >-
+      {%- if compruebaUsuario_login is skipped -%}APAGADO
+      {%- elif (compruebaUsuario_login.unreachable | default(false))
+               or (compruebaUsuario_login.rc | default(1)) != 0 -%}NO ACCEDE
+      {%- else -%}OK
+      {%- endif -%}
+  tags: [compruebaUsuario]
+
+- name: Resumen
+  ansible.builtin.debug:
+    msg: >-
+      {{ '%-8s' | format(hostvars[item].compruebaUsuario_estado | default('?')) }}
+      {{ item }} ({{ hostvars[item].ansible_host | default(item) }})
+      {{ hostvars[item].compruebaUsuario_usuario | default('?') }}
+  loop: "{{ ansible_play_hosts_all | sort }}"
+  loop_control:
+    label: "{{ item }}"
+  run_once: true
+  tags: [compruebaUsuario]

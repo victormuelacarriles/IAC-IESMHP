@@ -3,31 +3,29 @@
 # rolesUsuario.yaml — Playbook de configuración POR USUARIO
 # ---------------------------------------------------------------------------
 # A diferencia de ../roles.yaml (que corre COMO ROOT sobre el equipo), este
-# playbook configura el PERFIL del usuario que lo lanza y se ejecuta COMO ese
-# usuario (become: no global). Solo las tareas que necesitan privilegios
-# (instalar paquetes, desactivar el daemon de sistema, habilitar lingering)
-# piden become puntualmente dentro de cada rol.
+# playbook trabaja con el USUARIO de cada equipo (become: no global).
 #
-# Uso (como el usuario, NO como root):
+# Uso remoto (desde el servidor de Ansible, con un inventario de alumnos):
 #   cd /opt/IAC-IESMHP/Ubuntu/ansible/rolesUsuario
-#   ansible-playbook -i localhost, --connection=local -K rolesUsuario.yaml
+#   ansible-playbook -i EquiposSMRD-alumnos2627.ini rolesUsuario.yaml
+#   ansible-playbook -i equiposIABD-alumnos2627.ini rolesUsuario.yaml
+#   (añadir -k si se entra con contraseña en vez de con clave; necesita sshpass)
 #
-#   -K  → pregunta la contraseña de sudo (BECOME) una vez, para las pocas
-#         tareas marcadas con become: yes. El resto corre sin privilegios.
+# Uso local (como el usuario, NO como root):
+#   ansible-playbook -i localhost, --connection=local rolesUsuario.yaml
 #
-# Limitar a un rol concreto:
-#   ansible-playbook -i localhost, --connection=local -K rolesUsuario.yaml --tags <rol>
+# Limitar a un rol concreto:  --tags <rol>      Limitar a un equipo:  -l <host>
 #
-# 2026-10-21: se eliminó el rol DockerRootless (único rol hasta ahora). El
-# Docker rootless de cada usuario lo configura ya el rol de sistema
-# ../roles/Docker automáticamente en cada login (hook PAM + servicio de usuario).
+# 2026-10-21: se eliminó el rol DockerRootless (lo hace ya ../roles/Docker).
+# 2026-10-22: hosts: all (antes localhost) para poder usar los inventarios de
+#             alumnos; primer rol: compruebaUsuario.
 # ===========================================================================
 
 - name: Configuración del perfil de usuario
-  hosts: localhost
-  connection: local
+  hosts: all
   become: no
-  gather_facts: yes
+  gather_facts: no
 
-  # Sin roles por ahora (ver nota de la cabecera). Añadirlos en roles/<rol>.
-  roles: []
+  roles:
+    - role: compruebaUsuario
+      tags: [compruebaUsuario]
