@@ -221,6 +221,8 @@ cd /opt/IAC-IESMHP
 sudo bash Reclona-IAC-IESMHP.sh                                    # equipo local
 bash Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini          # aula
 bash Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini -l IABD-05  # un equipo
+bash Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini \
+                           /opt/IAC-IESMHP/Ubuntu/ansible/equiposSMRD.ini       # varias aulas
 FORKS=20 bash Reclona-IAC-IESMHP.sh <inventario>                   # más equipos en paralelo
 ./Reclona-IAC-IESMHP.sh --help          # ayuda (también -? y --ayuda)
 ```
@@ -233,12 +235,16 @@ FORKS=20 bash Reclona-IAC-IESMHP.sh <inventario>                   # más equipo
   según `/etc/os-release` (`ubuntu`→`Ubuntu`, `linuxmint`→`Mint`); SO
   desconocido → repo completo con aviso. Para volver a tenerlo todo en un
   equipo: `git -C /opt/IAC-IESMHP sparse-checkout disable`.
-- Los argumentos tras el inventario se pasan a `ansible` (`-l`, `-v`...).
+- Admite **varios inventarios** separados por espacios: lanza Ansible una vez por
+  cada uno (en orden, cada uno con sus `[all:vars]`; si uno falla sigue con el
+  siguiente) y al final saca el total de todos.
+- Los argumentos tras los inventarios (desde el primero que empieza por `-`) se
+  pasan a `ansible` (`-l`, `-v`...), a todos los inventarios.
 - Con inventario, en pantalla sale **una línea por equipo** (`OK` o `ERROR` con el
   motivo: «no responde por SSH» o la línea `[ERR]` del script) y un total. La
   salida completa de Ansible queda en
-  `/var/log/IAC-IESMHP/Reclona-IAC-IESMHP-inventario.log` (se sobrescribe en cada
-  ejecución). Usa el callback `tree` de ansible-core (`-t`). Código de salida 1 si
+  `/var/log/IAC-IESMHP/Reclona-IAC-IESMHP-inventario.log` (se vacía al empezar y
+  lleva una cabecera `===== <inventario> =====` por cada uno). Usa el callback `tree` de ansible-core (`-t`). Código de salida 1 si
   algún equipo da ERROR.
 - Log local: `/var/log/IAC-IESMHP/Reclona-IAC-IESMHP.log`. Sin preguntas (headless).
 
