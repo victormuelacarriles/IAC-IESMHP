@@ -12,4 +12,7 @@ ansible-playbook -i ./equiposIABD-alumnos2627.ini rolesUsuario.yaml
 #SMRD
 ansible-playbook -i ./EquiposSMRD-alumnos2627.ini rolesUsuario.yaml
 
+#un solo caso
+ansible-playbook -i ./EquiposSMRD-alumnos2627.ini rolesUsuario.yaml -l 'SMRD-04-SMRV24' 
+
 ############################################################################################################

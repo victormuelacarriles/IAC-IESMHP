@@ -4,5 +4,9 @@
 # (formato SMRD) se usa tal cual.
 compruebaUsuario_dominio: iesmhp.local
 
-# Segundos de espera al comprobar si el equipo tiene el puerto SSH abierto.
+# Segundos de espera de la conexión SSH (ConnectTimeout).
 compruebaUsuario_timeout: 5
+
+# Contraseña para entrar (vacía = con clave SSH). Si se usa, pasarla con -e o
+# desde un vault, nunca escrita aquí. Necesita el paquete sshpass.
+compruebaUsuario_password: ""

@@ -35,3 +35,9 @@
     name: curl
     state: present
     update_cache: false
+
+- name: Instalar sshpass (utilizado para conexiones SSH con contraseña)
+  apt:
+    name: sshpass
+    state: present
+    update_cache: false
