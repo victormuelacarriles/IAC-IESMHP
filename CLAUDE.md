@@ -203,10 +203,35 @@ Particionado por perfil (línea Ubuntu; detalle en [`Ubuntu/CLAUDE.md`](Ubuntu/C
   Lo consumen las cuatro líneas para nombre + IP estática.
 - **`Autorizados.txt`** — claves SSH públicas autorizadas (root/usuario/Administrador).
 - **`README.md`** — instrucciones mínimas de clonado.
+- **`Reclona-IAC-IESMHP.sh`** — re-clona `/opt/IAC-IESMHP` (local o por inventario Ansible); ver abajo.
 
 > Los fondos de escritorio, logos Plymouth e imágenes del IES viven dentro de cada
 > línea (p. ej. `Ubuntu/ISO/26.04/imagenesIES/`, `ThinStation/imagenes/`), **no** en
 > la raíz.
+
+## Script de la raíz: `Reclona-IAC-IESMHP.sh`
+
+Borra `/opt/IAC-IESMHP` y lo vuelve a clonar de GitHub, en el equipo local o en
+todos los de un inventario Ansible. Herramienta manual, fuera de la cadena
+automática. Al estar en la raíz, se conserva en todos los equipos (el
+sparse-checkout siempre deja los ficheros raíz).
+
+```bash
+cd /opt/IAC-IESMHP
+sudo bash Reclona-IAC-IESMHP.sh                                    # equipo local
+bash Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini          # aula
+bash Reclona-IAC-IESMHP.sh /opt/IAC-IESMHP/Ubuntu/ansible/equiposIABD.ini -l IABD-05  # un equipo
+FORKS=20 bash Reclona-IAC-IESMHP.sh <inventario>                   # más equipos en paralelo
+```
+
+- Clona primero en `/opt/IAC-IESMHP.nuevo`; solo si sale bien borra el viejo y
+  lo sustituye. Si falla la red, el equipo conserva su copia.
+- Equipo `controlubuntu`: repo completo. Resto: `git sparse-checkout set <SO>`
+  según `/etc/os-release` (`ubuntu`→`Ubuntu`, `linuxmint`→`Mint`); SO
+  desconocido → repo completo con aviso. Para volver a tenerlo todo en un
+  equipo: `git -C /opt/IAC-IESMHP sparse-checkout disable`.
+- Los argumentos tras el inventario se pasan a `ansible` (`-l`, `-v`...).
+- Log local: `/var/log/IAC-IESMHP/Reclona-IAC-IESMHP.log`. Sin preguntas (headless).
 
 ---
 

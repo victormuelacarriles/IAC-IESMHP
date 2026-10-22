@@ -39,3 +39,6 @@ control** (Linux) con acceso de red a las aulas.
   `SMRD-16` en `ControlSMRD/EnciendeSMRD.sh`, corregido el 2026-10-16). Ante una
   discrepancia, manda `macs.csv`.
 - Para usar la versión de GitHub en la VM: `cd /opt/IAC-IESMHP && git pull`.
+
+> `ReclonaIAC.sh` (re-clonar `/opt/IAC-IESMHP`) se movió a la raíz del repo como
+> [`Reclona-IAC-IESMHP.sh`](../../Reclona-IAC-IESMHP.sh); ver el `CLAUDE.md` raíz.
