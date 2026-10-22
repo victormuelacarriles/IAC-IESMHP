@@ -19,6 +19,9 @@
 # 2026-10-21: se eliminó el rol DockerRootless (lo hace ya ../roles/Docker).
 # 2026-10-22: hosts: all (antes localhost) para poder usar los inventarios de
 #             alumnos; primer rol: compruebaUsuario.
+# 2026-10-22: rol VirtualW11 (copia la VM Windows 11 de plantilla al perfil).
+#             Va detrás de compruebaUsuario: solo se aplica a los equipos en
+#             los que el usuario entra.
 # ===========================================================================
 
 - name: Configuración del perfil de usuario
@@ -29,3 +32,5 @@
   roles:
     - role: compruebaUsuario
       tags: [compruebaUsuario]
+    - role: VirtualW11
+      tags: [VirtualW11]

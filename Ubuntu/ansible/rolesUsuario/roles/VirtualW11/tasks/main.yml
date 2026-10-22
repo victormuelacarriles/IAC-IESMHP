@@ -1,0 +1,193 @@
+---
+# VirtualW11 — copia la máquina virtual Windows 11 de plantilla (NAS) al perfil
+# del usuario (~/vmware/Win11-<usuario>) y la añade a su VMware Workstation.
+#
+# - Nunca machaca una máquina que ya existe (salvo -e VirtualW11_reemplazar=true).
+# - Inventario SMRD (ansible_user=SMRV08@iesmhp.local): se entra como el usuario.
+# - Inventario IABD (ansible_user=root, usuario=CEGSIABD14): se entra como root
+#   y las tareas se ejecutan como el usuario (become_user), así todo queda suyo.
+
+- name: Usuario y rutas en {{ inventory_hostname }}
+  ansible.builtin.set_fact:
+    VirtualW11_login: >-
+      {{ (usuario ~ '@' ~ VirtualW11_dominio)
+         if (usuario is defined and usuario | length > 0)
+         else (ansible_user | default(lookup('env', 'USER'))) }}
+    VirtualW11_conexion: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+  tags: [VirtualW11]
+
+- name: Nombre de la máquina
+  ansible.builtin.set_fact:
+    VirtualW11_id: "{{ VirtualW11_login.split('@')[0] }}"
+    VirtualW11_nombre: "{{ VirtualW11_prefijo }}-{{ VirtualW11_login.split('@')[0] }}"
+    VirtualW11_become: "{{ VirtualW11_conexion == 'root' and VirtualW11_login != 'root' }}"
+  tags: [VirtualW11]
+
+- name: No se copia al perfil de root
+  ansible.builtin.fail:
+    msg: "No hay usuario para este equipo (sale root): falta 'usuario=' o 'ansible_user=' en el inventario"
+  when: VirtualW11_login == 'root'
+  tags: [VirtualW11]
+
+- name: Tareas como {{ VirtualW11_login }}
+  become: "{{ VirtualW11_become | bool }}"
+  become_user: "{{ VirtualW11_login }}"
+  tags: [VirtualW11]
+  block:
+    # ---------------------------------------------------------------- rutas
+    - name: HOME del usuario
+      ansible.builtin.command: printenv HOME
+      register: VirtualW11_home_cmd
+      changed_when: false
+
+    - name: Rutas
+      ansible.builtin.set_fact:
+        VirtualW11_home: "{{ VirtualW11_home_cmd.stdout | trim }}"
+        VirtualW11_destino: "{{ VirtualW11_home_cmd.stdout | trim }}/{{ VirtualW11_carpeta }}/{{ VirtualW11_nombre }}"
+
+    - name: Comprobar que existe el HOME
+      ansible.builtin.stat:
+        path: "{{ VirtualW11_home }}"
+      register: VirtualW11_home_st
+
+    - name: Sin HOME no se sigue
+      ansible.builtin.fail:
+        msg: "{{ VirtualW11_home }} no existe: {{ VirtualW11_login }} no ha iniciado sesión nunca en este equipo"
+      when: not VirtualW11_home_st.stat.exists
+
+    # ------------------------------------------------------------ plantilla
+    - name: Buscar el .vmx de la plantilla
+      ansible.builtin.find:
+        paths: "{{ VirtualW11_origen }}"
+        patterns: "*.vmx"
+      register: VirtualW11_plantilla
+
+    - name: La plantilla tiene que estar accesible
+      ansible.builtin.fail:
+        msg: >-
+          No encuentro un único .vmx en {{ VirtualW11_origen }}
+          ({{ VirtualW11_plantilla.matched }} encontrados). ¿Está montado el NAS (rol clienteNAS)?
+      when: VirtualW11_plantilla.matched != 1
+
+    - name: Ruta del .vmx copiado
+      ansible.builtin.set_fact:
+        VirtualW11_vmx: "{{ VirtualW11_destino }}/{{ VirtualW11_plantilla.files[0].path | basename }}"
+
+    # ---------------------------------------------------------------- copia
+    - name: Borrar la máquina anterior (VirtualW11_reemplazar=true)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ VirtualW11_destino }}"
+        - "{{ VirtualW11_destino }}.copiando"
+      when: VirtualW11_reemplazar | bool
+
+    - name: ¿Ya tiene la máquina?
+      ansible.builtin.stat:
+        path: "{{ VirtualW11_vmx }}"
+      register: VirtualW11_vmx_st
+
+    - name: Espacio necesario y libre
+      ansible.builtin.shell: |
+        set -o pipefail
+        mkdir -p "{{ VirtualW11_home }}/{{ VirtualW11_carpeta }}"
+        echo "$(du -sb "{{ VirtualW11_origen }}" | cut -f1) $(df --output=avail -B1 "{{ VirtualW11_home }}/{{ VirtualW11_carpeta }}" | tail -1)"
+      args:
+        executable: /bin/bash
+      register: VirtualW11_espacio
+      changed_when: false
+      when: not VirtualW11_vmx_st.stat.exists
+
+    - name: Comprobar que cabe
+      ansible.builtin.fail:
+        msg: >-
+          No cabe: la plantilla ocupa {{ (necesita / 1073741824) | round(1) }} GB y
+          quedan {{ (libre / 1073741824) | round(1) }} GB libres en {{ VirtualW11_home }}
+          (se piden {{ VirtualW11_margen_gb }} GB de margen)
+      vars:
+        necesita: "{{ VirtualW11_espacio.stdout.split()[0] | int }}"
+        libre: "{{ VirtualW11_espacio.stdout.split()[1] | int }}"
+      when:
+        - not VirtualW11_vmx_st.stat.exists
+        - (libre | int) < (necesita | int) + (VirtualW11_margen_gb | int) * 1073741824
+
+    # Se copia a <destino>.copiando y se renombra al terminar: una copia cortada
+    # nunca parece una máquina completa, y al relanzar rsync continúa por donde iba.
+    - name: Copiar la plantilla desde el NAS (~15 GB, tarda)
+      ansible.builtin.shell: |
+        set -e
+        rsync -a --partial --no-owner --no-group --chmod=Du=rwx,Dgo=,Fu=rw,Fgo= \
+              "{{ VirtualW11_origen }}/" "{{ VirtualW11_destino }}.copiando/"
+        mv "{{ VirtualW11_destino }}.copiando" "{{ VirtualW11_destino }}"
+      args:
+        executable: /bin/bash
+      async: "{{ VirtualW11_timeout_copia }}"
+      poll: 30
+      when: not VirtualW11_vmx_st.stat.exists
+
+    # ------------------------------------------------- ajustes del .vmx
+    - name: ¿Está encendida la máquina?
+      ansible.builtin.stat:
+        path: "{{ VirtualW11_vmx }}.lck"
+      register: VirtualW11_lck
+
+    - name: ¿Tiene ya uuid.action? (no = recién copiada de la plantilla)
+      ansible.builtin.command:
+        argv: [grep, -q, '^uuid\.action', "{{ VirtualW11_vmx }}"]
+      register: VirtualW11_uuid_action
+      changed_when: false
+      failed_when: VirtualW11_uuid_action.rc > 1
+
+    # Solo la primera vez (aún sin uuid.action): sin UUID ni MAC, VMware genera
+    # unos propios al arrancarla y, con uuid.action=create, no pregunta "¿la has
+    # movido o copiado?" (pregunta que dejaría la máquina esperando un clic).
+    - name: Quitar UUID y MAC de la plantilla
+      ansible.builtin.lineinfile:
+        path: "{{ VirtualW11_vmx }}"
+        regexp: '^{{ item }}\s*='
+        state: absent
+      loop:
+        - 'uuid\.bios'
+        - 'uuid\.location'
+        - 'ethernet0\.generatedAddress'
+        - 'ethernet0\.generatedAddressOffset'
+      when:
+        - VirtualW11_uuid_action.rc == 1
+        - not VirtualW11_lck.stat.exists
+
+    - name: Ajustes del .vmx
+      ansible.builtin.lineinfile:
+        path: "{{ VirtualW11_vmx }}"
+        regexp: '^{{ item.clave | regex_escape }}\s*='
+        line: '{{ item.clave }} = "{{ item.valor }}"'
+      loop:
+        - { clave: displayName, valor: "{{ VirtualW11_nombre }}" }
+        - { clave: uuid.action, valor: create }
+      loop_control:
+        label: "{{ item.clave }}"
+      when: not VirtualW11_lck.stat.exists
+
+    - name: Aviso si está encendida
+      ansible.builtin.debug:
+        msg: "[WARN] {{ VirtualW11_nombre }} está en uso: no se toca su .vmx"
+      when: VirtualW11_lck.stat.exists
+
+    # ------------------------------------------- biblioteca de VMware
+    - name: Añadir la máquina a VMware Workstation
+      ansible.builtin.script:
+        cmd: >-
+          inventario-vmware.sh
+          {{ (VirtualW11_home ~ '/.vmware/inventory.vmls') | quote }}
+          {{ VirtualW11_vmx | quote }}
+          {{ VirtualW11_nombre | quote }}
+      register: VirtualW11_inventario
+      changed_when: "'AÑADIDA' in VirtualW11_inventario.stdout"
+
+    - name: Resultado
+      ansible.builtin.debug:
+        msg: >-
+          {{ VirtualW11_nombre }}:
+          {{ 'YA EXISTÍA' if VirtualW11_vmx_st.stat.exists else 'COPIADA' }},
+          biblioteca {{ VirtualW11_inventario.stdout | trim }}
+          → {{ VirtualW11_vmx }}

@@ -12,6 +12,9 @@ ansible-playbook -i ./equiposIABD-alumnos2627.ini rolesUsuario.yaml
 #SMRD
 ansible-playbook -i ./EquiposSMRD-alumnos2627.ini rolesUsuario.yaml
 
+#solo la máquina virtual Windows 11 (rol VirtualW11)
+#ansible-playbook -i ./EquiposSMRD-alumnos2627.ini rolesUsuario.yaml --tags VirtualW11
+
 #un solo caso
 ansible-playbook -i ./EquiposSMRD-alumnos2627.ini rolesUsuario.yaml -l 'SMRD-04-SMRV24' 
 

@@ -1,0 +1,25 @@
+---
+# Plantilla de la máquina virtual en el NAS (montado por el rol clienteNAS en
+# cada equipo). Tiene que haber un único .vmx dentro.
+VirtualW11_origen: /mnt/nasDepInfo/PruebaRapidosX3/SMRV/VMWARE-Plantillas/Win11
+
+# Carpeta de las máquinas virtuales dentro del HOME del usuario. La máquina
+# queda en ~/<VirtualW11_carpeta>/<VirtualW11_prefijo>-<usuario>.
+VirtualW11_carpeta: vmware
+VirtualW11_prefijo: Win11
+
+# Dominio que se añade a la variable `usuario` del inventario (formato IABD:
+# usuario=CEGSIABD14). Con ansible_user=SMRV08@iesmhp.local (formato SMRD) se
+# usa tal cual.
+VirtualW11_dominio: iesmhp.local
+
+# Espacio libre que debe quedar en el HOME después de copiar (GB).
+VirtualW11_margen_gb: 5
+
+# Tiempo máximo de la copia (segundos). Se hace en segundo plano (async) para
+# que la conexión SSH no se corte durante los ~15 GB.
+VirtualW11_timeout_copia: 7200
+
+# true = BORRA la máquina del usuario y la vuelve a copiar de la plantilla
+# (pierde todo lo que haya hecho el alumno). Solo con -e, nunca aquí.
+VirtualW11_reemplazar: false

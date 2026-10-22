@@ -44,6 +44,7 @@ Roles actuales:
 | Rol | Qué hace |
 |-----|----------|
 | [`compruebaUsuario`](roles/compruebaUsuario/CLAUDE.md) | Entra por SSH como el usuario asignado a cada equipo y dice `OK` / `NO ACCEDE` / `APAGADO`. No cambia nada (2026-10-22) |
+| [`VirtualW11`](roles/VirtualW11/CLAUDE.md) | Copia la VM Windows 11 de plantilla del NAS a `~/vmware/Win11-<usuario>` y la añade a VMware Workstation. Nunca machaca una existente (2026-10-22, en construcción) |
 
 > **2026-10-21**: se eliminó el rol `DockerRootless` (era el único). El Docker
 > rootless de **cada usuario** (local o de dominio) lo configura ya el rol de

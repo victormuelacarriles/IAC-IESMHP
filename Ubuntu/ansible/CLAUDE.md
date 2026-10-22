@@ -4,7 +4,7 @@ Esta carpeta contiene la **configuración automática del equipo ya instalado**,
 
 ### Subcarpetas
 - **`roles/`** — roles de Ansible que se aplican **como root** sobre el equipo (lo que describe este documento).
-- **`rolesUsuario/`** — configuraciones que **todo usuario** debería tener en su propio perfil (`~/.ssh`, dotfiles, ajustes de escritorio…); se ejecutan **como el usuario**, no como root. Ver [`rolesUsuario/CLAUDE.md`](rolesUsuario/CLAUDE.md). Carpeta nueva (2026-06-08), todavía no enganchada a `roles.yaml`. Primer rol: `compruebaUsuario` (2026-10-22).
+- **`rolesUsuario/`** — configuraciones que **todo usuario** debería tener en su propio perfil (`~/.ssh`, dotfiles, ajustes de escritorio…); se ejecutan **como el usuario**, no como root. Ver [`rolesUsuario/CLAUDE.md`](rolesUsuario/CLAUDE.md). Carpeta nueva (2026-06-08), todavía no enganchada a `roles.yaml`. Roles: `compruebaUsuario` y `VirtualW11` (2026-10-22).
 - **`pruebas/`** — playbooks sueltos de experimentación; no forman parte del despliegue.
 
 ## `roles.yaml` — el playbook maestro
