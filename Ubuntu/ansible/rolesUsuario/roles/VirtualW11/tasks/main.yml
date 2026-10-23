@@ -45,16 +45,52 @@
       when: not VirtualW11_home_st.stat.exists
 
     # ------------------------------------------------------------ plantilla
+    # Primero la caché local (parte 1, CacheNAS.yaml) y, si no está, el NAS.
+    - name: Dónde está la plantilla (caché local o NAS)
+      ansible.builtin.shell:
+        cmd: |
+          for d in {{ candidatos | map('quote') | join(' ') }}; do
+            if [ "$(ls -1 "$d"/*.vmx 2>/dev/null | wc -l)" = 1 ]; then echo "$d"; exit 0; fi
+          done
+          echo "No encuentro la plantilla (un único .vmx) en: {{ candidatos | join(', ') }}"
+          exit 1
+        executable: /bin/bash
+      vars:
+        candidatos: >-
+          {{ [VirtualW11_origen] if VirtualW11_origen | length > 0
+             else (VirtualW11_cache_discos
+                   | map('regex_replace', '$', '/' ~ VirtualW11_cache_carpeta ~ '/' ~ VirtualW11_plantilla_ruta)
+                   | list) + [VirtualW11_nas_raiz ~ '/' ~ VirtualW11_plantilla_ruta] }}
+      register: VirtualW11_origen_cmd
+      changed_when: false
+      failed_when: false
+
+    - name: La plantilla tiene que estar accesible
+      ansible.builtin.fail:
+        msg: "{{ VirtualW11_origen_cmd.stdout | trim }}. ¿Está montado el NAS (rol clienteNAS)?"
+      when: VirtualW11_origen_cmd.rc != 0
+
+    - name: Plantilla en {{ VirtualW11_origen_cmd.stdout | trim }}
+      ansible.builtin.set_fact:
+        VirtualW11_origen_real: "{{ VirtualW11_origen_cmd.stdout | trim }}"
+
+    - name: Aviso si se copia desde el NAS
+      ansible.builtin.debug:
+        msg: >-
+          [WARN] Sin caché local: se copia desde el NAS ({{ VirtualW11_origen_real }}).
+          Para ir más rápido, lanzar antes la parte 1 (CacheNAS.yaml, como root).
+      when: VirtualW11_origen_real.startswith(VirtualW11_nas_raiz)
+
     - name: Buscar el .vmx de la plantilla
       ansible.builtin.find:
-        paths: "{{ VirtualW11_origen }}"
+        paths: "{{ VirtualW11_origen_real }}"
         patterns: "*.vmx"
       register: VirtualW11_plantilla
 
     - name: La plantilla tiene que estar accesible
       ansible.builtin.fail:
         msg: >-
-          No encuentro un único .vmx en {{ VirtualW11_origen }}
+          No encuentro un único .vmx en {{ VirtualW11_origen_real }}
           ({{ VirtualW11_plantilla.matched }} encontrados). ¿Está montado el NAS (rol clienteNAS)?
       when: VirtualW11_plantilla.matched != 1
 
@@ -94,7 +130,7 @@
       ansible.builtin.shell: |
         set -o pipefail
         mkdir -p "{{ VirtualW11_home }}/{{ VirtualW11_carpeta }}"
-        echo "$(du -sb "{{ VirtualW11_origen }}" | cut -f1) $(df --output=avail -B1 "{{ VirtualW11_home }}/{{ VirtualW11_carpeta }}" | tail -1)"
+        echo "$(du -sb "{{ VirtualW11_origen_real }}" | cut -f1) $(df --output=avail -B1 "{{ VirtualW11_home }}/{{ VirtualW11_carpeta }}" | tail -1)"
       args:
         executable: /bin/bash
       register: VirtualW11_espacio
@@ -116,11 +152,11 @@
 
     # Se copia a <destino>.copiando y se renombra al terminar: una copia cortada
     # nunca parece una máquina completa, y al relanzar rsync continúa por donde iba.
-    - name: Copiar la plantilla desde el NAS (~15 GB, tarda)
+    - name: Copiar la plantilla al perfil (~15 GB)
       ansible.builtin.shell: |
         set -e
         rsync -a --partial --no-owner --no-group --chmod=Du=rwx,Dgo=,Fu=rw,Fgo= \
-              "{{ VirtualW11_origen }}/" "{{ VirtualW11_destino }}.copiando/"
+              "{{ VirtualW11_origen_real }}/" "{{ VirtualW11_destino }}.copiando/"
         # Si la carpeta existe vacía, mv metería la copia DENTRO de ella.
         if [ -d "{{ VirtualW11_destino }}" ]; then rmdir "{{ VirtualW11_destino }}"; fi
         mv "{{ VirtualW11_destino }}.copiando" "{{ VirtualW11_destino }}"

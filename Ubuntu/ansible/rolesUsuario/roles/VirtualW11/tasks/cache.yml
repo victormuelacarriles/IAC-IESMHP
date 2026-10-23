@@ -1,0 +1,88 @@
+---
+# VirtualW11 — PARTE 1: caché local de la plantilla en cada equipo físico.
+#
+# Copia (rsync, solo lo que cambie) la plantilla del NAS a
+#   <disco>/nasCache/<ruta>   (/datos si existe; si no, /home)
+#   p. ej. /home/nasCache/SMRV/VMWARE-Plantillas/Win11
+# para que luego cada alumno copie su máquina desde el disco local y no desde
+# el NAS. Se lanza COMO ROOT con el inventario de aula (un equipo por línea):
+# CacheNAS.yaml / VirtualW11.sh. Parámetros en defaults/main.yml.
+#
+# Permisos: <disco>/nasCache es de root con 1777 (cualquiera puede leer y
+# escribir dentro; nadie borra lo que no es suyo) y, al estar dentro de un
+# directorio de root (/home, /datos), solo un administrador puede borrar
+# nasCache. El interior: carpetas 1777 y ficheros 666 (lectura/escritura para
+# todos, petición del propietario 2026-10-23).
+
+- name: Disco de la caché (el primero que exista de {{ VirtualW11_cache_discos | join(', ') }})
+  ansible.builtin.shell:
+    cmd: |
+      for d in {{ VirtualW11_cache_discos | map('quote') | join(' ') }}; do
+        [ -d "$d" ] && { echo "$d"; exit 0; }
+      done
+      exit 1
+    executable: /bin/bash
+  register: VirtualW11_cache_disco
+  changed_when: false
+  tags: [VirtualW11, cache]
+
+- name: Rutas de la caché
+  ansible.builtin.set_fact:
+    VirtualW11_cache_raiz: "{{ VirtualW11_cache_disco.stdout | trim }}/{{ VirtualW11_cache_carpeta }}"
+    VirtualW11_cache_destino: "{{ VirtualW11_cache_disco.stdout | trim }}/{{ VirtualW11_cache_carpeta }}/{{ VirtualW11_plantilla_ruta }}"
+    VirtualW11_cache_origen: "{{ VirtualW11_nas_raiz }}/{{ VirtualW11_plantilla_ruta }}"
+  tags: [VirtualW11, cache]
+
+- name: Buscar la plantilla en el NAS
+  ansible.builtin.find:
+    paths: "{{ VirtualW11_cache_origen }}"
+    patterns: "*.vmx"
+  register: VirtualW11_cache_vmx
+  tags: [VirtualW11, cache]
+
+- name: La plantilla del NAS tiene que estar accesible
+  ansible.builtin.fail:
+    msg: >-
+      No encuentro un único .vmx en {{ VirtualW11_cache_origen }}
+      ({{ VirtualW11_cache_vmx.matched }} encontrados). ¿Está montado el NAS (rol clienteNAS)?
+  when: VirtualW11_cache_vmx.matched != 1
+  tags: [VirtualW11, cache]
+
+# Cada nivel (nasCache, SMRV, VMWARE-Plantillas, Win11) con 1777.
+- name: Carpetas de la caché (1777)
+  ansible.builtin.shell:
+    cmd: |
+      d={{ VirtualW11_cache_raiz | quote }}
+      for p in "" {{ VirtualW11_plantilla_ruta.split('/') | map('quote') | join(' ') }}; do
+        d="${d}${p:+/$p}"
+        [ -d "$d" ] || { mkdir "$d"; echo "CREADA $d"; }
+        [ "$(stat -c %a "$d")" = 1777 ] || { chmod 1777 "$d"; echo "PERMISOS $d"; }
+      done
+    executable: /bin/bash
+  register: VirtualW11_cache_dirs
+  changed_when: VirtualW11_cache_dirs.stdout | trim | length > 0
+  tags: [VirtualW11, cache]
+
+# rsync: solo copia lo que haya cambiado en el NAS (si no cambió nada, segundos)
+# y borra de la caché lo que ya no esté en la plantilla. En segundo plano
+# (async) para que no se corte el SSH durante la primera copia (~15 GB).
+- name: Sincronizar la plantilla NAS → {{ VirtualW11_cache_destino }}
+  ansible.builtin.shell:
+    cmd: >-
+      rsync -a --delete --partial --no-owner --no-group --chmod=D1777,F0666
+      --itemize-changes
+      {{ (VirtualW11_cache_origen ~ '/') | quote }} {{ (VirtualW11_cache_destino ~ '/') | quote }}
+    executable: /bin/bash
+  async: "{{ VirtualW11_timeout_cache }}"
+  poll: 30
+  register: VirtualW11_cache_rsync
+  changed_when: VirtualW11_cache_rsync.stdout | trim | length > 0
+  tags: [VirtualW11, cache]
+
+- name: Resultado de la caché
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }}: caché
+      {{ 'ACTUALIZADA' if VirtualW11_cache_rsync is changed else 'AL DÍA' }}
+      → {{ VirtualW11_cache_destino }}
+  tags: [VirtualW11, cache]

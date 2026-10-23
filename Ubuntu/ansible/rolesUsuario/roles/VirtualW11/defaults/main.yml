@@ -1,7 +1,24 @@
 ---
-# Plantilla de la máquina virtual en el NAS (montado por el rol clienteNAS en
-# cada equipo). Tiene que haber un único .vmx dentro.
-VirtualW11_origen: /mnt/nasDepInfo/PruebaRapidosX3/SMRV/VMWARE-Plantillas/Win11
+# ------------------------------------------------------------------ plantilla
+# Plantilla de la máquina virtual = <raíz> / <ruta>. Tiene que haber un único
+# .vmx dentro. En el NAS (montado por el rol clienteNAS):
+#   /mnt/nasDepInfo/PruebaRapidosX3/SMRV/VMWARE-Plantillas/Win11
+VirtualW11_nas_raiz: /mnt/nasDepInfo/PruebaRapidosX3
+VirtualW11_plantilla_ruta: SMRV/VMWARE-Plantillas/Win11
+
+# Caché local de la plantilla en cada equipo (parte 1: CacheNAS.yaml, como
+# root con el inventario de aula): <disco>/<carpeta>/<ruta>, en el primer disco
+# de la lista que exista → /datos/nasCache/SMRV/VMWARE-Plantillas/Win11 o
+# /home/nasCache/SMRV/VMWARE-Plantillas/Win11.
+VirtualW11_cache_discos: [/datos, /home]
+VirtualW11_cache_carpeta: nasCache
+
+# Segundos máximos para la copia NAS → caché (~15 GB la primera vez).
+VirtualW11_timeout_cache: 7200
+
+# Origen fijo de la plantilla (vacío = automático: el primero que la tenga de
+# /datos/nasCache, /home/nasCache y el NAS).
+VirtualW11_origen: ""
 
 # Carpeta de las máquinas virtuales dentro del HOME del usuario. La máquina
 # queda en ~/<VirtualW11_carpeta>/<VirtualW11_prefijo>-<usuario>.

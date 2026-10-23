@@ -6,6 +6,11 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
 
 - Plantilla: `/mnt/nasDepInfo/PruebaRapidosX3/SMRV/VMWARE-Plantillas/Win11`
   (NFS del NAS, montado en cada equipo; ~15 GB: un `.vmx` + un `.vmdk`).
+- **Caché local** (2026-10-23): para no leer los 15 GB del NAS una vez por
+  alumno, la **parte 1** la copia una vez por equipo físico a
+  `/datos/nasCache/SMRV/VMWARE-Plantillas/Win11` (si existe `/datos`) o a
+  `/home/nasCache/SMRV/VMWARE-Plantillas/Win11`, y el rol (**parte 2**) copia
+  desde ahí. Ver "Parte 1: caché local".
 - Destino: `~/vmware/Win11-<usuario>` (p. ej. `~/vmware/Win11-SMRV08`).
   Se conservan los nombres de fichero de la plantilla
   (`Windows 11 25H2.vmx`…); solo cambian la carpeta y el nombre visible.
@@ -189,29 +194,80 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
       Nombre  : Win11-vmuela
       ```
 
-## Uso en solitario: `VirtualW11.yaml` + `VirtualW11.sh`
+## Parte 1: caché local (`tasks/cache.yml` + `CacheNAS.yaml`)
 
-Como el rol [`vscode`](../../../roles/vscode/CLAUDE.md), trae su propio
-playbook, `VirtualW11.yaml` (`hosts: all`, `become: no`, `gather_facts: no`;
-aplica esta carpeta como rol con `role: "{{ playbook_dir }}"`). El lanzador
-`VirtualW11.sh` lo ejecuta eligiendo el inventario:
+Necesita **root**, así que va con el **inventario de aula**
+(`../../../equiposSMRD.ini` / `equiposIABD.ini`: un equipo por línea,
+`ansible_user=root`), no con el de alumnos.
+
+1. Disco: el primero que exista de `VirtualW11_cache_discos` (`/datos`, `/home`).
+2. Comprueba que la plantilla del NAS está (un único `.vmx`).
+3. Crea `<disco>/nasCache/SMRV/VMWARE-Plantillas/Win11`, todos los niveles
+   con **1777**.
+4. `rsync -a --delete --chmod=D1777,F0666` del NAS a la caché: solo copia lo
+   que cambie (sin cambios, segundos) y borra lo que ya no esté en el NAS.
+   Va en `async` (hasta `VirtualW11_timeout_cache`).
+
+**Permisos** (petición del propietario):
+- el interior es de lectura/escritura para todos: carpetas `1777` y ficheros `666`;
+- `nasCache` es de root y está dentro de `/home` o `/datos`, que son de root:
+  **solo un administrador puede borrarlo**;
+- el bit *sticky* impide además que un usuario borre lo que no es suyo.
+
+> ⚠ Con `666` cualquier alumno **puede modificar** la plantilla en caché y
+> afectaría a las copias posteriores en ese equipo; la siguiente parte 1 la
+> vuelve a dejar igual que el NAS.
+
+En la **parte 2**, el rol busca la plantilla por orden en `/datos/nasCache/…`,
+`/home/nasCache/…` y el NAS (o en `VirtualW11_origen` si se fija). Si acaba en
+el NAS, avisa con `[WARN]`.
+
+En `/home` (ZFS `rpool/home` con dedup), la caché y las copias de los alumnos
+se deduplican entre sí.
+
+## Uso en solitario: `VirtualW11.sh` (parte 1 + parte 2)
+
+`VirtualW11.sh` lanza las dos partes seguidas:
+
+1. `CacheNAS.yaml`, con el inventario de **aula**, como root.
+2. `VirtualW11.yaml`, con el inventario de **alumnos**.
+
+`VirtualW11.yaml` aplica esta carpeta como rol (`role: "{{ playbook_dir }}"`,
+`become: no`), como el rol [`vscode`](../../../roles/vscode/CLAUDE.md).
 
 ```bash
 cd /opt/IAC-IESMHP/Ubuntu/ansible/rolesUsuario/roles/VirtualW11
-bash VirtualW11.sh                        # local, como el usuario actual
-bash VirtualW11.sh SMRD                   # ../../EquiposSMRD-alumnos2627.ini
-bash VirtualW11.sh IABD -l IABD-05        # ../../equiposIABD-alumnos2627.ini
-bash VirtualW11.sh otro.ini [args]        # cualquier inventario
+bash VirtualW11.sh                        # local (caché con sudo -n; si no, avisa)
+bash VirtualW11.sh SMRD                   # caché equiposSMRD.ini + alumnos SMRD
+bash VirtualW11.sh IABD -l IABD-05        # un equipo
 bash VirtualW11.sh SMRD -l SMRD-04-SMRV24 -e VirtualW11_reemplazar=true   # BORRA y recopia
+bash VirtualW11.sh otro-alumnos.ini       # el de aula se deduce del grupo [SMRD]/[IABD]
+bash VirtualW11.sh SMRD --solo-cache      # solo la parte 1
+bash VirtualW11.sh SMRD --sin-cache       # solo la parte 2
+bash VirtualW11.sh SMRD --forks-cache 3 --forks-alumno 10   # equipos a la vez
 bash VirtualW11.sh --help
 ```
 
-- Lo que va detrás del inventario se pasa a `ansible-playbook` (`-l`, `-e`, `-v`…).
-- Sin preguntas (stdin a `/dev/null`). Devuelve el código de `ansible-playbook`.
-- Log: `/var/log/IAC-IESMHP/VirtualW11.log` o, si no se puede escribir ahí,
-  `~/.local/state/IAC-IESMHP/VirtualW11.log`. Cada ejecución empieza con una
-  línea `===== fecha`.
-- No pasa por `compruebaUsuario`.
+- **Equipos a la vez** (`--forks` de Ansible), uno por parte, por defecto 5:
+  - `--forks-cache N` (o `FORKS_CACHE=N`) para la parte 1: cada equipo lee
+    ~15 GB del NAS la primera vez, así que conviene un número bajo;
+  - `--forks-alumno N` (o `FORKS_ALUMNO=N`) para la parte 2: en SMRD hay
+    varios alumnos por equipo y cada uno copia y arranca su máquina (8 GB de
+    RAM).
+
+  Un valor que no sea un número positivo da error.
+
+- **`-l`:** lleva nombres del inventario de alumnos. Para la parte 1 se
+  traduce a los equipos físicos por su IP (`ansible-inventory --limit` →
+  `-e VirtualW11_ips=…`). Si no coincide con ninguno, error y no se lanza nada.
+- **Resto de argumentos:** (`-e`, `-v`…) van solo a la parte 2.
+- **Si la parte 1 falla en un equipo** (apagado…), se sigue con la parte 2: en
+  ese equipo copiará desde el NAS.
+- **Sin preguntas:** stdin a `/dev/null`. Devuelve el código de la parte 2 o,
+  si esa va bien, el de la 1.
+- **Log:** `/var/log/IAC-IESMHP/VirtualW11.log` o
+  `~/.local/state/IAC-IESMHP/VirtualW11.log`, con una línea `=====` por parte.
+- **No pasa por `compruebaUsuario`.**
 
 ## Uso dentro de `rolesUsuario.yaml`
 
@@ -235,12 +291,17 @@ y los equipos en los que el usuario no entra se quedan fuera.
 
 | Variable | Defecto | Para qué |
 |----------|---------|----------|
-| `VirtualW11_origen` | `/mnt/nasDepInfo/.../VMWARE-Plantillas/Win11` | Carpeta de la plantilla |
 | `VirtualW11_carpeta` | `vmware` | Carpeta de las VMs dentro del HOME |
 | `VirtualW11_prefijo` | `Win11` | Nombre: `<prefijo>-<usuario>` |
 | `VirtualW11_margen_gb` | `5` | GB libres que deben quedar tras copiar |
 | `VirtualW11_timeout_copia` | `7200` | Segundos máximos de la copia |
 | `VirtualW11_reemplazar` | `false` | `true` = borra y vuelve a copiar |
+| `VirtualW11_nas_raiz` | `/mnt/nasDepInfo/PruebaRapidosX3` | Raíz del NAS |
+| `VirtualW11_plantilla_ruta` | `SMRV/VMWARE-Plantillas/Win11` | Ruta de la plantilla (igual en NAS y caché) |
+| `VirtualW11_cache_discos` | `[/datos, /home]` | Disco de la caché: el primero que exista |
+| `VirtualW11_cache_carpeta` | `nasCache` | Carpeta de la caché en ese disco |
+| `VirtualW11_timeout_cache` | `7200` | Segundos máximos de la copia NAS → caché |
+| `VirtualW11_origen` | `""` | Origen fijo de la plantilla (vacío = caché o NAS) |
 | `VirtualW11_comprobar_arranque` | `true` | Arrancar y esperar a las Tools |
 | `VirtualW11_timeout_tools` | `600` | Segundos máximos esperando a las Tools |
 | `VirtualW11_apagar_tras_comprobar` | `true` | Apagarla al terminar (si la encendió el rol) |
@@ -305,6 +366,12 @@ y los equipos en los que el usuario no entra se quedan fuera.
   600 s (dos veces seguidas); a los 30 min, otra copia nueva las levantó en
   45 s. No reproducido; si vuelve a pasar, mirar la pantalla con
   `vmrun -gu usuario -gp usuario@1 captureScreen <vmx> pantalla.png`.
+- 2026-10-23, caché (sin root, con discos y NAS falsos): 1ª copia, 2ª «al
+  día», cambio en el NAS → solo lo nuevo, con `/datos` → `/datos/nasCache`,
+  permisos 1777/666; la parte 2 copia desde la caché y, sin caché, desde el
+  NAS con aviso. `VirtualW11.sh` probado con un `ansible-playbook` falso
+  (traducción del `-l`, `--sin-cache`, `--solo-cache`, `-l` inexistente).
+  **Falta probar la parte 1 con root real en un equipo del aula.**
 - **Pendiente**: probar contra un equipo del aula (copia real de 15 GB,
   `become_user` desde root en IABD) y abrir VMware para ver que la máquina
   aparece y arranca sin preguntas.

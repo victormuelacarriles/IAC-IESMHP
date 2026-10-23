@@ -1,0 +1,26 @@
+---
+# VirtualW11 — PARTE 1: caché local de la plantilla en cada equipo físico.
+# Copia la plantilla del NAS a /datos/nasCache/... o /home/nasCache/... (ver
+# tasks/cache.yml). Necesita ROOT: se lanza con el inventario de AULA (un
+# equipo por línea, ansible_user=root), no con el de alumnos.
+# Lo más cómodo es VirtualW11.sh, que lanza esta parte y luego la del alumno.
+#
+# Desde esta carpeta:
+#   ansible-playbook -i ../../../equiposSMRD.ini CacheNAS.yaml
+#   ansible-playbook -i ../../../equiposIABD.ini CacheNAS.yaml -l IABD-05
+#   sudo ansible-playbook -i localhost, --connection=local CacheNAS.yaml   # local
+
+- hosts: all
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Caché local de la plantilla
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir }}"
+        tasks_from: cache
+      # Con -e VirtualW11_ips=ip1,ip2 solo esos equipos (lo usa VirtualW11.sh
+      # para traducir el -l del inventario de alumnos).
+      when: >-
+        VirtualW11_ips | default('') | length == 0
+        or (ansible_host | default(inventory_hostname)) in VirtualW11_ips.split(',')

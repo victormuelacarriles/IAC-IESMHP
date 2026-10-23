@@ -59,7 +59,7 @@ Roles actuales:
 | Rol | Qué hace |
 |-----|----------|
 | [`compruebaUsuario`](roles/compruebaUsuario/CLAUDE.md) | Entra por SSH como el usuario asignado a cada equipo y dice `OK` / `NO ACCEDE` / `APAGADO`. No cambia nada (2026-10-22) |
-| [`VirtualW11`](roles/VirtualW11/CLAUDE.md) | Copia la VM Windows 11 de plantilla del NAS a `~/vmware/Win11-<usuario>` y la añade a VMware Workstation. Solo copia si la carpeta no existe o está vacía (2026-10-22, en construcción) |
+| [`VirtualW11`](roles/VirtualW11/CLAUDE.md) | Copia la VM Windows 11 de plantilla a `~/vmware/Win11-<usuario>`, la añade a VMware Workstation y configura el Windows (administrador, SSH, RDP, IP, nombre, lanzador en Remmina). La plantilla sale de una caché local por equipo (`/datos` o `/home/nasCache`, parte 1 como root) o del NAS. Lanzador `roles/VirtualW11/VirtualW11.sh` (2026-10-22, en construcción) |
 
 > **2026-10-21**: se eliminó el rol `DockerRootless` (era el único). El Docker
 > rootless de **cada usuario** (local o de dominio) lo configura ya el rol de
