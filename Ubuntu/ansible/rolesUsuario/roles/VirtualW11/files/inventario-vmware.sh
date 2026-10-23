@@ -3,7 +3,8 @@
 # (~/.vmware/inventory.vmls). Idempotente: si ya está, no hace nada.
 #
 # Uso: inventario-vmware.sh <inventory.vmls> <ruta .vmx> <nombre visible>
-# Salida: "YA ESTABA" o "AÑADIDA" (Ansible lo usa para changed_when).
+# Salida: "YA ESTABA" o "AÑADIDA" (Ansible lo usa para changed_when), más un
+# [WARN] si VMware está abierto.
 set -euo pipefail
 
 INV="$1"
@@ -21,7 +22,7 @@ fi
 # Si VMware está abierto, al cerrarse reescribe la biblioteca y puede perder
 # la entrada nueva. Solo se avisa: no se espera a nadie (headless).
 if pgrep -u "$(id -u)" -x vmware >/dev/null 2>&1; then
-    echo "[WARN] VMware está abierto: si al cerrarlo desaparece la máquina, relanzar el rol" >&2
+    echo "[WARN] VMware está abierto: si al cerrarlo desaparece la máquina, relanzar el rol"
 fi
 
 # Siguiente número libre de vmlistN y posición dentro de la raíz (ParentID 0).

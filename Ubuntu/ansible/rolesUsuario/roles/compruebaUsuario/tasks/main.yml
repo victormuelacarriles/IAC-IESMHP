@@ -13,10 +13,7 @@
 
 - name: Usuario a comprobar en {{ inventory_hostname }}
   ansible.builtin.set_fact:
-    compruebaUsuario_usuario: >-
-      {{ (usuario ~ '@' ~ compruebaUsuario_dominio)
-         if (usuario is defined and usuario | length > 0)
-         else (ansible_user | default(lookup('env', 'USER'))) }}
+    compruebaUsuario_usuario: "{{ ansible_user | default(lookup('env', 'USER')) }}"
     compruebaUsuario_ip: "{{ ansible_host | default(inventory_hostname) }}"
   tags: [compruebaUsuario]
 

@@ -8,10 +8,6 @@ VirtualW11_origen: /mnt/nasDepInfo/PruebaRapidosX3/SMRV/VMWARE-Plantillas/Win11
 VirtualW11_carpeta: vmware
 VirtualW11_prefijo: Win11
 
-# Dominio que se añade a la variable `usuario` del inventario (formato IABD:
-# usuario=CEGSIABD14). Con ansible_user=SMRV08@iesmhp.local (formato SMRD) se
-# usa tal cual.
-VirtualW11_dominio: iesmhp.local
 
 # Espacio libre que debe quedar en el HOME después de copiar (GB).
 VirtualW11_margen_gb: 5
@@ -23,3 +19,46 @@ VirtualW11_timeout_copia: 7200
 # true = BORRA la máquina del usuario y la vuelve a copiar de la plantilla
 # (pierde todo lo que haya hecho el alumno). Solo con -e, nunca aquí.
 VirtualW11_reemplazar: false
+
+# ---------------------------------------------------------- comprobar arranque
+# Arranca la máquina sin ventana (vmrun ... nogui), espera a que respondan las
+# VMware Tools del Windows invitado y muestra lo que devuelven.
+VirtualW11_comprobar_arranque: true
+
+# Segundos máximos esperando a que las VMware Tools respondan.
+VirtualW11_timeout_tools: 600
+
+# Apagar la máquina al terminar la comprobación (solo si la ha encendido el
+# rol; si ya estaba encendida, no se apaga nunca).
+VirtualW11_apagar_tras_comprobar: true
+
+# Segundos para el apagado ordenado (soft) antes de forzarlo (hard).
+VirtualW11_timeout_apagado: 180
+
+# ------------------------------------------------------------------- red
+# Modo de red de la única tarjeta (ethernet0) que se fija antes de encender.
+VirtualW11_red: bridged
+
+# ------------------------------------------------- configuración del invitado
+# Tras comprobar las Tools: administrador, SSH, IP estática y nombre.
+VirtualW11_configurar_invitado: true
+
+# Las operaciones de vmrun dentro del invitado necesitan usuario y contraseña
+# de Windows. El rol crea un administrador con el nombre del usuario físico
+# (SMRV08, vmuela...) y esta contraseña inicial, y desactiva el de la plantilla.
+VirtualW11_invitado_password: "usuario@1"
+
+# Usuario de la plantilla: solo se usa para entrar la primera vez (y crear el
+# administrador nuevo); después queda desactivado.
+VirtualW11_invitado_usuario: usuario
+
+# IP estática del invitado = IP del equipo físico + este número (último
+# octeto). Si pasa de 254, o la IP responde a ping, se queda en DHCP.
+VirtualW11_ip_suma: 30
+
+# Segundos máximos esperando a que vuelva tras reiniciar (cambio de nombre).
+VirtualW11_timeout_reinicio: 600
+
+# Lanzador RDP en Remmina (perfil con usuario e IP, sin contraseña) y
+# Escritorio remoto activado en el invitado.
+VirtualW11_remmina: true

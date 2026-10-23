@@ -5,11 +5,9 @@ por SSH**. No cambia nada en el equipo.
 
 ## Qué hace
 
-1. Calcula el usuario del host (`set_fact`, en el controlador):
-   - Inventario IABD (`usuario=CEGSIABD14`) → `CEGSIABD14@iesmhp.local`
-     (dominio en `compruebaUsuario_dominio`).
-   - Inventario SMRD (`ansible_user=SMRV08@iesmhp.local`) → ese mismo.
-   El `ansible_user=root` del grupo no se usa.
+1. El usuario es el `ansible_user` de cada equipo en el inventario
+   (`ansible_user=SMRV08@iesmhp.local`; el mismo formato en SMRD e IABD desde
+   2026-10-23), o el usuario actual en local.
 2. **Desde el controlador** (`delegate_to: localhost`) lanza
    `ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -l <usuario> <ip> id -un`
    y lee el código de salida y el error:
@@ -49,6 +47,5 @@ ansible-playbook -i equiposIABD-alumnos2627.ini rolesUsuario.yaml --tags comprue
 
 | Variable | Defecto | Para qué |
 |----------|---------|----------|
-| `compruebaUsuario_dominio` | `iesmhp.local` | Dominio que se añade a `usuario` |
 | `compruebaUsuario_timeout` | `5` | `ConnectTimeout` del ssh (segundos) |
 | `compruebaUsuario_password` | `""` | Contraseña (vacía = clave SSH) |

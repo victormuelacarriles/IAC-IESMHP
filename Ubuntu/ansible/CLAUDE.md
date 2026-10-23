@@ -45,8 +45,8 @@ Esta carpeta contiene la **configuración automática del equipo ya instalado**,
 
 - `equiposIABD.ini` — aula IABD, hosts `IABD-00..20` en `10.0.72.12x`.
 - `equiposSMRD.ini` — aula SMRD, hosts `SMRD-00..18` en `10.0.32.12x` (comentarios por equipo: averías conocidas).
-- `rolesUsuario/EquiposSMRD-alumnos2627.ini` y `rolesUsuario/equiposIABD-alumnos2627.ini` — un host por alumno (equipo + usuario de dominio) del curso 26/27; los usa `rolesUsuario.yaml`.
-- Todos: `[all:vars]` con `ansible_user=root` y `ansible_python_interpreter=auto_silent` (este último se fijó el 2026-05-15 porque Ubuntu 26.04 «resolute» no trae `python3.12`; ver Registro de cambios).
+- `rolesUsuario/EquiposSMRD-alumnos2627.ini` y `rolesUsuario/equiposIABD-alumnos2627.ini` — un host por alumno del curso 26/27, **mismo formato** (`EQUIPO ansible_host=IP ansible_user=ALUMNO@iesmhp.local`); los usa `rolesUsuario.yaml`. Sus `[all:vars]` **no** llevan `ansible_user=root` (Ansible entra como el alumno) y añaden `StrictHostKeyChecking=accept-new`.
+- Los de aula (`equiposIABD.ini`, `equiposSMRD.ini`): `[all:vars]` con `ansible_user=root` y `ansible_python_interpreter=auto_silent` (este último se fijó el 2026-05-15 porque Ubuntu 26.04 «resolute» no trae `python3.12`; ver Registro de cambios).
 
 ## Comandos clave
 

@@ -34,17 +34,32 @@ ansible-playbook -i equiposIABD-alumnos2627.ini rolesUsuario.yaml      # IABD
 ansible-playbook -i localhost, --connection=local rolesUsuario.yaml    # local
 ```
 
-Inventarios de alumnos (formatos distintos, el rol acepta los dos):
-- `EquiposSMRD-alumnos2627.ini`: `ansible_user=SMRV08@iesmhp.local` por host.
-- `equiposIABD-alumnos2627.ini`: `usuario=CEGSIABD14` por host (el rol le añade
-  `@iesmhp.local`) y `ansible_user=root` en el grupo.
+Inventarios de alumnos: **mismo formato en los dos** (desde 2026-10-23), una
+línea por alumno con su equipo, IP y usuario de dominio:
+
+```ini
+[SMRD]                      # [IABD] en el otro
+SMRD-10-SMRV08 ansible_host=10.0.32.130 ansible_user=SMRV08@iesmhp.local #Alumno
+...
+[all:vars]
+ansible_python_interpreter=auto_silent
+ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
+```
+
+- `EquiposSMRD-alumnos2627.ini` (grupo `[SMRD]`) y
+  `equiposIABD-alumnos2627.ini` (grupo `[IABD]`, antes `[iabd]`).
+- Ansible entra **como el alumno**. Sin `ansible_user=root` en `[all:vars]`:
+  en SMRD nunca se usaba (manda el de cada equipo) y despistaba. Antes IABD
+  llevaba `usuario=CEGSIABD14` y entraba como root.
+- La clave del que lanza el playbook tiene que estar en cada alumno:
+  `ssh-copy-id SMRV05@iesmhp.local@10.0.32.160`.
 
 Roles actuales:
 
 | Rol | Qué hace |
 |-----|----------|
 | [`compruebaUsuario`](roles/compruebaUsuario/CLAUDE.md) | Entra por SSH como el usuario asignado a cada equipo y dice `OK` / `NO ACCEDE` / `APAGADO`. No cambia nada (2026-10-22) |
-| [`VirtualW11`](roles/VirtualW11/CLAUDE.md) | Copia la VM Windows 11 de plantilla del NAS a `~/vmware/Win11-<usuario>` y la añade a VMware Workstation. Nunca machaca una existente (2026-10-22, en construcción) |
+| [`VirtualW11`](roles/VirtualW11/CLAUDE.md) | Copia la VM Windows 11 de plantilla del NAS a `~/vmware/Win11-<usuario>` y la añade a VMware Workstation. Solo copia si la carpeta no existe o está vacía (2026-10-22, en construcción) |
 
 > **2026-10-21**: se eliminó el rol `DockerRootless` (era el único). El Docker
 > rootless de **cada usuario** (local o de dominio) lo configura ya el rol de

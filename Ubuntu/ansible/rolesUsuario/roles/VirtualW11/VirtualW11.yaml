@@ -1,0 +1,20 @@
+---
+# Playbook independiente del rol VirtualW11 (no depende de rolesUsuario.yaml).
+# Copia la VM Windows 11 de plantilla al perfil del usuario y la añade a VMware.
+# Lo más cómodo es lanzarlo con VirtualW11.sh (misma carpeta).
+#
+# Desde esta carpeta:
+#   ansible-playbook -i localhost, --connection=local VirtualW11.yaml       # local, como el usuario
+#   ansible-playbook -i ../../EquiposSMRD-alumnos2627.ini VirtualW11.yaml   # aula SMRD
+#   ansible-playbook -i ../../equiposIABD-alumnos2627.ini VirtualW11.yaml -l IABD-05
+#   ... -e VirtualW11_reemplazar=true   → BORRA la máquina y la vuelve a copiar
+#
+# become: no — el rol ya se encarga de ejecutar como el usuario (become_user
+# cuando Ansible entra como root, inventario IABD).
+
+- hosts: all
+  become: no
+  gather_facts: no
+
+  roles:
+    - role: "{{ playbook_dir }}"   # esta misma carpeta es el rol

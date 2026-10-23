@@ -3,35 +3,24 @@
 # del usuario (~/vmware/Win11-<usuario>) y la añade a su VMware Workstation.
 #
 # - Nunca machaca una máquina que ya existe (salvo -e VirtualW11_reemplazar=true).
-# - Inventario SMRD (ansible_user=SMRV08@iesmhp.local): se entra como el usuario.
-# - Inventario IABD (ansible_user=root, usuario=CEGSIABD14): se entra como root
-#   y las tareas se ejecutan como el usuario (become_user), así todo queda suyo.
+# - Se entra como el alumno: ansible_user del inventario
+#   (EquiposSMRD/equiposIABD-alumnos2627.ini: ansible_user=SMRV08@iesmhp.local),
+#   o el usuario actual en local. Así todo lo que crea queda suyo.
 
-- name: Usuario y rutas en {{ inventory_hostname }}
+- name: Usuario y nombre de la máquina en {{ inventory_hostname }}
   ansible.builtin.set_fact:
-    VirtualW11_login: >-
-      {{ (usuario ~ '@' ~ VirtualW11_dominio)
-         if (usuario is defined and usuario | length > 0)
-         else (ansible_user | default(lookup('env', 'USER'))) }}
-    VirtualW11_conexion: "{{ ansible_user | default(lookup('env', 'USER')) }}"
-  tags: [VirtualW11]
-
-- name: Nombre de la máquina
-  ansible.builtin.set_fact:
-    VirtualW11_id: "{{ VirtualW11_login.split('@')[0] }}"
-    VirtualW11_nombre: "{{ VirtualW11_prefijo }}-{{ VirtualW11_login.split('@')[0] }}"
-    VirtualW11_become: "{{ VirtualW11_conexion == 'root' and VirtualW11_login != 'root' }}"
+    VirtualW11_login: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+    VirtualW11_id: "{{ (ansible_user | default(lookup('env', 'USER'))).split('@')[0] }}"
+    VirtualW11_nombre: "{{ VirtualW11_prefijo }}-{{ (ansible_user | default(lookup('env', 'USER'))).split('@')[0] }}"
   tags: [VirtualW11]
 
 - name: No se copia al perfil de root
   ansible.builtin.fail:
-    msg: "No hay usuario para este equipo (sale root): falta 'usuario=' o 'ansible_user=' en el inventario"
+    msg: "Se ha entrado como root: el inventario tiene que llevar ansible_user=<alumno> en cada equipo"
   when: VirtualW11_login == 'root'
   tags: [VirtualW11]
 
 - name: Tareas como {{ VirtualW11_login }}
-  become: "{{ VirtualW11_become | bool }}"
-  become_user: "{{ VirtualW11_login }}"
   tags: [VirtualW11]
   block:
     # ---------------------------------------------------------------- rutas
@@ -83,10 +72,23 @@
         - "{{ VirtualW11_destino }}.copiando"
       when: VirtualW11_reemplazar | bool
 
-    - name: ¿Ya tiene la máquina?
-      ansible.builtin.stat:
-        path: "{{ VirtualW11_vmx }}"
-      register: VirtualW11_vmx_st
+    # Solo se copia si la carpeta destino no existe o está vacía: si tiene
+    # cualquier cosa (la máquina del alumno u otra), no se toca.
+    - name: ¿Existe la carpeta destino con contenido?
+      ansible.builtin.shell: |
+        if [ -d "{{ VirtualW11_destino }}" ] && [ -n "$(ls -A "{{ VirtualW11_destino }}")" ]; then
+          echo CON_CONTENIDO
+        else
+          echo VACIA
+        fi
+      args:
+        executable: /bin/bash
+      register: VirtualW11_destino_st
+      changed_when: false
+
+    - name: Decidir si se copia
+      ansible.builtin.set_fact:
+        VirtualW11_copiar: "{{ VirtualW11_destino_st.stdout | trim == 'VACIA' }}"
 
     - name: Espacio necesario y libre
       ansible.builtin.shell: |
@@ -97,7 +99,7 @@
         executable: /bin/bash
       register: VirtualW11_espacio
       changed_when: false
-      when: not VirtualW11_vmx_st.stat.exists
+      when: VirtualW11_copiar
 
     - name: Comprobar que cabe
       ansible.builtin.fail:
@@ -109,7 +111,7 @@
         necesita: "{{ VirtualW11_espacio.stdout.split()[0] | int }}"
         libre: "{{ VirtualW11_espacio.stdout.split()[1] | int }}"
       when:
-        - not VirtualW11_vmx_st.stat.exists
+        - VirtualW11_copiar
         - (libre | int) < (necesita | int) + (VirtualW11_margen_gb | int) * 1073741824
 
     # Se copia a <destino>.copiando y se renombra al terminar: una copia cortada
@@ -119,75 +121,648 @@
         set -e
         rsync -a --partial --no-owner --no-group --chmod=Du=rwx,Dgo=,Fu=rw,Fgo= \
               "{{ VirtualW11_origen }}/" "{{ VirtualW11_destino }}.copiando/"
+        # Si la carpeta existe vacía, mv metería la copia DENTRO de ella.
+        if [ -d "{{ VirtualW11_destino }}" ]; then rmdir "{{ VirtualW11_destino }}"; fi
         mv "{{ VirtualW11_destino }}.copiando" "{{ VirtualW11_destino }}"
       args:
         executable: /bin/bash
       async: "{{ VirtualW11_timeout_copia }}"
       poll: 30
-      when: not VirtualW11_vmx_st.stat.exists
+      when: VirtualW11_copiar
 
-    # ------------------------------------------------- ajustes del .vmx
-    - name: ¿Está encendida la máquina?
+    # Carpeta con contenido pero sin el .vmx de la plantilla (renombrado,
+    # otra máquina...): no se toca nada más.
+    - name: ¿Está el .vmx?
       ansible.builtin.stat:
-        path: "{{ VirtualW11_vmx }}.lck"
-      register: VirtualW11_lck
-
-    - name: ¿Tiene ya uuid.action? (no = recién copiada de la plantilla)
-      ansible.builtin.command:
-        argv: [grep, -q, '^uuid\.action', "{{ VirtualW11_vmx }}"]
-      register: VirtualW11_uuid_action
-      changed_when: false
-      failed_when: VirtualW11_uuid_action.rc > 1
-
-    # Solo la primera vez (aún sin uuid.action): sin UUID ni MAC, VMware genera
-    # unos propios al arrancarla y, con uuid.action=create, no pregunta "¿la has
-    # movido o copiado?" (pregunta que dejaría la máquina esperando un clic).
-    - name: Quitar UUID y MAC de la plantilla
-      ansible.builtin.lineinfile:
         path: "{{ VirtualW11_vmx }}"
-        regexp: '^{{ item }}\s*='
-        state: absent
-      loop:
-        - 'uuid\.bios'
-        - 'uuid\.location'
-        - 'ethernet0\.generatedAddress'
-        - 'ethernet0\.generatedAddressOffset'
-      when:
-        - VirtualW11_uuid_action.rc == 1
-        - not VirtualW11_lck.stat.exists
+      register: VirtualW11_vmx_st
 
-    - name: Ajustes del .vmx
-      ansible.builtin.lineinfile:
-        path: "{{ VirtualW11_vmx }}"
-        regexp: '^{{ item.clave | regex_escape }}\s*='
-        line: '{{ item.clave }} = "{{ item.valor }}"'
-      loop:
-        - { clave: displayName, valor: "{{ VirtualW11_nombre }}" }
-        - { clave: uuid.action, valor: create }
-      loop_control:
-        label: "{{ item.clave }}"
-      when: not VirtualW11_lck.stat.exists
-
-    - name: Aviso si está encendida
-      ansible.builtin.debug:
-        msg: "[WARN] {{ VirtualW11_nombre }} está en uso: no se toca su .vmx"
-      when: VirtualW11_lck.stat.exists
-
-    # ------------------------------------------- biblioteca de VMware
-    - name: Añadir la máquina a VMware Workstation
-      ansible.builtin.script:
-        cmd: >-
-          inventario-vmware.sh
-          {{ (VirtualW11_home ~ '/.vmware/inventory.vmls') | quote }}
-          {{ VirtualW11_vmx | quote }}
-          {{ VirtualW11_nombre | quote }}
-      register: VirtualW11_inventario
-      changed_when: "'AÑADIDA' in VirtualW11_inventario.stdout"
-
-    - name: Resultado
+    - name: Aviso si la carpeta tiene otra cosa
       ansible.builtin.debug:
         msg: >-
-          {{ VirtualW11_nombre }}:
-          {{ 'YA EXISTÍA' if VirtualW11_vmx_st.stat.exists else 'COPIADA' }},
-          biblioteca {{ VirtualW11_inventario.stdout | trim }}
-          → {{ VirtualW11_vmx }}
+          [WARN] {{ VirtualW11_destino }} tiene contenido pero no
+          {{ VirtualW11_vmx | basename }}: no se copia ni se ajusta nada
+      when: not VirtualW11_vmx_st.stat.exists
+
+    - name: Ajustes y biblioteca (solo si está el .vmx)
+      when: VirtualW11_vmx_st.stat.exists
+      block:
+        # ------------------------------------------------- ajustes del .vmx
+        - name: ¿Está encendida la máquina?
+          ansible.builtin.stat:
+            path: "{{ VirtualW11_vmx }}.lck"
+          register: VirtualW11_lck
+
+        - name: ¿Tiene ya uuid.action? (no = recién copiada de la plantilla)
+          ansible.builtin.command:
+            argv: [grep, -q, '^uuid\.action', "{{ VirtualW11_vmx }}"]
+          register: VirtualW11_uuid_action
+          changed_when: false
+          failed_when: VirtualW11_uuid_action.rc > 1
+
+        # Solo la primera vez (aún sin uuid.action): sin UUID, VMware genera uno
+        # propio al arrancarla y, con uuid.action=create, no pregunta "¿la has
+        # movido o copiado?" (pregunta que dejaría la máquina esperando un clic).
+        - name: Quitar el UUID de la plantilla
+          ansible.builtin.lineinfile:
+            path: "{{ VirtualW11_vmx }}"
+            regexp: '^{{ item }}\s*='
+            state: absent
+          loop:
+            - 'uuid\.bios'
+            - 'uuid\.location'
+          when:
+            - VirtualW11_uuid_action.rc == 1
+            - not VirtualW11_lck.stat.exists
+
+        # Cada tarjeta de red con la MISMA MAC que la plantilla recibe una MAC
+        # nueva (estática, 00:50:56:00-3F:xx:xx). Si ya es distinta, no se toca.
+        - name: MAC nueva si coincide con la de la plantilla
+          ansible.builtin.script:
+            cmd: >-
+              mac-nueva.sh
+              {{ VirtualW11_plantilla.files[0].path | quote }}
+              {{ VirtualW11_vmx | quote }}
+          register: VirtualW11_mac
+          changed_when: "'CAMBIADA' in VirtualW11_mac.stdout"
+          when: not VirtualW11_lck.stat.exists
+
+        - name: MAC cambiada
+          ansible.builtin.debug:
+            msg: "{{ VirtualW11_mac.stdout_lines | select('search', 'CAMBIADA') | list }}"
+          when: VirtualW11_mac is changed
+
+        - name: Ajustes del .vmx
+          ansible.builtin.lineinfile:
+            path: "{{ VirtualW11_vmx }}"
+            regexp: '^{{ item.clave | regex_escape }}\s*='
+            line: '{{ item.clave }} = "{{ item.valor }}"'
+          loop:
+            - { clave: displayName, valor: "{{ VirtualW11_nombre }}" }
+            - { clave: uuid.action, valor: create }
+          loop_control:
+            label: "{{ item.clave }}"
+          when: not VirtualW11_lck.stat.exists
+
+        # --------------------------------------------- red (antes de encender)
+        - name: Tarjetas de red y modo actual
+          ansible.builtin.shell:
+            cmd: |
+              v="{{ VirtualW11_vmx }}"
+              n=$(grep -ciE '^ethernet[0-9]+\.present *= *"true"' "$v")
+              m=$(sed -nE 's/^ethernet0\.connectionType *= *"([^"]*)".*/\1/p' "$v" | head -1)
+              echo "$n ${m:-bridged}"
+            executable: /bin/bash
+          register: VirtualW11_red_actual
+          changed_when: false
+
+        - name: Tiene que haber una única tarjeta de red
+          ansible.builtin.fail:
+            msg: >-
+              {{ VirtualW11_nombre }} tiene {{ VirtualW11_red_actual.stdout.split()[0] }}
+              tarjetas de red; se espera una sola
+          when: VirtualW11_red_actual.stdout.split()[0] | int != 1
+
+        - name: Red en modo {{ VirtualW11_red }}
+          ansible.builtin.lineinfile:
+            path: "{{ VirtualW11_vmx }}"
+            regexp: '^ethernet0\.connectionType\s*='
+            line: 'ethernet0.connectionType = "{{ VirtualW11_red }}"'
+          when: not VirtualW11_lck.stat.exists
+
+        # Con connectionType "custom" se usa una red vmnetN concreta; ya no aplica.
+        - name: Quitar la red vmnet concreta (ethernet0.vnet)
+          ansible.builtin.lineinfile:
+            path: "{{ VirtualW11_vmx }}"
+            regexp: '^ethernet0\.vnet\s*='
+            state: absent
+          when: not VirtualW11_lck.stat.exists
+
+        - name: No se puede cambiar la red si está encendida o abierta en VMware
+          ansible.builtin.fail:
+            msg: >-
+              {{ VirtualW11_nombre }} tiene la red en modo
+              "{{ VirtualW11_red_actual.stdout.split()[1] | default('?') }}" y hay que ponerla en
+              "{{ VirtualW11_red }}", pero está encendida o abierta en VMware. Apagarla y
+              cerrar su pestaña (o VMware) y relanzar el rol.
+          when:
+            - VirtualW11_lck.stat.exists
+            - (VirtualW11_red_actual.stdout.split() + ['', ''])[1] != VirtualW11_red
+
+        # El .lck existe si la máquina está encendida O abierta en una pestaña
+        # de VMware (aunque esté apagada): VMware reescribiría el .vmx al cerrarla.
+        - name: Aviso si está encendida o abierta en VMware
+          ansible.builtin.debug:
+            msg: "[WARN] {{ VirtualW11_nombre }} está encendida o abierta en VMware: no se toca su .vmx"
+          when: VirtualW11_lck.stat.exists
+
+        # ------------------------------------------- biblioteca de VMware
+        - name: Añadir la máquina a VMware Workstation
+          ansible.builtin.script:
+            cmd: >-
+              inventario-vmware.sh
+              {{ (VirtualW11_home ~ '/.vmware/inventory.vmls') | quote }}
+              {{ VirtualW11_vmx | quote }}
+              {{ VirtualW11_nombre | quote }}
+          register: VirtualW11_inventario
+          changed_when: "'AÑADIDA' in VirtualW11_inventario.stdout"
+
+        - name: Resultado
+          ansible.builtin.debug:
+            msg: >-
+              {{ VirtualW11_nombre }}:
+              {{ 'COPIADA' if VirtualW11_copiar else 'YA EXISTÍA' }},
+              biblioteca {{ VirtualW11_inventario.stdout | trim }}
+              → {{ VirtualW11_vmx }}
+
+        # ------------------------------------ comprobar que arranca (Tools)
+        # Sin ventana (nogui) y sin DISPLAY: igual que por SSH en un equipo sin
+        # monitor. Todos los vmrun llevan `timeout` para no colgarse nunca.
+        - name: Comprobar que arranca y responden las VMware Tools
+          when: VirtualW11_comprobar_arranque | bool
+          vars:
+            VirtualW11_vmrun: [env, -u, DISPLAY, -u, WAYLAND_DISPLAY, timeout, '60', vmrun, -T, ws]
+          block:
+            - name: ¿Está ya encendida?
+              ansible.builtin.command:
+                argv: "{{ VirtualW11_vmrun + ['list'] }}"
+              register: VirtualW11_vmrun_list
+              changed_when: false
+
+            # VMware abierto con la máquina en una pestaña, pero apagada: no sale
+            # en `vmrun list` y VMware la tiene bloqueada (.lck), así que
+            # `vmrun start ... nogui` falla con "The file is already in use".
+            # En ese caso se enciende DENTRO de esa ventana (`start ... gui`).
+            - name: ¿Tiene el usuario VMware abierto?
+              ansible.builtin.shell: pgrep -u "$(id -u)" -x vmware
+              register: VirtualW11_gui
+              changed_when: false
+              failed_when: VirtualW11_gui.rc > 1
+
+            - name: Estado de la máquina
+              ansible.builtin.set_fact:
+                VirtualW11_estaba_encendida: "{{ VirtualW11_vmx in VirtualW11_vmrun_list.stdout_lines }}"
+                VirtualW11_abierta_en_vmware: >-
+                  {{ (VirtualW11_vmx not in VirtualW11_vmrun_list.stdout_lines)
+                     and VirtualW11_lck.stat.exists and VirtualW11_gui.rc == 0 }}
+                VirtualW11_arrancada: false
+
+            # `start ... gui` necesita el entorno gráfico de la sesión del
+            # usuario. Se toma del propio proceso de VMware, así funciona también
+            # lanzado por SSH (sin DISPLAY).
+            - name: Entorno gráfico de la ventana de VMware
+              ansible.builtin.shell: |
+                set -o pipefail
+                tr '\0' '\n' < /proc/$(pgrep -u "$(id -u)" -x vmware | head -1)/environ \
+                  | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|XDG_RUNTIME_DIR|DBUS_SESSION_BUS_ADDRESS)='
+              args:
+                executable: /bin/bash
+              register: VirtualW11_entorno_gui
+              changed_when: false
+              failed_when: false
+              when: VirtualW11_abierta_en_vmware | bool
+
+            - name: Aviso si está abierta en VMware (apagada)
+              ansible.builtin.debug:
+                msg: "{{ VirtualW11_nombre }} está abierta en VMware (apagada): se enciende en su ventana"
+              when: VirtualW11_abierta_en_vmware | bool
+
+            - name: Arrancar sin ventana (vmrun start nogui)
+              ansible.builtin.command:
+                argv: "{{ VirtualW11_vmrun + ['start', VirtualW11_vmx, 'nogui'] }}"
+              register: VirtualW11_start_nogui
+              when:
+                - not VirtualW11_estaba_encendida
+                - not VirtualW11_abierta_en_vmware | bool
+
+            - name: Arrancar en la ventana de VMware (vmrun start gui)
+              ansible.builtin.command:
+                argv: [timeout, '60', vmrun, -T, ws, start, "{{ VirtualW11_vmx }}", gui]
+              environment: >-
+                {{ dict(VirtualW11_entorno_gui.stdout_lines
+                        | map('split', '=', 1)) }}
+              register: VirtualW11_start_gui
+              when:
+                - not VirtualW11_estaba_encendida
+                - VirtualW11_abierta_en_vmware | bool
+
+            - name: Anotar que la ha encendido el rol (para apagarla luego)
+              ansible.builtin.set_fact:
+                VirtualW11_arrancada: true
+              when: (VirtualW11_start_nogui is changed) or (VirtualW11_start_gui is changed)
+
+            - name: Esperar a las VMware Tools (hasta {{ VirtualW11_timeout_tools }} s)
+              ansible.builtin.command:
+                argv: "{{ VirtualW11_vmrun + ['checkToolsState', VirtualW11_vmx] }}"
+              register: VirtualW11_tools
+              until: VirtualW11_tools.stdout | trim == 'running'
+              retries: "{{ ((VirtualW11_timeout_tools | int) / 10) | round(0, 'ceil') | int }}"
+              delay: 10
+              changed_when: false
+              failed_when: false
+
+            - name: Las VMware Tools tienen que responder
+              ansible.builtin.fail:
+                msg: >-
+                  Las VMware Tools no responden tras {{ VirtualW11_timeout_tools }} s
+                  (estado: {{ VirtualW11_tools.stdout | default('') | trim }}
+                  {{ VirtualW11_tools.stderr | default('') | trim }}). Ver {{ VirtualW11_destino }}/vmware.log
+              when: VirtualW11_tools.stdout | default('') | trim != 'running'
+
+            - name: IP del Windows invitado
+              ansible.builtin.command:
+                argv: "{{ VirtualW11_vmrun + ['getGuestIPAddress', VirtualW11_vmx, '-wait'] }}"
+              register: VirtualW11_ip
+              changed_when: false
+              failed_when: false
+
+            # Lo que publican las Tools (no hace falta usuario/contraseña de Windows).
+            - name: Datos que devuelven las VMware Tools
+              ansible.builtin.command:
+                argv: "{{ VirtualW11_vmrun + ['readVariable', VirtualW11_vmx, 'runtimeConfig', item] }}"
+              loop:
+                - guestinfo.vmtools.description
+                - guestInfo.detailed.data
+                - ethernet0.address
+                - ethernet0.generatedAddress
+                - uuid.bios
+              register: VirtualW11_vars
+              changed_when: false
+              failed_when: false
+
+            - name: Información de las VMware Tools
+              ansible.builtin.debug:
+                msg:
+                  - "Máquina : {{ VirtualW11_nombre }} ({{ 'ya estaba encendida' if VirtualW11_estaba_encendida else ('arrancada por el rol en la ventana de VMware' if VirtualW11_abierta_en_vmware | bool else 'arrancada por el rol, sin ventana') }})"
+                  - "Tools   : {{ VirtualW11_tools.stdout | trim }} — {{ d['guestinfo.vmtools.description'] }}"
+                  - "Windows : {{ d['guestInfo.detailed.data'] | regex_search(\"prettyName='([^']*)'\", '\\1') | default(['?'], true) | first }}"
+                  - "IP      : {{ VirtualW11_ip.stdout | default('') | trim if VirtualW11_ip.rc | default(1) == 0 else 'sin IP (' ~ (VirtualW11_ip.stdout | default('') | trim) ~ ')' }}"
+                  - "MAC     : {{ d['ethernet0.address'] or (d['ethernet0.generatedAddress'] ~ ' (generada)') }}"
+                  - "UUID    : {{ d['uuid.bios'] }}"
+              vars:
+                d: "{{ dict(VirtualW11_vars.results | map(attribute='item') | zip(VirtualW11_vars.results | map(attribute='stdout') | map('trim'))) }}"
+
+            # ------------------------------------- configuración del invitado
+            # Por VMware Tools (invitado.sh → PowerShell dentro del Windows): no
+            # depende de la red, así que el cambio de IP no corta nada. Las
+            # operaciones de vmrun en el invitado necesitan usuario y contraseña
+            # de Windows: se prueba el administrador nuevo y, la primera vez, el
+            # de la plantilla. Si ninguno entra (el alumno cambió la
+            # contraseña), invitado.sh lo hace por SSH con la clave.
+            - name: Configurar el Windows invitado
+              when: VirtualW11_configurar_invitado | bool
+              vars:
+                VirtualW11_dir_inv: "{{ VirtualW11_home }}/.cache/IAC-IESMHP/VirtualW11"
+                VirtualW11_inv: >-
+                  {{ ['bash', VirtualW11_home ~ '/.cache/IAC-IESMHP/VirtualW11/invitado.sh', VirtualW11_vmx] }}
+                VirtualW11_ssh: >-
+                  {{ ['ssh', '-i', VirtualW11_clave | default(''), '-o', 'BatchMode=yes',
+                      '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null',
+                      '-o', 'LogLevel=ERROR', '-o', 'ConnectTimeout=10', '-l', VirtualW11_id] }}
+              environment:
+                IAC_USUARIOS: "{{ VirtualW11_id }} {{ VirtualW11_invitado_usuario }}"
+                IAC_PASSWORD: "{{ VirtualW11_invitado_password }}"
+                IAC_SSH_USUARIO: "{{ VirtualW11_id }}"
+                IAC_SSH_KEY: "{{ VirtualW11_clave | default('') }}"
+                IAC_IP: "{{ VirtualW11_ip_final | default(VirtualW11_ip.stdout | default('') | trim) }}"
+                IAC_METODO: "{{ VirtualW11_acceso | default('') }}"
+              block:
+                - name: Copiar al equipo los scripts del invitado
+                  ansible.builtin.copy:
+                    src: invitado/
+                    dest: "{{ VirtualW11_dir_inv }}/"
+                    mode: preserve
+
+                # ------------------------------------- 0. clave SSH (equipo físico)
+                # Se busca ya al principio: invitado.sh la usa para entrar por SSH
+                # si las VMware Tools no pueden (contraseña cambiada por el alumno).
+                # Clave del usuario del equipo físico: la que tenga o una nueva sin contraseña.
+                - name: Clave SSH del usuario del equipo físico
+                  ansible.builtin.shell: |
+                    for k in id_ed25519 id_ecdsa id_rsa; do
+                      if [ -f ~/.ssh/$k ] && [ -f ~/.ssh/$k.pub ]; then echo ~/.ssh/$k; exit 0; fi
+                    done
+                    mkdir -p ~/.ssh && chmod 700 ~/.ssh
+                    ssh-keygen -q -t ed25519 -N "" -C "$(id -un)@$(hostname)" -f ~/.ssh/id_ed25519 </dev/null
+                    echo ~/.ssh/id_ed25519
+                    echo GENERADA
+                  args:
+                    executable: /bin/bash
+                  register: VirtualW11_clave_cmd
+                  changed_when: "'GENERADA' in VirtualW11_clave_cmd.stdout"
+
+                - name: Clave pública
+                  ansible.builtin.command:
+                    argv: [cat, "{{ VirtualW11_clave_cmd.stdout_lines[0] }}.pub"]
+                  register: VirtualW11_clave_pub
+                  changed_when: false
+
+                - name: Recordar la clave
+                  ansible.builtin.set_fact:
+                    VirtualW11_clave: "{{ VirtualW11_clave_cmd.stdout_lines[0] }}"
+
+                # Cómo se entra (una vez): cada contraseña errónea cuenta para el
+                # bloqueo de cuentas de Windows (10 fallos → 10 min bloqueada,
+                # también por SSH), así que no se reintenta en cada operación.
+                - name: Cómo se entra en el invitado
+                  ansible.builtin.command:
+                    argv: ['bash', "{{ VirtualW11_dir_inv }}/invitado.sh", '--detecta', "{{ VirtualW11_vmx }}"]
+                  register: VirtualW11_metodo
+                  changed_when: false
+                  failed_when: false
+
+                - name: Hay que poder entrar en el invitado
+                  ansible.builtin.fail:
+                    msg: "{{ VirtualW11_metodo.stdout | trim }}"
+                  when: VirtualW11_metodo.rc != 0
+
+                - name: Se entra por {{ VirtualW11_metodo.stdout | trim }}
+                  ansible.builtin.set_fact:
+                    VirtualW11_acceso: "{{ VirtualW11_metodo.stdout | trim }}"
+
+                # ------------------------------ 1. administrador = usuario físico
+                # Crea <usuario físico> administrador con la contraseña inicial
+                # (si ya existe no se la cambia) y desactiva el de la plantilla.
+                - name: Administrador {{ VirtualW11_id }} y {{ VirtualW11_invitado_usuario }} desactivado
+                  ansible.builtin.command:
+                    argv: >-
+                      {{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/usuario.ps1',
+                         VirtualW11_id, VirtualW11_invitado_password, VirtualW11_invitado_usuario] }}
+                  register: VirtualW11_usuario_cfg
+                  changed_when: >-
+                    VirtualW11_usuario_cfg.stdout_lines
+                    | select('search', '^(Usuario .*(creado|activado)|Administrador .*añadido|Desactivado )')
+                    | list | length > 0
+                  failed_when: false
+
+                - name: El administrador tiene que quedar creado
+                  ansible.builtin.fail:
+                    msg: >-
+                      No se pudo crear el administrador {{ VirtualW11_id }} en el invitado:
+                      {{ (VirtualW11_usuario_cfg.stdout ~ ' ' ~ VirtualW11_usuario_cfg.stderr) | regex_replace('\s+', ' ') }}
+                  when: VirtualW11_usuario_cfg.rc != 0
+
+                # Cómo se entra (una vez): cada contraseña errónea cuenta para el
+                # bloqueo de cuentas de Windows (10 fallos → 10 min bloqueada,
+                # también por SSH), así que no se reintenta en cada operación.
+                # Solo si se entró con el usuario de la plantilla, que ya está
+                # desactivado (así cada ejecución suma como mucho 1 contraseña mala).
+                - name: Cómo se entra en el invitado (tras crear el administrador)
+                  ansible.builtin.command:
+                    argv: ['bash', "{{ VirtualW11_dir_inv }}/invitado.sh", '--detecta', "{{ VirtualW11_vmx }}"]
+                  register: VirtualW11_metodo2
+                  changed_when: false
+                  failed_when: false
+                  when: VirtualW11_acceso == 'tools:' ~ VirtualW11_invitado_usuario
+
+                - name: Hay que poder entrar en el invitado (tras crear el administrador)
+                  ansible.builtin.fail:
+                    msg: "{{ VirtualW11_metodo2.stdout | trim }}"
+                  when:
+                    - VirtualW11_metodo2 is not skipped
+                    - VirtualW11_metodo2.rc != 0
+
+                - name: Se entra por {{ VirtualW11_metodo2.stdout | default('') | trim }}
+                  ansible.builtin.set_fact:
+                    VirtualW11_acceso: "{{ VirtualW11_metodo2.stdout | trim }}"
+                  when: VirtualW11_metodo2 is not skipped
+
+                # ---------------------------------------------------- 2. SSH
+                - name: OpenSSH en el invitado (instalado, arrancado, puerto 22, clave autorizada)
+                  ansible.builtin.command:
+                    argv: "{{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/ssh.ps1', VirtualW11_clave_pub.stdout | trim] }}"
+                  register: VirtualW11_ssh_cfg
+                  changed_when: "'añadida' in VirtualW11_ssh_cfg.stdout"
+                  failed_when: false
+
+                - name: OpenSSH tiene que quedar configurado
+                  ansible.builtin.fail:
+                    msg: "No se pudo configurar OpenSSH en el invitado: {{ VirtualW11_ssh_cfg.stdout | regex_replace('\\s+', ' ') }}"
+                  when: VirtualW11_ssh_cfg.rc != 0
+
+                # whoami /groups vale con cmd y con PowerShell como shell de sshd.
+                # S-1-5-32-544 = Administradores, S-1-16-12288 = nivel alto (elevado).
+                # La salida de Windows viene en cp850 (tildes): se dejan solo
+                # caracteres ASCII para que Ansible la acepte.
+                - name: Entrar por SSH como administrador ({{ VirtualW11_ip.stdout | default('') | trim }})
+                  ansible.builtin.shell:
+                    cmd: >-
+                      set -o pipefail;
+                      {{ VirtualW11_ssh | map('quote') | join(' ') }}
+                      {{ VirtualW11_ip.stdout | default('') | trim | quote }}
+                      'whoami /groups /fo csv /nh'
+                      | LC_ALL=C tr -c '[:print:]\n' '?'
+                    executable: /bin/bash
+                  register: VirtualW11_ssh_prueba
+                  until: VirtualW11_ssh_prueba.rc == 0
+                  retries: 6
+                  delay: 5
+                  changed_when: false
+                  failed_when: false
+
+                - name: El acceso administrativo por SSH tiene que funcionar
+                  ansible.builtin.fail:
+                    msg: >-
+                      No se pudo entrar por SSH como administrador en
+                      {{ VirtualW11_ip.stdout | default('?') | trim }}:
+                      {{ (VirtualW11_ssh_prueba.stderr | default('') ~ ' ' ~ VirtualW11_ssh_prueba.stdout | default('')) | regex_replace('\s+', ' ') | truncate(300) }}
+                  when: >-
+                    VirtualW11_ssh_prueba.rc != 0
+                    or 'S-1-5-32-544' not in VirtualW11_ssh_prueba.stdout
+                    or 'S-1-16-12288' not in VirtualW11_ssh_prueba.stdout
+
+                # ------------------------------------------ 2b. Escritorio remoto
+                - name: Escritorio remoto (RDP) en el invitado
+                  ansible.builtin.command:
+                    argv: "{{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/rdp.ps1'] }}"
+                  register: VirtualW11_rdp
+                  changed_when: "'RDP           : activado' in VirtualW11_rdp.stdout"
+                  failed_when: VirtualW11_rdp.rc != 0
+                  when: VirtualW11_remmina | bool
+
+                # --------------------------------------------- 3. IP estática
+                - name: Direccionamiento del equipo físico
+                  ansible.builtin.shell: |
+                    dev=$(ip -4 route show default | awk '{print $5; exit}')
+                    gw=$(ip -4 route show default | awk '{print $3; exit}')
+                    cidr=$(ip -4 -o addr show dev "$dev" scope global | awk '{print $4; exit}')
+                    dns=$(nmcli -g IP4.DNS dev show "$dev" 2>/dev/null | tr -d ' ' | tr '|' ',')
+                    [ -n "$dns" ] || dns=$(resolvectl dns "$dev" 2>/dev/null | cut -d: -f2- | xargs | tr ' ' ',')
+                    echo "$cidr $gw ${dns:-$gw}"
+                  args:
+                    executable: /bin/bash
+                  register: VirtualW11_red_fisica
+                  changed_when: false
+
+                - name: IP que le toca al invitado
+                  ansible.builtin.set_fact:
+                    VirtualW11_ip_actual: "{{ VirtualW11_ip.stdout | default('') | trim }}"
+                    VirtualW11_ip_fisica: "{{ f[0].split('/')[0] }}"
+                    VirtualW11_prefijo: "{{ f[0].split('/')[1] }}"
+                    VirtualW11_puerta: "{{ f[1] }}"
+                    VirtualW11_dns: "{{ f[2] }}"
+                    VirtualW11_ip_nueva: >-
+                      {{ (o[:3] + [(o[3] | int + VirtualW11_ip_suma | int) | string]) | join('.')
+                         if (o[3] | int + VirtualW11_ip_suma | int) <= 254 else '' }}
+                  vars:
+                    f: "{{ VirtualW11_red_fisica.stdout.split() }}"
+                    o: "{{ VirtualW11_red_fisica.stdout.split()[0].split('/')[0].split('.') }}"
+
+                # Windows no responde a ping por defecto: también se mira si alguien
+                # contesta por ARP. Una entrada STALE de la caché ARP (de un equipo
+                # que ya no está) no cuenta: el ping obliga al kernel a volver a
+                # preguntar y solo REACHABLE significa que alguien ha contestado.
+                - name: ¿Está libre {{ VirtualW11_ip_nueva }}?
+                  ansible.builtin.shell: |
+                    ip={{ VirtualW11_ip_nueva }}
+                    if ping -c 2 -W 1 "$ip" >/dev/null 2>&1; then echo OCUPADA; exit 0; fi
+                    for i in $(seq 12); do
+                      estado=$(ip neigh show "$ip" | awk '{print $NF}')
+                      case "$estado" in
+                        REACHABLE) echo OCUPADA; exit 0 ;;
+                        ""|FAILED|INCOMPLETE) echo LIBRE; exit 0 ;;
+                      esac
+                      sleep 1
+                    done
+                    echo LIBRE
+                  args:
+                    executable: /bin/bash
+                  register: VirtualW11_ping
+                  changed_when: false
+                  when:
+                    - VirtualW11_ip_nueva | length > 0
+                    - VirtualW11_ip_nueva != VirtualW11_ip_actual
+
+                - name: Decidir la IP
+                  ansible.builtin.set_fact:
+                    VirtualW11_ip_modo: >-
+                      {{ 'FUERA' if VirtualW11_ip_nueva | length == 0
+                         else ('YA' if VirtualW11_ip_nueva == VirtualW11_ip_actual
+                         else ('OCUPADA' if 'OCUPADA' in VirtualW11_ping.stdout | default('')
+                         else 'ESTATICA')) }}
+
+                - name: Aviso si no se cambia la IP
+                  ansible.builtin.debug:
+                    msg: >-
+                      [WARN] {{ VirtualW11_nombre }}: no se cambia la IP (sigue con
+                      {{ VirtualW11_ip_actual }}, normalmente por DHCP):
+                      {{ (VirtualW11_ip_nueva ~ ' ya está en uso en la red')
+                         if VirtualW11_ip_modo == 'OCUPADA'
+                         else ('la IP física + ' ~ VirtualW11_ip_suma ~ ' pasa de .254') }}
+                  when: VirtualW11_ip_modo in ['OCUPADA', 'FUERA']
+
+                - name: IP estática {{ VirtualW11_ip_nueva }}/{{ VirtualW11_prefijo }} (por VMware Tools)
+                  ansible.builtin.command:
+                    argv: >-
+                      {{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/ip.ps1', VirtualW11_ip_nueva,
+                         VirtualW11_prefijo, VirtualW11_puerta, VirtualW11_dns] }}
+                  register: VirtualW11_ip_cfg
+                  changed_when: "'ya tenía' not in VirtualW11_ip_cfg.stdout"
+                  failed_when: false
+                  when: VirtualW11_ip_modo in ['ESTATICA', 'YA']
+
+                - name: La IP estática tiene que aplicarse
+                  ansible.builtin.fail:
+                    msg: "No se pudo poner la IP estática: {{ VirtualW11_ip_cfg.stdout | regex_replace('\\s+', ' ') }}"
+                  when:
+                    - VirtualW11_ip_cfg is not skipped
+                    - VirtualW11_ip_cfg.rc != 0
+
+                - name: IP con la que se sigue
+                  ansible.builtin.set_fact:
+                    VirtualW11_ip_final: "{{ VirtualW11_ip_nueva if VirtualW11_ip_modo in ['ESTATICA', 'YA'] else VirtualW11_ip_actual }}"
+
+                # --------------------------------------------------- 4. nombre
+                - name: Nombre del equipo {{ VirtualW11_nombre }} (por VMware Tools)
+                  ansible.builtin.command:
+                    argv: "{{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/nombre.ps1', VirtualW11_nombre] }}"
+                  register: VirtualW11_nombre_cfg
+                  changed_when: VirtualW11_nombre_cfg.rc == 3
+                  failed_when: VirtualW11_nombre_cfg.rc not in [0, 3]
+
+                # Solo se reinicia si la encendió el rol (no si el alumno la está usando).
+                - name: Reiniciar el invitado para aplicar el nombre
+                  ansible.builtin.command:
+                    argv: [env, -u, DISPLAY, -u, WAYLAND_DISPLAY, timeout, '300', vmrun, -T, ws, reset, "{{ VirtualW11_vmx }}", soft]
+                  when:
+                    - VirtualW11_nombre_cfg.rc == 3
+                    - VirtualW11_arrancada | bool
+
+                - name: Esperar a que vuelva con el nombre nuevo (hasta {{ VirtualW11_timeout_reinicio }} s)
+                  ansible.builtin.command:
+                    argv: "{{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/nombre.ps1', VirtualW11_nombre] }}"
+                  environment:
+                    TIMEOUT: "60"
+                  register: VirtualW11_nombre_fin
+                  until: VirtualW11_nombre_fin.rc == 0
+                  retries: "{{ ((VirtualW11_timeout_reinicio | int) / 10) | round(0, 'ceil') | int }}"
+                  delay: 10
+                  changed_when: false
+                  when:
+                    - VirtualW11_nombre_cfg.rc == 3
+                    - VirtualW11_arrancada | bool
+
+                - name: Aviso si falta reiniciar para el nombre
+                  ansible.builtin.debug:
+                    msg: "[WARN] {{ VirtualW11_nombre }} estaba encendida por el usuario: el nombre nuevo se aplicará cuando la reinicie"
+                  when:
+                    - VirtualW11_nombre_cfg.rc == 3
+                    - not VirtualW11_arrancada | bool
+
+                # ------------------------------------------ 5. comprobación final
+                - name: Comprobación final por SSH ({{ VirtualW11_ip_final }})
+                  ansible.builtin.command:
+                    argv: "{{ VirtualW11_ssh + [VirtualW11_ip_final, 'hostname'] }}"
+                  register: VirtualW11_ssh_fin
+                  until: VirtualW11_ssh_fin.rc == 0
+                  retries: 12
+                  delay: 5
+                  changed_when: false
+
+                # ----------------------------------- 6. lanzador en Remmina (RDP)
+                - name: El Escritorio remoto tiene que responder ({{ VirtualW11_ip_final }}:3389)
+                  ansible.builtin.wait_for:
+                    host: "{{ VirtualW11_ip_final }}"
+                    port: 3389
+                    timeout: 60
+                  when: VirtualW11_remmina | bool
+
+                - name: Lanzador {{ VirtualW11_nombre }} en Remmina
+                  ansible.builtin.script:
+                    cmd: >-
+                      remmina-perfil.sh {{ VirtualW11_nombre | quote }} {{ VirtualW11_ip_final | quote }}
+                      {{ VirtualW11_id | quote }}
+                  register: VirtualW11_remmina_perfil
+                  changed_when: VirtualW11_remmina_perfil.stdout is search('^(CREADO|ACTUALIZADO)')
+                  when: VirtualW11_remmina | bool
+
+                - name: Resumen del invitado
+                  ansible.builtin.debug:
+                    msg:
+                      - "Usuario : {{ VirtualW11_id }} administrador (contraseña inicial {{ VirtualW11_invitado_password }}); {{ VirtualW11_usuario_cfg.stdout_lines | select('search', '^Desactiva') | first | default('') | regex_replace('\\s+:\\s+', ': ') }}"
+                      - "SSH     : ssh -i {{ VirtualW11_clave }} {{ VirtualW11_id }}@{{ VirtualW11_ip_final }}"
+                      - "IP      : {{ VirtualW11_ip_final }}{{ ('/' ~ VirtualW11_prefijo ~ ' estática, puerta ' ~ VirtualW11_puerta ~ ', DNS ' ~ VirtualW11_dns) if VirtualW11_ip_modo in ['ESTATICA', 'YA'] else ' (sin cambiar: ' ~ VirtualW11_ip_modo ~ ')' }}"
+                      - "Nombre  : {{ VirtualW11_ssh_fin.stdout | trim }}"
+                      - "Remmina : {{ VirtualW11_remmina_perfil.stdout | default('(desactivado)') | trim }}"
+
+          # Siempre (también si las Tools no responden): apagar si la encendió el
+          # rol. Primero ordenado (soft) y, si no termina, forzado (hard).
+          always:
+            - name: Apagar la máquina (soft)
+              ansible.builtin.command:
+                argv: >-
+                  {{ ['env', '-u', 'DISPLAY', '-u', 'WAYLAND_DISPLAY',
+                      'timeout', VirtualW11_timeout_apagado | string,
+                      'vmrun', '-T', 'ws', 'stop', VirtualW11_vmx, 'soft'] }}
+              register: VirtualW11_stop
+              failed_when: false
+              when:
+                - VirtualW11_arrancada | default(false) | bool
+                - VirtualW11_apagar_tras_comprobar | bool
+
+            - name: Apagar la máquina (hard, si no se apagó)
+              ansible.builtin.command:
+                argv: "{{ VirtualW11_vmrun + ['stop', VirtualW11_vmx, 'hard'] }}"
+              when:
+                - VirtualW11_stop is not skipped
+                - VirtualW11_stop.rc | default(0) != 0
