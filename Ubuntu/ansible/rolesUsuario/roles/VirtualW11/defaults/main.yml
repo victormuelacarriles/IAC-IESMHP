@@ -63,10 +63,13 @@ VirtualW11_red: nat
 # Tras comprobar las Tools: administrador, SSH, IP estática y nombre.
 VirtualW11_configurar_invitado: true
 
-# Las operaciones de vmrun dentro del invitado necesitan usuario y contraseña
-# de Windows. El rol crea un administrador con el nombre del usuario físico
-# (SMRV08, vmuela...) y esta contraseña inicial, y desactiva el de la plantilla.
+# Cada alumno tiene dos usuarios en Windows, con la MISMA contraseña (esta, al
+# crearlos): <usuario físico> (SMRV08, vmuela...) ESTÁNDAR, con arranque
+# automático y Remmina, y <prefijo><usuario> (adminSMRV08) ADMINISTRADOR, que
+# es el que usa el rol (las operaciones de vmrun en el invitado necesitan
+# usuario y contraseña de Windows). El de la plantilla queda desactivado.
 VirtualW11_invitado_password: "usuario@1"
+VirtualW11_admin_prefijo: admin
 
 # Usuario de la plantilla: solo se usa para entrar la primera vez (y crear el
 # administrador nuevo); después queda desactivado.

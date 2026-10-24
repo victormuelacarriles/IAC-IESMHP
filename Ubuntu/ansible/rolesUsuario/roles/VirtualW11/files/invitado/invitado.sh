@@ -8,8 +8,8 @@
 #   tools:<usuario>  por VMware Tools (vmrun). No usa la red: funciona aunque se
 #                    cambie la IP. Las operaciones de vmrun en el invitado
 #                    exigen usuario y contraseña de Windows (IAC_PASSWORD).
-#   ssh              por SSH con la clave IAC_SSH_KEY como IAC_SSH_USUARIO en
-#                    IAC_IP. No usa contraseña.
+#   ssh:<usuario>    por SSH con la clave IAC_SSH_KEY en IAC_IP, como el primero
+#                    de IAC_SSH_USUARIO ("u1 u2") que entre. No usa contraseña.
 #
 # ⚠ Cada contraseña errónea cuenta para el BLOQUEO de cuentas de Windows 11
 # (por defecto 10 fallos → cuenta bloqueada 10 min, también para SSH). Por
@@ -39,7 +39,7 @@ vm() {   # vm <usuario> <orden vmrun...>
 }
 
 hay_ssh() {
-    [ -n "${IAC_SSH_KEY:-}" ] && [ -n "${IAC_IP:-}" ] && [ -n "${IAC_SSH_USUARIO:-}" ]
+    [ -n "${IAC_SSH_KEY:-}" ] && [ -n "${IAC_IP:-}" ]
 }
 
 # ------------------------------------------------------------------ detectar
@@ -56,16 +56,18 @@ if [ "${1:-}" = "--detecta" ]; then
     }
 
     [ "${#USUARIOS[@]}" -gt 0 ] && probar_tools "${USUARIOS[0]}"
-    if hay_ssh; then
+    if hay_ssh && [ -n "${IAC_SSH_USUARIO:-}" ]; then
         # Recién arrancada, sshd puede tardar: se reintenta (la clave no
-        # cuenta para el bloqueo de cuentas).
+        # cuenta para el bloqueo de cuentas). Cada vuelta prueba todos.
         for i in $(seq "${IAC_SSH_INTENTOS:-6}"); do
-            if out=$(ssh "${SSH_O[@]}" -l "$IAC_SSH_USUARIO" "$IAC_IP" hostname 2>&1 </dev/null); then
-                echo "ssh"; exit 0
-            fi
+            for su in ${IAC_SSH_USUARIO}; do
+                if out=$(ssh "${SSH_O[@]}" -l "$su" "$IAC_IP" hostname 2>&1 </dev/null); then
+                    echo "ssh:$su"; exit 0
+                fi
+            done
             sleep 5
         done
-        ERRORES+="SSH como $IAC_SSH_USUARIO@$IAC_IP: ${out:-sin respuesta}. "
+        ERRORES+="SSH como ${IAC_SSH_USUARIO// //}@$IAC_IP: ${out:-sin respuesta}. "
     fi
     for u in "${USUARIOS[@]:1}"; do probar_tools "$u"; done
 
@@ -118,20 +120,21 @@ tools:*)
     echo "[ERR] No se pudo recoger la salida del invitado"
     exit 91
     ;;
-ssh)
-    hay_ssh || { echo "[ERR] Faltan IAC_SSH_KEY/IAC_IP/IAC_SSH_USUARIO"; exit 90; }
+ssh:*)
+    SU="${METODO#ssh:}"
+    hay_ssh || { echo "[ERR] Faltan IAC_SSH_KEY/IAC_IP"; exit 90; }
     # Un .cmd que ejecuta el script y escribe su código: así no depende de si
     # el shell de sshd es cmd o PowerShell (PowerShell no devuelve el código).
     printf '@echo off\r\npowershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File %s\\%s.ps1%s\r\necho IAC_RC=%%ERRORLEVEL%%\r\n' \
         "$G" "$ID" "$ARGS" > "$TMP/$ID.cmd"
     cp "$PS1" "$TMP/$ID.ps1"   # scp de varios ficheros conserva el nombre
-    if ! out=$(scp "${SSH_O[@]}" "$TMP/$ID.ps1" "$TMP/$ID.cmd" "$IAC_SSH_USUARIO@$IAC_IP:C:/Windows/Temp/" 2>&1); then
+    if ! out=$(scp "${SSH_O[@]}" "$TMP/$ID.ps1" "$TMP/$ID.cmd" "$SU@$IAC_IP:C:/Windows/Temp/" 2>&1); then
         echo "[ERR] No se pudo copiar el script al invitado (SSH): ${out:-sin respuesta}"
         exit 90
     fi
-    echo "[invitado] por SSH como $IAC_SSH_USUARIO@$IAC_IP" >&2
-    ssh "${SSH_O[@]}" -l "$IAC_SSH_USUARIO" "$IAC_IP" "$G\\$ID.cmd" > "$TMP/out" 2>&1 </dev/null
-    ssh "${SSH_O[@]}" -l "$IAC_SSH_USUARIO" "$IAC_IP" "cmd /c del /q $G\\$ID.ps1 $G\\$ID.cmd" >/dev/null 2>&1 </dev/null || true
+    echo "[invitado] por SSH como $SU@$IAC_IP" >&2
+    ssh "${SSH_O[@]}" -l "$SU" "$IAC_IP" "$G\\$ID.cmd" > "$TMP/out" 2>&1 </dev/null
+    ssh "${SSH_O[@]}" -l "$SU" "$IAC_IP" "cmd /c del /q $G\\$ID.ps1 $G\\$ID.cmd" >/dev/null 2>&1 </dev/null || true
     salida "$TMP/out"
     ;;
 *)

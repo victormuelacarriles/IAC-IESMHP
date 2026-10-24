@@ -121,16 +121,17 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
      > corren como ese usuario (comprobado: sin credenciales, *"Command
      > requires valid user name and password"*). Un administrador corre
      > **elevado**.
-   - **`ssh`** — `scp` + `ssh` con la clave, como `<usuario físico>`. No usa
-     contraseña.
+   - **`ssh:<usuario>`** — `scp` + `ssh` con la clave. No usa contraseña.
 
    **El método se averigua una vez** (`invitado.sh --detecta`), al principio
    y otra vez tras crear el administrador, y todas las operaciones usan ese.
    Orden:
-   1. Tools como `<usuario físico>` con `usuario@1`, un único intento.
-   2. SSH con la clave, hasta 6 intentos cada 5 s, porque recién arrancada
-      `sshd` tarda.
-   3. Tools como `usuario` de la plantilla, solo la primera vez.
+   1. Tools como `admin<usuario>` con `usuario@1`, un único intento.
+   2. SSH con la clave como `admin<usuario>` y, en máquinas de antes, como
+      `<usuario>`, que era administrador (`ssh:<usuario>`). Hasta 6 vueltas,
+      cada 5 s, porque recién arrancada `sshd` tarda.
+   3. Tools como `<usuario>` (máquinas de antes) y como `usuario` de la
+      plantilla (la primera vez).
 
    > ⚠ **Bloqueo de cuentas de Windows 11**: cada contraseña errónea cuenta
    > (por defecto 10 fallos → cuenta **bloqueada 10 min**), y una cuenta
@@ -144,24 +145,29 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
    Los scripts se copian antes a `~/.cache/IAC-IESMHP/VirtualW11/` del equipo
    físico.
 
-   1. **Administrador** (`usuario.ps1`):
-      - crea el usuario local `<usuario físico>` (`SMRV08`, `CEGSIABD14`,
-        `vmuela`…) con contraseña inicial `usuario@1`
-        (`VirtualW11_invitado_password`) y lo mete en Administradores (por SID,
-        S-1-5-32-544);
-      - si ya existe, **no** le cambia la contraseña;
-      - desactiva la **pantalla de privacidad del primer inicio de sesión**
-        (directiva `DisablePrivacyExperience=1`). Sin ella, con el arranque
-        automático el usuario se quedaba en *"Permitir que Microsoft y las
-        aplicaciones usen tu ubicación"* esperando un clic (visto en una
-        captura el 2026-10-24);
-      - **desactiva solo `usuario`** (el de la plantilla,
-        `VirtualW11_invitado_usuario`), si existe y no es el propio
-        administrador; el resto de usuarios no se tocan (cambio 2026-10-23).
+   1. **Usuarios** (`usuario.ps1`; dos por alumno desde 2026-10-24):
+      - `<usuario físico>` (`SMRV08`, `vmuela`…): **estándar**. Es el del
+        arranque automático y el de Remmina: se mete en *Usuarios* y en
+        *Usuarios de escritorio remoto* (S-1-5-32-555), sin el cual un
+        usuario estándar no puede entrar por RDP;
+      - `admin<usuario físico>` (`adminSMRV08`, prefijo
+        `VirtualW11_admin_prefijo`): **administrador**. Es el que usa el rol
+        (Tools y SSH);
+      - los dos con la **misma contraseña**, `usuario@1` al crearlos
+        (`VirtualW11_invitado_password`). A los que ya existen **no** se les
+        cambia;
+      - **máquinas de antes**, donde `<usuario físico>` era administrador: se
+        le quita de *Administradores* solo cuando `admin<usuario>` ya existe y
+        lo es. Si el alumno ya había cambiado su contraseña, `admin<usuario>`
+        se crea con `usuario@1` (el rol no conoce la nueva); se igualan cuando
+        el alumno usa el script del escritorio;
+      - desactiva **solo `usuario`** (el de la plantilla) y la **pantalla de
+        privacidad del primer inicio de sesión** (`DisablePrivacyExperience=1`;
+        sin ella, con el arranque automático el usuario se quedaba en *"Permitir
+        que Microsoft y las aplicaciones usen tu ubicación"* esperando un clic).
 
-      La primera vez se entra con `usuario` de la plantilla
-      (`VirtualW11_invitado_usuario`); como el script lo desactiva, la salida
-      se recoge con el usuario nuevo.
+      La primera vez se entra con `usuario` de la plantilla; como el script lo
+      desactiva, la salida se recoge con el administrador nuevo.
    2. **SSH** (`ssh.ps1`): clave del usuario del equipo físico (`id_ed25519`,
       `id_ecdsa` o `id_rsa`; si no tiene, se genera `~/.ssh/id_ed25519` sin
       contraseña). En el invitado:
@@ -212,10 +218,9 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
       toca, salvo `server=` si la IP ha cambiado.
    7. **Arranque automático (último paso)** (`CambiarPassword.ps1`,
       `VirtualW11_autologon_activar`; 2026-10-23):
-      - **solo con la contraseña inicial**: si el rol entra por Tools con
-        `usuario@1`, configura que Windows entre solo con `<usuario físico>`;
-        si el alumno ya la cambió (entra por SSH), no toca su arranque
-        automático, porque lo rompería;
+      - del usuario **estándar** `<usuario físico>`, y **solo si su contraseña
+        sigue siendo la inicial** (una única comprobación). Si el alumno ya la
+        cambió, no se toca su arranque automático, porque lo rompería;
       - Winlogon `AutoAdminLogon=1` + `DefaultUserName` + `DefaultDomainName`
         (nombre del equipo), y la contraseña como **secreto LSA**
         `DefaultPassword` (como Autologon de Sysinternals), **no** en texto
@@ -225,12 +230,14 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
         el **escritorio público** el acceso directo *"Cambiar contraseña y
         arranque automático"* (doble clic en un `.ps1` lo abriría en el Bloc de
         notas). El script interactivo:
-        1. pide permisos de administrador (UAC) y explica que configura el
-           arranque automático;
+        1. pide permisos de administrador: como `<usuario>` es estándar,
+           Windows pide en la ventana de UAC `admin<usuario>` y su contraseña;
+           explica que configura el arranque automático;
         2. si sigue la contraseña inicial, pide una nueva **dos veces**
-           (no vacía ni igual a la inicial), se la pone y configura el
-           arranque automático con ella;
-        3. si ya la cambió, permite reconfigurar el arranque con la actual;
+           (no vacía ni igual a la inicial), **se la pone a los dos usuarios**
+           y configura el arranque automático de `<usuario>` con ella;
+        3. si ya la cambió, pide la actual de `<usuario>`, deja
+           `admin<usuario>` con la misma y reconfigura el arranque;
         4. termina avisando de que **recuerde la contraseña para entrar por
            Remmina**;
       - si lo configuró y la máquina la encendió el rol, **reinicia y comprueba**
@@ -370,7 +377,8 @@ y los equipos en los que el usuario no entra se quedan fuera.
 | `VirtualW11_timeout_apagado` | `180` | Segundos de apagado `soft` antes del `hard` |
 | `VirtualW11_red` | `nat` | Modo de red de `ethernet0`: `nat` o `bridged` |
 | `VirtualW11_configurar_invitado` | `true` | Usuario, SSH, IP y nombre del invitado |
-| `VirtualW11_invitado_password` | `usuario@1` | Contraseña inicial del administrador `<usuario físico>` |
+| `VirtualW11_invitado_password` | `usuario@1` | Contraseña inicial de `<usuario>` y `admin<usuario>` |
+| `VirtualW11_admin_prefijo` | `admin` | Nombre del administrador: `admin<usuario>` |
 | `VirtualW11_invitado_usuario` | `usuario` | Usuario de la plantilla: solo para entrar la primera vez (luego queda desactivado) |
 | `VirtualW11_ip_suma` | `30` | Solo `bridged`: IP del invitado = IP física + esto |
 | `VirtualW11_timeout_reinicio` | `600` | Espera tras reiniciar por el nombre |

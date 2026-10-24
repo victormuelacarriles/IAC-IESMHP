@@ -1,17 +1,22 @@
 ﻿# CambiarPassword.ps1 — arranque automático de Windows (autologon) y cambio de
-# la contraseña inicial del usuario. Parte del rol VirtualW11 (IAC-IESMHP).
+# la contraseña inicial. Parte del rol VirtualW11 (IAC-IESMHP).
+#
+# Cada alumno tiene dos usuarios con la MISMA contraseña: <usuario> (estándar,
+# el del arranque automático y Remmina) y <admin> (administrador).
 #
 # Dos modos:
 #  - Instalación (lo lanza el rol, sin preguntas; argumentos por posición):
-#      CambiarPassword.ps1 instalar <usuario> si|no <contraseña inicial>
+#      CambiarPassword.ps1 instalar <usuario> si|no <contraseña inicial> <admin>
 #    Se copia a C:\ProgramData\IAC-IESMHP\, deja en el escritorio público el
 #    acceso directo "Cambiar contraseña y arranque automático" y, con "si",
-#    configura el arranque automático de <u> con la contraseña
-#    inicial.
-#  - Interactivo (el alumno, desde el acceso directo del escritorio):
-#    explica qué hace; si el usuario sigue con la contraseña inicial pide una
-#    nueva (dos veces), se la pone y configura el arranque automático con ella;
-#    si ya la cambió, puede volver a configurar el arranque con la actual.
+#    configura el arranque automático de <usuario> con la contraseña inicial,
+#    solo si sigue siendo la suya (si el alumno la cambió, no se toca).
+#  - Interactivo (el alumno, desde el acceso directo del escritorio): como
+#    <usuario> no es administrador, Windows pide en la ventana de permisos
+#    (UAC) el usuario <admin> y su contraseña. Explica qué hace; si sigue la
+#    contraseña inicial pide una nueva (dos veces) y se la pone a LOS DOS
+#    usuarios; si ya la cambió, pide la actual de <usuario> y deja <admin> con
+#    la misma. En los dos casos configura el arranque automático de <usuario>.
 #
 # La contraseña del arranque automático se guarda como secreto LSA
 # ("DefaultPassword", como Autologon de Sysinternals), no en texto plano en el
@@ -20,8 +25,10 @@ param(
     [Parameter(Position = 0)][string]$Accion = '',              # 'instalar' = modo del rol
     [Parameter(Position = 1)][string]$Usuario = $env:USERNAME,
     [Parameter(Position = 2)][string]$Autologon = 'no',         # 'si' = configurarlo
-    [Parameter(Position = 3)][string]$PasswordInicial = 'usuario@1'
+    [Parameter(Position = 3)][string]$PasswordInicial = 'usuario@1',
+    [Parameter(Position = 4)][string]$Admin = ''
 )
+if (-not $Admin) { $Admin = "admin$Usuario" }
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
 $Destino = Join-Path $env:ProgramData 'IAC-IESMHP\CambiarPassword.ps1'
@@ -104,13 +111,17 @@ if ($Accion -eq 'instalar') {
         $sh = New-Object -ComObject WScript.Shell
         $l = $sh.CreateShortcut($Acceso)
         $l.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-        $l.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$Destino`" -PasswordInicial `"$PasswordInicial`""
+        $l.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$Destino`" -Usuario `"$Usuario`" -Admin `"$Admin`" -PasswordInicial `"$PasswordInicial`""
         $l.IconLocation = "$env:SystemRoot\System32\imageres.dll,77"
         $l.Description = 'Cambia la contraseña inicial y configura el arranque automático'
         $l.Save()
         "Script        : $Destino"
         "Escritorio    : $Acceso"
-        if ($Autologon -eq 'si') {
+        # Una sola comprobación de la contraseña de <usuario> (cada fallo
+        # cuenta para el bloqueo de cuentas de Windows).
+        if ($Autologon -eq 'si' -and -not (Test-Password $Usuario $PasswordInicial)) {
+            "Autologon     : no se toca ($Usuario ya cambió la contraseña)"
+        } elseif ($Autologon -eq 'si') {
             $antes = (Get-ItemProperty $Winlogon -ErrorAction SilentlyContinue)
             Set-ArranqueAutomatico $Usuario $PasswordInicial
             if ($antes.AutoAdminLogon -eq '1' -and $antes.DefaultUserName -eq $Usuario) {
@@ -134,7 +145,7 @@ $yo = New-Object Security.Principal.WindowsPrincipal([Security.Principal.Windows
 if (-not $yo.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Start-Process powershell.exe -Verb RunAs -ArgumentList @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"",
-        '-Usuario', "`"$Usuario`"", '-PasswordInicial', "`"$PasswordInicial`"")
+        '-Usuario', "`"$Usuario`"", '-Admin', "`"$Admin`"", '-PasswordInicial', "`"$PasswordInicial`"")
     exit
 }
 
@@ -148,7 +159,8 @@ Write-Host "  encenderla, Windows entrará solo con tu usuario ($Usuario)."
 Write-Host ''
 Write-Host '  Para eso necesita tu contraseña. Si sigues con la contraseña inicial'
 Write-Host '  (la misma para todos), DEBES CAMBIARLA: el script te pedirá una nueva,'
-Write-Host '  te la pondrá y configurará el arranque automático con ella.'
+Write-Host "  se la pondrá a tus dos usuarios ($Usuario y el administrador $Admin)"
+Write-Host '  y configurará el arranque automático con ella.'
 Write-Host ''
 
 try {
@@ -163,9 +175,11 @@ try {
             if ($p1 -eq $PasswordInicial) { Write-Host '  Tiene que ser distinta de la inicial. Otra vez.' -ForegroundColor Red; continue }
             break
         }
-        Set-LocalUser -Name $Usuario -Password (ConvertTo-SecureString $p1 -AsPlainText -Force)
+        $sec = ConvertTo-SecureString $p1 -AsPlainText -Force
+        Set-LocalUser -Name $Usuario -Password $sec
+        if (Get-LocalUser -Name $Admin -ErrorAction SilentlyContinue) { Set-LocalUser -Name $Admin -Password $sec }
         Write-Host ''
-        Write-Host '  Contraseña cambiada.' -ForegroundColor Green
+        Write-Host "  Contraseña cambiada en $Usuario y $Admin." -ForegroundColor Green
     } else {
         Write-Host '  Ya no tienes la contraseña inicial (bien).' -ForegroundColor Green
         Write-Host '  Para configurar el arranque automático escribe tu contraseña ACTUAL.'
@@ -177,13 +191,19 @@ try {
             if (Test-Password $Usuario $p1) { break }
             Write-Host '  Contraseña incorrecta. Otra vez.' -ForegroundColor Red
         }
+        # El administrador, con la misma contraseña que el usuario.
+        if (Get-LocalUser -Name $Admin -ErrorAction SilentlyContinue) {
+            Set-LocalUser -Name $Admin -Password (ConvertTo-SecureString $p1 -AsPlainText -Force)
+            Write-Host "  $Admin queda con la misma contraseña." -ForegroundColor Green
+        }
     }
 
     Set-ArranqueAutomatico $Usuario $p1
     Write-Host '  Arranque automático configurado con tu contraseña.' -ForegroundColor Green
     Write-Host ''
     Write-Host '  ¡ACUÉRDATE DE TU NUEVA CONTRASEÑA! La necesitarás para entrar en esta' -ForegroundColor Yellow
-    Write-Host '  máquina en remoto desde Remmina (Escritorio remoto, RDP).' -ForegroundColor Yellow
+    Write-Host "  máquina en remoto desde Remmina (Escritorio remoto, RDP) con $Usuario," -ForegroundColor Yellow
+    Write-Host "  y para las tareas de administrador ($Admin, la misma contraseña)." -ForegroundColor Yellow
 } catch {
     Write-Host ''
     Write-Host "  ERROR: $_" -ForegroundColor Red

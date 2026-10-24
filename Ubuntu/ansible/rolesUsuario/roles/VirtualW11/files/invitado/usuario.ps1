@@ -1,43 +1,77 @@
-﻿# Crea (si no existe) un usuario local administrador y desactiva el usuario
-# de la plantilla (si existe y es otro).
-# Uso: usuario.ps1 <nombre> <contraseña inicial> <usuario a desactivar>
-# Si el usuario ya existe NO se cambia su contraseña (la puede haber cambiado).
+﻿# Usuarios del Windows invitado (rol VirtualW11):
+#  - <Admin> (p. ej. adminSMRV08): administrador. Lo usa el rol.
+#  - <Nombre> (p. ej. SMRV08): usuario ESTÁNDAR del alumno (arranque automático
+#    y Escritorio remoto). Se le quita de Administradores (en máquinas antiguas
+#    lo era) solo cuando <Admin> ya existe y es administrador.
+#  - Desactiva el usuario de la plantilla (<Desactivar>), si existe y es otro.
+#  - Quita la pantalla de privacidad del primer inicio de sesión.
+# Los que se crean llevan la contraseña inicial; a los que ya existen NO se les
+# cambia (la puede haber cambiado el alumno).
+# Uso: usuario.ps1 <nombre> <admin> <contraseña inicial> <usuario a desactivar>
 # Salida: 0 = correcto, 1 = error.
 param(
     [Parameter(Mandatory)][string]$Nombre,
+    [Parameter(Mandatory)][string]$Admin,
     [Parameter(Mandatory)][string]$Password,
     [Parameter(Mandatory)][string]$Desactivar
 )
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
 
-try {
-    $u = Get-LocalUser -Name $Nombre -ErrorAction SilentlyContinue
+function Asegurar-Usuario([string]$N) {
+    $u = Get-LocalUser -Name $N -ErrorAction SilentlyContinue
     if (-not $u) {
         $clave = ConvertTo-SecureString $Password -AsPlainText -Force
-        $u = New-LocalUser -Name $Nombre -Password $clave -FullName $Nombre `
+        $u = New-LocalUser -Name $N -Password $clave -FullName $N `
                  -Description 'Creado por IAC-IESMHP' -PasswordNeverExpires -AccountNeverExpires
-        "Usuario       : $Nombre creado (contraseña inicial)"
+        "Usuario       : $N creado (contraseña inicial)"
     } else {
-        "Usuario       : $Nombre ya existe (no se cambia su contraseña)"
+        "Usuario       : $N ya existe (no se cambia su contraseña)"
     }
     if (-not $u.Enabled) {
-        Enable-LocalUser -Name $Nombre
-        "Usuario       : $Nombre activado"
+        Enable-LocalUser -Name $N
+        "Usuario       : $N activado"
     }
+}
 
-    # Administradores por SID (el nombre del grupo depende del idioma).
-    $admins = Get-LocalGroup -SID 'S-1-5-32-544'
+function Es-Miembro($Grupo, [string]$N) {
+    # Por SID del usuario (no depende del idioma). Si Get-LocalGroupMember
+    # fallara (SIDs huérfanos en el grupo), se toma como "no es miembro".
+    $sid = (Get-LocalUser -Name $N).SID.Value
+    return [bool](Get-LocalGroupMember -Group $Grupo -ErrorAction SilentlyContinue |
+                  Where-Object { $_.SID.Value -eq $sid })
+}
+
+function Agregar([string]$Sid, [string]$N) {
+    $g = Get-LocalGroup -SID $Sid
     try {
-        Add-LocalGroupMember -Group $admins -Member $Nombre -ErrorAction Stop
-        "Administrador : $Nombre añadido a $($admins.Name)"
+        Add-LocalGroupMember -Group $g -Member $N -ErrorAction Stop
+        "Grupo         : $N añadido a $($g.Name)"
     } catch [Microsoft.PowerShell.Commands.MemberExistsException] {
-        "Administrador : $Nombre ya es de $($admins.Name)"
+        "Grupo         : $N ya es de $($g.Name)"
+    }
+}
+
+try {
+    if ($Admin -ieq $Nombre) { throw "El administrador y el usuario no pueden llamarse igual ($Nombre)" }
+
+    # 1. Administrador.
+    Asegurar-Usuario $Admin
+    Agregar 'S-1-5-32-544' $Admin                 # Administradores
+
+    # 2. Usuario estándar del alumno.
+    Asegurar-Usuario $Nombre
+    Agregar 'S-1-5-32-545' $Nombre                # Usuarios
+    Agregar 'S-1-5-32-555' $Nombre                # Usuarios de escritorio remoto
+    $admins = Get-LocalGroup -SID 'S-1-5-32-544'
+    if ((Es-Miembro $admins $Admin) -and (Es-Miembro $admins $Nombre)) {
+        Remove-LocalGroupMember -Group $admins -Member $Nombre
+        "Estándar      : $Nombre quitado de $($admins.Name)"
     }
 
-    # Sin la pantalla de privacidad del primer inicio de sesión ("Permitir que
-    # Microsoft y las aplicaciones usen tu ubicación"...): con el arranque
-    # automático el usuario se quedaría ahí esperando un clic.
+    # 3. Sin la pantalla de privacidad del primer inicio de sesión ("Permitir
+    #    que Microsoft y las aplicaciones usen tu ubicación"...): con el
+    #    arranque automático el usuario se quedaría ahí esperando un clic.
     $oobe = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE'
     if (-not (Test-Path $oobe)) { New-Item $oobe -Force | Out-Null }
     if ((Get-ItemProperty $oobe -ErrorAction SilentlyContinue).DisablePrivacyExperience -ne 1) {
@@ -45,10 +79,10 @@ try {
         "Privacidad    : pantalla del primer inicio de sesión desactivada"
     }
 
-    # Solo ese usuario (y nunca el que se acaba de crear, si se llaman igual).
+    # 4. Usuario de la plantilla (nunca los dos de arriba).
     $d = Get-LocalUser -Name $Desactivar -ErrorAction SilentlyContinue
-    if ($Desactivar -ieq $Nombre) {
-        "Desactivar    : $Desactivar es el propio administrador, no se desactiva"
+    if ($Desactivar -ieq $Nombre -or $Desactivar -ieq $Admin) {
+        "Desactivar    : $Desactivar es uno de los usuarios del alumno, no se desactiva"
     } elseif (-not $d) {
         "Desactivar    : no existe $Desactivar"
     } elseif ($d.Enabled) {

@@ -11,6 +11,8 @@
   ansible.builtin.set_fact:
     VirtualW11_login: "{{ ansible_user | default(lookup('env', 'USER')) }}"
     VirtualW11_id: "{{ (ansible_user | default(lookup('env', 'USER'))).split('@')[0] }}"
+    # Administrador del alumno en el Windows (adminSMRV08).
+    VirtualW11_admin: "{{ VirtualW11_admin_prefijo }}{{ (ansible_user | default(lookup('env', 'USER'))).split('@')[0] }}"
     VirtualW11_nombre: "{{ VirtualW11_prefijo }}-{{ (ansible_user | default(lookup('env', 'USER'))).split('@')[0] }}"
   tags: [VirtualW11]
 
@@ -403,7 +405,7 @@
               ansible.builtin.shell:
                 cmd: |
                   f={{ (VirtualW11_destino ~ '/fallo-tools-') | quote }}$(date +%Y%m%d-%H%M%S).png
-                  for u in {{ VirtualW11_id | quote }} {{ VirtualW11_invitado_usuario | quote }}; do
+                  for u in {{ VirtualW11_admin | quote }} {{ VirtualW11_id | quote }} {{ VirtualW11_invitado_usuario | quote }}; do
                     timeout 60 vmrun -T ws -gu "$u" -gp {{ VirtualW11_invitado_password | quote }} \
                       captureScreen {{ VirtualW11_vmx | quote }} "$f" >/dev/null 2>&1 && { echo "$f"; exit 0; }
                   done
@@ -472,11 +474,13 @@
                 VirtualW11_ssh: >-
                   {{ ['ssh', '-i', VirtualW11_clave | default(''), '-o', 'BatchMode=yes',
                       '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null',
-                      '-o', 'LogLevel=ERROR', '-o', 'ConnectTimeout=10', '-l', VirtualW11_id] }}
+                      '-o', 'LogLevel=ERROR', '-o', 'ConnectTimeout=10', '-l', VirtualW11_admin] }}
               environment:
-                IAC_USUARIOS: "{{ VirtualW11_id }} {{ VirtualW11_invitado_usuario }}"
+                # Orden: administrador (lo normal) → [SSH] → usuario del alumno
+                # (máquinas de antes, en las que era administrador) → plantilla.
+                IAC_USUARIOS: "{{ VirtualW11_admin }} {{ VirtualW11_id }} {{ VirtualW11_invitado_usuario }}"
                 IAC_PASSWORD: "{{ VirtualW11_invitado_password }}"
-                IAC_SSH_USUARIO: "{{ VirtualW11_id }}"
+                IAC_SSH_USUARIO: "{{ VirtualW11_admin }} {{ VirtualW11_id }}"
                 IAC_SSH_KEY: "{{ VirtualW11_clave | default('') }}"
                 IAC_IP: "{{ VirtualW11_ip_final | default(VirtualW11_ip.stdout | default('') | trim) }}"
                 IAC_METODO: "{{ VirtualW11_acceso | default('') }}"
@@ -537,11 +541,11 @@
                 # ------------------------------ 1. administrador = usuario físico
                 # Crea <usuario físico> administrador con la contraseña inicial
                 # (si ya existe no se la cambia) y desactiva el de la plantilla.
-                - name: Administrador {{ VirtualW11_id }} y {{ VirtualW11_invitado_usuario }} desactivado
+                - name: Usuarios {{ VirtualW11_id }} (estándar) y {{ VirtualW11_admin }} (administrador); {{ VirtualW11_invitado_usuario }} desactivado
                   ansible.builtin.command:
                     argv: >-
                       {{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/usuario.ps1',
-                         VirtualW11_id, VirtualW11_invitado_password, VirtualW11_invitado_usuario] }}
+                         VirtualW11_id, VirtualW11_admin, VirtualW11_invitado_password, VirtualW11_invitado_usuario] }}
                   register: VirtualW11_usuario_cfg
                   changed_when: >-
                     VirtualW11_usuario_cfg.stdout_lines
@@ -552,22 +556,23 @@
                 - name: El administrador tiene que quedar creado
                   ansible.builtin.fail:
                     msg: >-
-                      No se pudo crear el administrador {{ VirtualW11_id }} en el invitado:
+                      No se pudieron crear los usuarios {{ VirtualW11_id }}/{{ VirtualW11_admin }} en el invitado:
                       {{ (VirtualW11_usuario_cfg.stdout ~ ' ' ~ VirtualW11_usuario_cfg.stderr) | regex_replace('\s+', ' ') }}
                   when: VirtualW11_usuario_cfg.rc != 0
 
                 # Cómo se entra (una vez): cada contraseña errónea cuenta para el
                 # bloqueo de cuentas de Windows (10 fallos → 10 min bloqueada,
                 # también por SSH), así que no se reintenta en cada operación.
-                # Solo si se entró con el usuario de la plantilla, que ya está
-                # desactivado (así cada ejecución suma como mucho 1 contraseña mala).
+                # Solo si no se entró con el administrador (sino con la plantilla,
+                # ya desactivada, o con el usuario del alumno, que ya no es
+                # administrador): así cada ejecución suma pocas contraseñas malas.
                 - name: Cómo se entra en el invitado (tras crear el administrador)
                   ansible.builtin.command:
                     argv: ['bash', "{{ VirtualW11_dir_inv }}/invitado.sh", '--detecta', "{{ VirtualW11_vmx }}"]
                   register: VirtualW11_metodo2
                   changed_when: false
                   failed_when: false
-                  when: VirtualW11_acceso == 'tools:' ~ VirtualW11_invitado_usuario
+                  when: VirtualW11_acceso not in ['tools:' ~ VirtualW11_admin, 'ssh:' ~ VirtualW11_admin]
 
                 - name: Hay que poder entrar en el invitado (tras crear el administrador)
                   ansible.builtin.fail:
@@ -828,8 +833,8 @@
                   ansible.builtin.command:
                     argv: >-
                       {{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/CambiarPassword.ps1', 'instalar', VirtualW11_id,
-                         ('si' if VirtualW11_acceso == 'tools:' ~ VirtualW11_id else 'no'),
-                         VirtualW11_invitado_password] }}
+                         ('si' if VirtualW11_acceso == 'tools:' ~ VirtualW11_admin else 'no'),
+                         VirtualW11_invitado_password, VirtualW11_admin] }}
                   register: VirtualW11_autologon
                   changed_when: VirtualW11_autologon.stdout is search('configurado')
                   failed_when: VirtualW11_autologon.rc != 0
@@ -848,7 +853,7 @@
                   ansible.builtin.shell:
                     cmd: >-
                       sleep 5;
-                      timeout 60 vmrun -T ws -gu {{ VirtualW11_id | quote }} -gp {{ VirtualW11_invitado_password | quote }}
+                      timeout 60 vmrun -T ws -gu {{ VirtualW11_admin | quote }} -gp {{ VirtualW11_invitado_password | quote }}
                       listProcessesInGuest {{ VirtualW11_vmx | quote }}
                       | grep -i 'explorer.exe' | grep -iE {{ ('[^a-z0-9]' ~ VirtualW11_id ~ ',') | quote }}
                     executable: /bin/bash
@@ -864,8 +869,8 @@
                 - name: Resumen del invitado
                   ansible.builtin.debug:
                     msg:
-                      - "Usuario : {{ VirtualW11_id }} administrador (contraseña inicial {{ VirtualW11_invitado_password }}); {{ VirtualW11_usuario_cfg.stdout_lines | select('search', '^Desactiva') | first | default('') | regex_replace('\\s+:\\s+', ': ') }}"
-                      - "SSH     : ssh -i {{ VirtualW11_clave }} {{ VirtualW11_id }}@{{ VirtualW11_ip_final }}"
+                      - "Usuarios: {{ VirtualW11_id }} (estándar, arranque automático y Remmina) + {{ VirtualW11_admin }} (administrador), contraseña inicial {{ VirtualW11_invitado_password }}; {{ VirtualW11_usuario_cfg.stdout_lines | select('search', '^Desactiva') | first | default('') | regex_replace('\\s+:\\s+', ': ') }}"
+                      - "SSH     : ssh -i {{ VirtualW11_clave }} {{ VirtualW11_admin }}@{{ VirtualW11_ip_final }}"
                       - "IP      : {{ VirtualW11_ip_final }}{{ ('/' ~ VirtualW11_prefijo ~ ' estática, puerta ' ~ VirtualW11_puerta ~ ', DNS ' ~ VirtualW11_dns) if VirtualW11_ip_modo in ['ESTATICA', 'YA'] else ' (sin cambiar: ' ~ VirtualW11_ip_modo ~ ')' }}"
                       - "Nombre  : {{ VirtualW11_ssh_fin.stdout | trim }}"
                       - "Remmina : {{ VirtualW11_remmina_perfil.stdout | default('(desactivado)') | trim }}"
