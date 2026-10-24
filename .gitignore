@@ -1,3 +1,5 @@
 Ubuntu/ISO/26.04/logs/
 # Configuración local de Claude Code (personal, no se sube)
 .claude/settings.local.json
+#Configuración local de Visual Studio Code (personal, no se sube)
+.vscode
