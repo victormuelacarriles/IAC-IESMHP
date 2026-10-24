@@ -186,6 +186,31 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
       con **usuario e IP de destino, sin contraseña** (la guarda el usuario
       la primera vez que conecta). Si ya hay un perfil con ese nombre no lo
       toca, salvo `server=` si la IP ha cambiado.
+   7. **Arranque automático (último paso)** (`CambiarPassword.ps1`,
+      `VirtualW11_autologon_activar`; 2026-10-23):
+      - **solo con la contraseña inicial**: si el rol entra por Tools con
+        `usuario@1`, configura que Windows entre solo con `<usuario físico>`;
+        si el alumno ya la cambió (entra por SSH), no toca su arranque
+        automático, porque lo rompería;
+      - Winlogon `AutoAdminLogon=1` + `DefaultUserName` + `DefaultDomainName`
+        (nombre del equipo), y la contraseña como **secreto LSA**
+        `DefaultPassword` (como Autologon de Sysinternals), **no** en texto
+        plano en el registro; `DevicePasswordLessBuildVersion=0` ("solo
+        Windows Hello" impide el inicio automático);
+      - se copia a `C:\ProgramData\IAC-IESMHP\CambiarPassword.ps1` y deja en
+        el **escritorio público** el acceso directo *"Cambiar contraseña y
+        arranque automático"* (doble clic en un `.ps1` lo abriría en el Bloc de
+        notas). El script interactivo:
+        1. pide permisos de administrador (UAC) y explica que configura el
+           arranque automático;
+        2. si sigue la contraseña inicial, pide una nueva **dos veces**
+           (no vacía ni igual a la inicial), se la pone y configura el
+           arranque automático con ella;
+        3. si ya la cambió, permite reconfigurar el arranque con la actual;
+        4. termina avisando de que **recuerde la contraseña para entrar por
+           Remmina**;
+      - si lo configuró y la máquina la encendió el rol, **reinicia y comprueba**
+        que el usuario entra solo (su `explorer.exe` en `listProcessesInGuest`).
    5. **Comprobación final** por SSH a la IP final (`hostname`) y resumen:
       ```
       Usuario : vmuela administrador (contraseña inicial usuario@1); Desactivado: usuario
@@ -313,6 +338,7 @@ y los equipos en los que el usuario no entra se quedan fuera.
 | `VirtualW11_ip_suma` | `30` | IP del invitado = IP física + esto |
 | `VirtualW11_timeout_reinicio` | `600` | Espera tras reiniciar por el nombre |
 | `VirtualW11_remmina` | `true` | RDP en el invitado + lanzador en Remmina |
+| `VirtualW11_autologon_activar` | `true` | Arranque automático + acceso directo para cambiar la contraseña |
 
 ## Pruebas
 

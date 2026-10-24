@@ -79,3 +79,8 @@ VirtualW11_timeout_reinicio: 600
 # Lanzador RDP en Remmina (perfil con usuario e IP, sin contraseña) y
 # Escritorio remoto activado en el invitado.
 VirtualW11_remmina: true
+
+# Arranque automático (autologon) del administrador con la contraseña inicial
+# y acceso directo en el escritorio para cambiarla (CambiarPassword.ps1). Si el
+# alumno ya cambió la contraseña, no se toca su arranque automático.
+VirtualW11_autologon_activar: true

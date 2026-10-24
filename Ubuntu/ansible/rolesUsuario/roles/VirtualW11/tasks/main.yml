@@ -772,6 +772,48 @@
                   changed_when: VirtualW11_remmina_perfil.stdout is search('^(CREADO|ACTUALIZADO)')
                   when: VirtualW11_remmina | bool
 
+                # --------------------------- 7. arranque automático (último paso)
+                # Solo con la contraseña inicial: si el rol entra por Tools con
+                # ella, sigue siendo la buena. Si el alumno la cambió (se entra por
+                # SSH), no se toca su arranque automático (lo rompería). Deja en
+                # el escritorio el acceso directo para cambiar la contraseña.
+                - name: Arranque automático de {{ VirtualW11_id }} y acceso directo para cambiar la contraseña
+                  ansible.builtin.command:
+                    argv: >-
+                      {{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/CambiarPassword.ps1', 'instalar', VirtualW11_id,
+                         ('si' if VirtualW11_acceso == 'tools:' ~ VirtualW11_id else 'no'),
+                         VirtualW11_invitado_password] }}
+                  register: VirtualW11_autologon
+                  changed_when: VirtualW11_autologon.stdout is search('configurado')
+                  failed_when: VirtualW11_autologon.rc != 0
+                  when: VirtualW11_autologon_activar | bool
+
+                # Comprobación: reiniciar y esperar a que el usuario entre solo
+                # (su explorer.exe). Solo si la encendió el rol.
+                - name: Reiniciar para comprobar el arranque automático
+                  ansible.builtin.command:
+                    argv: [env, -u, DISPLAY, -u, WAYLAND_DISPLAY, timeout, '300', vmrun, -T, ws, reset, "{{ VirtualW11_vmx }}", soft]
+                  when:
+                    - VirtualW11_autologon is changed
+                    - VirtualW11_arrancada | bool
+
+                - name: Esperar a que {{ VirtualW11_id }} entre solo (hasta {{ VirtualW11_timeout_reinicio }} s)
+                  ansible.builtin.shell:
+                    cmd: >-
+                      sleep 5;
+                      timeout 60 vmrun -T ws -gu {{ VirtualW11_id | quote }} -gp {{ VirtualW11_invitado_password | quote }}
+                      listProcessesInGuest {{ VirtualW11_vmx | quote }}
+                      | grep -i 'explorer.exe' | grep -iE {{ ('[^a-z0-9]' ~ VirtualW11_id ~ ',') | quote }}
+                    executable: /bin/bash
+                  register: VirtualW11_autologon_ok
+                  until: VirtualW11_autologon_ok.rc == 0
+                  retries: "{{ ((VirtualW11_timeout_reinicio | int) / 15) | round(0, 'ceil') | int }}"
+                  delay: 10
+                  changed_when: false
+                  when:
+                    - VirtualW11_autologon is changed
+                    - VirtualW11_arrancada | bool
+
                 - name: Resumen del invitado
                   ansible.builtin.debug:
                     msg:
@@ -780,6 +822,7 @@
                       - "IP      : {{ VirtualW11_ip_final }}{{ ('/' ~ VirtualW11_prefijo ~ ' estática, puerta ' ~ VirtualW11_puerta ~ ', DNS ' ~ VirtualW11_dns) if VirtualW11_ip_modo in ['ESTATICA', 'YA'] else ' (sin cambiar: ' ~ VirtualW11_ip_modo ~ ')' }}"
                       - "Nombre  : {{ VirtualW11_ssh_fin.stdout | trim }}"
                       - "Remmina : {{ VirtualW11_remmina_perfil.stdout | default('(desactivado)') | trim }}"
+                      - "Autologon: {{ (VirtualW11_autologon.stdout_lines | default([]) | select('search', '^Autologon') | first | default('(desactivado)')) | regex_replace('^Autologon\\s*:\\s*', '') }}{{ ' — comprobado: entra solo tras reiniciar' if (VirtualW11_autologon_ok.rc | default(1)) == 0 else '' }}"
 
           # Siempre (también si las Tools no responden): apagar si la encendió el
           # rol. Primero ordenado (soft) y, si no termina, forzado (hard).
