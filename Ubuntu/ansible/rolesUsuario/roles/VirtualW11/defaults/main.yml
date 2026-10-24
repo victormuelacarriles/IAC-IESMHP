@@ -42,8 +42,10 @@ VirtualW11_reemplazar: false
 # VMware Tools del Windows invitado y muestra lo que devuelven.
 VirtualW11_comprobar_arranque: true
 
-# Segundos máximos esperando a que las VMware Tools respondan.
-VirtualW11_timeout_tools: 600
+# Segundos máximos esperando a que las VMware Tools respondan. Normalmente
+# tardan 15-20 s, pero a veces Windows tarda muchos minutos en arrancar el
+# servicio de las Tools (visto 6, 7 y más de 10 min; causa sin aclarar).
+VirtualW11_timeout_tools: 1200
 
 # Apagar la máquina al terminar la comprobación (solo si la ha encendido el
 # rol; si ya estaba encendida, no se apaga nunca).
@@ -87,7 +89,7 @@ VirtualW11_timeout_reinicio: 600
 # Escritorio remoto activado en el invitado.
 VirtualW11_remmina: true
 
-# Arranque automático (autologon) del administrador con la contraseña inicial
+# Arranque automático (autologon) del usuario estándar con la contraseña inicial
 # y acceso directo en el escritorio para cambiarla (CambiarPassword.ps1). Si el
 # alumno ya cambió la contraseña, no se toca su arranque automático.
 VirtualW11_autologon_activar: true

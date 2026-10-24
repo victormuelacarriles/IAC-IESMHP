@@ -244,10 +244,10 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
         que el usuario entra solo (su `explorer.exe` en `listProcessesInGuest`).
    5. **Comprobación final** por SSH a la IP final (`hostname`) y resumen:
       ```
-      Usuario : vmuela administrador (contraseña inicial usuario@1); Desactivado: usuario
-      SSH     : ssh -i ~/.ssh/id_ed25519 vmuela@10.0.32.168
+      Usuarios: SMRV02 (estándar, arranque automático y Remmina) + adminSMRV02 (administrador), contraseña inicial usuario@1; Desactivado: usuario
+      SSH     : ssh -i ~/.ssh/id_ed25519 adminSMRV02@10.0.32.168
       IP      : 10.0.32.168/24 estática, puerta 10.0.32.254, DNS 10.0.1.48,10.0.1.54
-      Nombre  : Win11-vmuela
+      Nombre  : Win11-SMRV02
       ```
 
 ## Parte 1: caché local (`tasks/cache.yml` + `CacheNAS.yaml`)
@@ -372,7 +372,7 @@ y los equipos en los que el usuario no entra se quedan fuera.
 | `VirtualW11_timeout_cache` | `7200` | Segundos máximos de la copia NAS → caché |
 | `VirtualW11_origen` | `""` | Origen fijo de la plantilla (vacío = caché o NAS) |
 | `VirtualW11_comprobar_arranque` | `true` | Arrancar y esperar a las Tools |
-| `VirtualW11_timeout_tools` | `600` | Segundos máximos esperando a las Tools |
+| `VirtualW11_timeout_tools` | `1200` | Segundos máximos esperando a las Tools (normalmente 15-20 s; a veces muchos minutos) |
 | `VirtualW11_apagar_tras_comprobar` | `true` | Apagarla al terminar (si la encendió el rol) |
 | `VirtualW11_timeout_apagado` | `180` | Segundos de apagado `soft` antes del `hard` |
 | `VirtualW11_red` | `nat` | Modo de red de `ethernet0`: `nat` o `bridged` |
@@ -433,6 +433,16 @@ y los equipos en los que el usuario no entra se quedan fuera.
 - 2026-10-23, desde cero: solo se desactiva `usuario` (`adminw11` sigue
   activo), RDP ya activo, 3389 responde, perfil de Remmina creado sin
   contraseña.
+- **Arranque lento de las Tools — causa sin aclarar** (2026-10-24, tras varias
+  pruebas): a veces Windows tarda muchos minutos (6, 7, más de 10) en arrancar
+  el servicio de las Tools, tanto en copias nuevas (que se quedan en la
+  pantalla de bloqueo: la plantilla tiene `AutoAdminLogon=0`) como en máquinas
+  ya usadas. Las operaciones de `vmrun` dentro de Windows esperan a que el
+  servicio esté listo, y `checkToolsState=running` llega a la vez, así que es la
+  señal correcta. **No** era la pantalla de privacidad: esa era otro problema
+  (dejaba al alumno esperando un clic) y está resuelto, pero un caso lento se dio
+  en la pantalla de bloqueo. Mitigación: `VirtualW11_timeout_tools=1200` y
+  captura automática al fallar.
 - **Intermitente** (también 2026-10-24, y no solo en el primer arranque: una
   máquina que había arrancado bien no levantó las Tools en 600 s al arrancar
   de nuevo; al minuto siguiente, sí). Ahora se guarda una captura automática al

@@ -1,0 +1,37 @@
+
+Quiero que a cada alumno se le asigne una red "SoloHost"
+Suponiendo un máximo de 50 alumnos, las redes a utilizar serán
+
+		Primer alumno	Primero     Último
+ASIRxx	10.1.XX.0/24	10.1.1.0/24	10.1.50.0/24
+DAMxx	10.2.XX.0/24	10.2.1.0/24	10.2.50.0/24
+DAWxx	10.3.XX.0/24	10.3.1.0/24	10.3.50.0/24
+SMRxx	10.4.XX.0/24	10.4.1.0/24	10.4.50.0/24
+SMRVxx	10.5.XX.0/24	10.5.1.0/24	10.5.50.0/24
+IABDxx  10.6.XX.0/24	10.6.1.0/24	10.6.50.0/24
+
+
+Para la red Nat, el direccioniento dhcp ira de 
+172.16.179.151 a 172.16.179.254
+
+Se definirán los siguientes reenvios de puertos 
+de los usuarios asignados a la máquina
+ssh a 1
+
+A cada alumno se le asignará el último octeto 
+coincidiendo con su identificador
+SMRVxx -> yy=xx+100 -> 172.16.179.yy  (donde xx va de 0 a 50)
+
+
+
+
+Ej: a SMRV18 se le asignará 
+    RedSMRV18 (10.5.18.0/24)
+
+    Win11-SMRV18   (Windows 11 preconfigurado)
+    IP (redNAT)  172.16.179.118
+    Usara    RDP:  172.16.179.168:33118
+             SSH:  172.16.179.168:22118
+
+
+
