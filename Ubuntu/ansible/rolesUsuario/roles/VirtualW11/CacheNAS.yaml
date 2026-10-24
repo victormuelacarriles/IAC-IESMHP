@@ -10,17 +10,33 @@
 #   ansible-playbook -i ../../../equiposIABD.ini CacheNAS.yaml -l IABD-05
 #   sudo ansible-playbook -i localhost, --connection=local CacheNAS.yaml   # local
 
+#
+# strategy: free → cada equipo avanza a su ritmo y su tiempo es real. Al final
+# (también si falla) saca "TIEMPO|cache|<equipo>|<segundos>|OK/ERROR".
+
 - hosts: all
   become: yes
   gather_facts: no
+  strategy: free
 
   tasks:
+    # Con -e VirtualW11_ips=ip1,ip2 solo esos equipos (lo usa VirtualW11.sh
+    # para traducir el -l del inventario de alumnos).
     - name: Caché local de la plantilla
-      ansible.builtin.include_role:
-        name: "{{ playbook_dir }}"
-        tasks_from: cache
-      # Con -e VirtualW11_ips=ip1,ip2 solo esos equipos (lo usa VirtualW11.sh
-      # para traducir el -l del inventario de alumnos).
       when: >-
         VirtualW11_ips | default('') | length == 0
         or (ansible_host | default(inventory_hostname)) in VirtualW11_ips.split(',')
+      block:
+        - name: Inicio
+          ansible.builtin.set_fact:
+            VirtualW11_t0: "{{ now().timestamp() | int }}"
+
+        - name: Sincronizar NAS → caché
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir }}"
+            tasks_from: cache
+      always:
+        - name: Tiempo
+          ansible.builtin.debug:
+            msg: >-
+              TIEMPO|cache|{{ inventory_hostname }}|{{ now().timestamp() | int - VirtualW11_t0 | int }}|{{ 'ERROR' if ansible_failed_task is defined else 'OK' }}

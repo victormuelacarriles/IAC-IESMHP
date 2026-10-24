@@ -397,12 +397,30 @@
               changed_when: false
               failed_when: false
 
+            # Diagnóstico sin monitor: si las Tools no responden, captura de la
+            # pantalla de Windows en la carpeta de la máquina antes de fallar.
+            - name: Captura de pantalla si las Tools no responden
+              ansible.builtin.shell:
+                cmd: |
+                  f={{ (VirtualW11_destino ~ '/fallo-tools-') | quote }}$(date +%Y%m%d-%H%M%S).png
+                  for u in {{ VirtualW11_id | quote }} {{ VirtualW11_invitado_usuario | quote }}; do
+                    timeout 60 vmrun -T ws -gu "$u" -gp {{ VirtualW11_invitado_password | quote }} \
+                      captureScreen {{ VirtualW11_vmx | quote }} "$f" >/dev/null 2>&1 && { echo "$f"; exit 0; }
+                  done
+                  echo "(no se pudo capturar la pantalla)"
+                executable: /bin/bash
+              register: VirtualW11_captura
+              changed_when: false
+              failed_when: false
+              when: VirtualW11_tools.stdout | default('') | trim != 'running'
+
             - name: Las VMware Tools tienen que responder
               ansible.builtin.fail:
                 msg: >-
                   Las VMware Tools no responden tras {{ VirtualW11_timeout_tools }} s
                   (estado: {{ VirtualW11_tools.stdout | default('') | trim }}
                   {{ VirtualW11_tools.stderr | default('') | trim }}). Ver {{ VirtualW11_destino }}/vmware.log
+                  y la pantalla: {{ VirtualW11_captura.stdout | default('') | trim }}
               when: VirtualW11_tools.stdout | default('') | trim != 'running'
 
             - name: IP del Windows invitado
@@ -576,37 +594,6 @@
                     msg: "No se pudo configurar OpenSSH en el invitado: {{ VirtualW11_ssh_cfg.stdout | regex_replace('\\s+', ' ') }}"
                   when: VirtualW11_ssh_cfg.rc != 0
 
-                # whoami /groups vale con cmd y con PowerShell como shell de sshd.
-                # S-1-5-32-544 = Administradores, S-1-16-12288 = nivel alto (elevado).
-                # La salida de Windows viene en cp850 (tildes): se dejan solo
-                # caracteres ASCII para que Ansible la acepte.
-                - name: Entrar por SSH como administrador ({{ VirtualW11_ip.stdout | default('') | trim }})
-                  ansible.builtin.shell:
-                    cmd: >-
-                      set -o pipefail;
-                      {{ VirtualW11_ssh | map('quote') | join(' ') }}
-                      {{ VirtualW11_ip.stdout | default('') | trim | quote }}
-                      'whoami /groups /fo csv /nh'
-                      | LC_ALL=C tr -c '[:print:]\n' '?'
-                    executable: /bin/bash
-                  register: VirtualW11_ssh_prueba
-                  until: VirtualW11_ssh_prueba.rc == 0
-                  retries: 6
-                  delay: 5
-                  changed_when: false
-                  failed_when: false
-
-                - name: El acceso administrativo por SSH tiene que funcionar
-                  ansible.builtin.fail:
-                    msg: >-
-                      No se pudo entrar por SSH como administrador en
-                      {{ VirtualW11_ip.stdout | default('?') | trim }}:
-                      {{ (VirtualW11_ssh_prueba.stderr | default('') ~ ' ' ~ VirtualW11_ssh_prueba.stdout | default('')) | regex_replace('\s+', ' ') | truncate(300) }}
-                  when: >-
-                    VirtualW11_ssh_prueba.rc != 0
-                    or 'S-1-5-32-544' not in VirtualW11_ssh_prueba.stdout
-                    or 'S-1-16-12288' not in VirtualW11_ssh_prueba.stdout
-
                 # ------------------------------------------ 2b. Escritorio remoto
                 - name: Escritorio remoto (RDP) en el invitado
                   ansible.builtin.command:
@@ -617,32 +604,57 @@
                   when: VirtualW11_remmina | bool
 
                 # --------------------------------------------- 3. IP estática
-                - name: Direccionamiento del equipo físico
-                  ansible.builtin.shell: |
-                    dev=$(ip -4 route show default | awk '{print $5; exit}')
-                    gw=$(ip -4 route show default | awk '{print $3; exit}')
-                    cidr=$(ip -4 -o addr show dev "$dev" scope global | awk '{print $4; exit}')
-                    dns=$(nmcli -g IP4.DNS dev show "$dev" 2>/dev/null | tr -d ' ' | tr '|' ',')
-                    [ -n "$dns" ] || dns=$(resolvectl dns "$dev" 2>/dev/null | cut -d: -f2- | xargs | tr ' ' ',')
-                    echo "$cidr $gw ${dns:-$gw}"
-                  args:
+                # Datos de la red de la máquina, según VirtualW11_red:
+                #  - nat:     red vmnet8 del equipo físico (subred de vmnet8; puerta y
+                #             DNS = el NAT de VMware, "ip =" de nat.conf, el .2).
+                #  - bridged: red del equipo físico (su máscara, puerta y DNS).
+                - name: Direccionamiento de la red {{ VirtualW11_red }}
+                  ansible.builtin.shell:
+                    cmd: |
+                      if [ {{ VirtualW11_red | quote }} = nat ]; then
+                        cidr=$(ip -4 -o addr show dev vmnet8 scope global | awk '{print $4; exit}')
+                        gw=$(sed -nE 's/^\s*ip\s*=\s*([0-9.]+).*/\1/p' /etc/vmware/vmnet8/nat/nat.conf 2>/dev/null | head -1)
+                        [ -n "$gw" ] || gw="${cidr%.*/*}.2"
+                        dns="$gw"
+                      else
+                        dev=$(ip -4 route show default | awk '{print $5; exit}')
+                        gw=$(ip -4 route show default | awk '{print $3; exit}')
+                        cidr=$(ip -4 -o addr show dev "$dev" scope global | awk '{print $4; exit}')
+                        dns=$(nmcli -g IP4.DNS dev show "$dev" 2>/dev/null | tr -d ' ' | tr '|' ',')
+                        [ -n "$dns" ] || dns=$(resolvectl dns "$dev" 2>/dev/null | cut -d: -f2- | xargs | tr ' ' ',')
+                      fi
+                      [ -n "$cidr" ] || { echo "No encuentro la red {{ VirtualW11_red }} en el equipo físico"; exit 1; }
+                      echo "$cidr $gw ${dns:-$gw}"
                     executable: /bin/bash
                   register: VirtualW11_red_fisica
                   changed_when: false
 
+                # IP fija que le toca:
+                #  - nat:     usuario acabado en número (SMRV02) → <subred>.(100 + número)
+                #             = .102; sin número (vmuela) → la que le dio el DHCP, fija.
+                #  - bridged: IP del equipo físico + VirtualW11_ip_suma (.138 → .168).
+                # Si se pasa de .254, se queda la que tenga.
                 - name: IP que le toca al invitado
                   ansible.builtin.set_fact:
                     VirtualW11_ip_actual: "{{ VirtualW11_ip.stdout | default('') | trim }}"
-                    VirtualW11_ip_fisica: "{{ f[0].split('/')[0] }}"
                     VirtualW11_prefijo: "{{ f[0].split('/')[1] }}"
                     VirtualW11_puerta: "{{ f[1] }}"
                     VirtualW11_dns: "{{ f[2] }}"
                     VirtualW11_ip_nueva: >-
-                      {{ (o[:3] + [(o[3] | int + VirtualW11_ip_suma | int) | string]) | join('.')
-                         if (o[3] | int + VirtualW11_ip_suma | int) <= 254 else '' }}
+                      {%- if VirtualW11_red == 'nat' -%}
+                        {%- if num | length > 0 and (100 + num | int) <= 254 -%}
+                          {{ (o[:3] + [(100 + num | int) | string]) | join('.') }}
+                        {%- elif num | length > 0 -%}
+                        {%- else -%}
+                          {{ VirtualW11_ip.stdout | default('') | trim }}
+                        {%- endif -%}
+                      {%- elif (o[3] | int + VirtualW11_ip_suma | int) <= 254 -%}
+                        {{ (o[:3] + [(o[3] | int + VirtualW11_ip_suma | int) | string]) | join('.') }}
+                      {%- endif -%}
                   vars:
                     f: "{{ VirtualW11_red_fisica.stdout.split() }}"
                     o: "{{ VirtualW11_red_fisica.stdout.split()[0].split('/')[0].split('.') }}"
+                    num: "{{ VirtualW11_id | regex_search('[0-9]+$') | default('', true) }}"
 
                 # Windows no responde a ping por defecto: también se mira si alguien
                 # contesta por ARP. Una entrada STALE de la caché ARP (de un equipo
@@ -684,7 +696,7 @@
                       {{ VirtualW11_ip_actual }}, normalmente por DHCP):
                       {{ (VirtualW11_ip_nueva ~ ' ya está en uso en la red')
                          if VirtualW11_ip_modo == 'OCUPADA'
-                         else ('la IP física + ' ~ VirtualW11_ip_suma ~ ' pasa de .254') }}
+                         else ('la IP que le toca pasa de .254') }}
                   when: VirtualW11_ip_modo in ['OCUPADA', 'FUERA']
 
                 - name: IP estática {{ VirtualW11_ip_nueva }}/{{ VirtualW11_prefijo }} (por VMware Tools)
@@ -707,6 +719,41 @@
                 - name: IP con la que se sigue
                   ansible.builtin.set_fact:
                     VirtualW11_ip_final: "{{ VirtualW11_ip_nueva if VirtualW11_ip_modo in ['ESTATICA', 'YA'] else VirtualW11_ip_actual }}"
+
+                # Comprobación del acceso administrativo por SSH, contra la IP ya
+                # definitiva (si se ha cambiado el modo de red, la IP con la que
+                # arrancó puede no ser alcanzable). La IP se pone por Tools, que
+                # no necesita la red.
+                # whoami /groups vale con cmd y con PowerShell como shell de sshd.
+                # S-1-5-32-544 = Administradores, S-1-16-12288 = nivel alto (elevado).
+                # La salida de Windows viene en cp850 (tildes): se dejan solo
+                # caracteres ASCII para que Ansible la acepte.
+                - name: Entrar por SSH como administrador ({{ VirtualW11_ip_final }})
+                  ansible.builtin.shell:
+                    cmd: >-
+                      set -o pipefail;
+                      {{ VirtualW11_ssh | map('quote') | join(' ') }}
+                      {{ VirtualW11_ip_final | quote }}
+                      'whoami /groups /fo csv /nh'
+                      | LC_ALL=C tr -c '[:print:]\n' '?'
+                    executable: /bin/bash
+                  register: VirtualW11_ssh_prueba
+                  until: VirtualW11_ssh_prueba.rc == 0
+                  retries: 6
+                  delay: 5
+                  changed_when: false
+                  failed_when: false
+
+                - name: El acceso administrativo por SSH tiene que funcionar
+                  ansible.builtin.fail:
+                    msg: >-
+                      No se pudo entrar por SSH como administrador en
+                      {{ VirtualW11_ip_final }}:
+                      {{ (VirtualW11_ssh_prueba.stderr | default('') ~ ' ' ~ VirtualW11_ssh_prueba.stdout | default('')) | regex_replace('\s+', ' ') | truncate(300) }}
+                  when: >-
+                    VirtualW11_ssh_prueba.rc != 0
+                    or 'S-1-5-32-544' not in VirtualW11_ssh_prueba.stdout
+                    or 'S-1-16-12288' not in VirtualW11_ssh_prueba.stdout
 
                 # --------------------------------------------------- 4. nombre
                 - name: Nombre del equipo {{ VirtualW11_nombre }} (por VMware Tools)

@@ -35,6 +35,16 @@ try {
         "Administrador : $Nombre ya es de $($admins.Name)"
     }
 
+    # Sin la pantalla de privacidad del primer inicio de sesión ("Permitir que
+    # Microsoft y las aplicaciones usen tu ubicación"...): con el arranque
+    # automático el usuario se quedaría ahí esperando un clic.
+    $oobe = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE'
+    if (-not (Test-Path $oobe)) { New-Item $oobe -Force | Out-Null }
+    if ((Get-ItemProperty $oobe -ErrorAction SilentlyContinue).DisablePrivacyExperience -ne 1) {
+        Set-ItemProperty $oobe -Name DisablePrivacyExperience -Value 1 -Type DWord
+        "Privacidad    : pantalla del primer inicio de sesión desactivada"
+    }
+
     # Solo ese usuario (y nunca el que se acaba de crear, si se llaman igual).
     $d = Get-LocalUser -Name $Desactivar -ErrorAction SilentlyContinue
     if ($Desactivar -ieq $Nombre) {

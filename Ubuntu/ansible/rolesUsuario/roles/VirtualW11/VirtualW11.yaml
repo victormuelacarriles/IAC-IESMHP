@@ -12,9 +12,30 @@
 # become: no — el rol ya se encarga de ejecutar como el usuario (become_user
 # cuando Ansible entra como root, inventario IABD).
 
+#
+# strategy: free → cada alumno avanza a su ritmo (sin esperar a los demás en
+# cada tarea) y su tiempo es real. Al final (también si falla) saca una línea
+# "TIEMPO|alumno|<equipo>|<segundos>|OK/ERROR" que resume VirtualW11.sh.
+
 - hosts: all
   become: no
   gather_facts: no
+  strategy: free
 
-  roles:
-    - role: "{{ playbook_dir }}"   # esta misma carpeta es el rol
+  tasks:
+    - name: Inicio
+      ansible.builtin.set_fact:
+        VirtualW11_t0: "{{ now().timestamp() | int }}"
+      tags: [always]
+
+    - name: VirtualW11
+      tags: [always]
+      block:
+        - name: Rol VirtualW11
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir }}"   # esta misma carpeta es el rol
+      always:
+        - name: Tiempo
+          ansible.builtin.debug:
+            msg: >-
+              TIEMPO|alumno|{{ inventory_hostname }}|{{ now().timestamp() | int - VirtualW11_t0 | int }}|{{ 'ERROR' if ansible_failed_task is defined else 'OK' }}

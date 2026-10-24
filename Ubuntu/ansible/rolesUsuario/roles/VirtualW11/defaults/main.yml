@@ -53,8 +53,11 @@ VirtualW11_apagar_tras_comprobar: true
 VirtualW11_timeout_apagado: 180
 
 # ------------------------------------------------------------------- red
-# Modo de red de la única tarjeta (ethernet0) que se fija antes de encender.
-VirtualW11_red: bridged
+# Modo de red de la única tarjeta (ethernet0), que se fija antes de encender:
+#  - nat (por defecto): red vmnet8 del equipo físico. IP fija <subred>.(100+N)
+#    si el usuario acaba en número N (SMRV02 → .102); si no, la del DHCP, fija.
+#  - bridged: red del aula. IP fija = IP del equipo físico + VirtualW11_ip_suma.
+VirtualW11_red: nat
 
 # ------------------------------------------------- configuración del invitado
 # Tras comprobar las Tools: administrador, SSH, IP estática y nombre.
@@ -69,8 +72,9 @@ VirtualW11_invitado_password: "usuario@1"
 # administrador nuevo); después queda desactivado.
 VirtualW11_invitado_usuario: usuario
 
-# IP estática del invitado = IP del equipo físico + este número (último
-# octeto). Si pasa de 254, o la IP responde a ping, se queda en DHCP.
+# Solo con VirtualW11_red=bridged: IP estática del invitado = IP del equipo
+# físico + este número (último octeto). Si pasa de 254, o la IP responde a
+# ping, se queda en DHCP.
 VirtualW11_ip_suma: 30
 
 # Segundos máximos esperando a que vuelva tras reiniciar (cambio de nombre).

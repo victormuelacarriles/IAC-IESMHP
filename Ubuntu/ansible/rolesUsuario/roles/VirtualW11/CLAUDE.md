@@ -55,11 +55,13 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
    - `displayName = "Win11-<usuario>"`.
    - **Red** (antes de encender): tiene que haber **una sola** tarjeta
      (`ethernetN.present`); si hay más, error. Se pone
-     `ethernet0.connectionType = "bridged"` (`VirtualW11_red`) y se quita
-     `ethernet0.vnet`. Sin la clave, VMware usa bridged. Si hay que cambiarla
-     pero la máquina está encendida o abierta en VMware (`.lck`), **error y se
-     para**: hay que cerrarla y relanzar.
+     `ethernet0.connectionType = "<VirtualW11_red>"` y se quita
+     `ethernet0.vnet`:
+     - `nat` (**por defecto** desde 2026-10-24): red `vmnet8` del equipo físico;
+     - `bridged`: red del aula (`-e VirtualW11_red=bridged`).
 
+     Si hay que cambiarla pero la máquina está encendida o abierta en VMware
+     (`.lck`), **error y se para**: hay que cerrarla y relanzar.
 6. **Biblioteca de VMware**: `files/inventario-vmware.sh` añade la máquina a
    `~/.vmware/inventory.vmls` (entrada `vmlistN` en la raíz), si no estaba ya.
    Si VMware está abierto avisa: al cerrarse reescribe ese fichero y podría
@@ -87,6 +89,10 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
    - Espera a que `vmrun checkToolsState` diga `running`, como mucho
      `VirtualW11_timeout_tools` s. Si no llega, la tarea **falla** (el mensaje
      remite a `vmware.log` de la máquina).
+     Antes de fallar **guarda una captura de la pantalla de Windows** en
+     `<carpeta de la máquina>/fallo-tools-<fecha>.png` (`vmrun captureScreen`
+     con el usuario físico o el de la plantilla), para ver qué hacía sin
+     monitor.
    - Muestra lo que devuelven las Tools, sin usuario ni contraseña de Windows
      (`getGuestIPAddress` + `readVariable runtimeConfig`):
      ```
@@ -144,6 +150,11 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
         (`VirtualW11_invitado_password`) y lo mete en Administradores (por SID,
         S-1-5-32-544);
       - si ya existe, **no** le cambia la contraseña;
+      - desactiva la **pantalla de privacidad del primer inicio de sesión**
+        (directiva `DisablePrivacyExperience=1`). Sin ella, con el arranque
+        automático el usuario se quedaba en *"Permitir que Microsoft y las
+        aplicaciones usen tu ubicación"* esperando un clic (visto en una
+        captura el 2026-10-24);
       - **desactiva solo `usuario`** (el de la plantilla,
         `VirtualW11_invitado_usuario`), si existe y no es el propio
         administrador; el resto de usuarios no se tocan (cambio 2026-10-23).
@@ -160,22 +171,35 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
       - la clave pública va a `C:\ProgramData\ssh\administrators_authorized_keys`
         (el fichero de los administradores) con sus permisos.
 
-      Luego se entra desde el equipo físico (`ssh <usuario físico>@<IP>`) y se
+      **Después de fijar la IP** (paso 3; cambio 2026-10-24) se entra desde el equipo físico (`ssh <usuario físico>@<IP final>`) y se
       comprueba con `whoami /groups` (vale con cmd o PowerShell como shell) que
       es administrador elevado. La salida de Windows viene en cp850: se filtra
       a ASCII.
    2b. **Escritorio remoto** (`rdp.ps1`, si `VirtualW11_remmina`): RDP activado
       con NLA, reglas `RemoteDesktop-UserMode-In-*` en todos los perfiles y
       `TermService` arrancado (en la plantilla ya venía activo).
-   3. **IP estática** (`ip.ps1`): misma máscara, puerta de enlace y DNS que el
-      equipo físico (`ip route`, `nmcli`/`resolvectl`) y último octeto
-      **+ `VirtualW11_ip_suma` (30)** (`10.0.32.138` → `10.0.32.168`).
+   3. **IP estática** (`ip.ps1`, por VMware Tools; va antes de la comprobación
+      por SSH, porque si se cambió el modo de red la máquina arranca con la IP
+      del modo anterior, que puede no ser alcanzable), según `VirtualW11_red`:
+      - **`nat`** (por defecto): subred de `vmnet8` del equipo físico; puerta
+        y DNS = el NAT de VMware (`ip =` de `/etc/vmware/vmnet8/nat/nat.conf`,
+        el `.2`). Último octeto:
+        - usuario acabado en número N → **100 + N** (`SMRV02` → `.102`,
+          `CEGSIABD14` → `.114`). Así los alumnos que comparten equipo (SMRD)
+          no chocan;
+        - usuario sin número (`vmuela`) → **la IP que le dio el DHCP**, fija.
+      - **`bridged`**: misma máscara, puerta y DNS que el equipo físico (`ip
+        route`, `nmcli`/`resolvectl`) y último octeto **+ `VirtualW11_ip_suma`
+        (30)** (`10.0.32.138` → `10.0.32.168`).
       - Antes se mira si está libre: ping **y** ARP (`ip neigh`), porque
         Windows no contesta a ping y sí a ARP. Solo cuenta `REACHABLE`: una
         entrada `STALE` de la caché ARP, de un equipo que ya no está, no la da
         por ocupada. Si está ocupada, o pasa de `.254`, no se cambia (`[WARN]`,
         se queda con la que tenía, normalmente DHCP).
       - Si la máquina ya tiene esa IP, no se mira.
+      - ⚠ En `nat` el DHCP de VMware reparte por defecto `.128`–`.254`: con
+        N ≥ 28 (`.128` o más) y en usuarios sin número, la IP fija cae dentro
+        de ese rango.
    4. **Nombre** (`nombre.ps1`): `Win11-<usuario>`. Si cambia, hay que
       reiniciar: `vmrun reset soft` y se espera (hasta
       `VirtualW11_timeout_reinicio`) a que vuelva con el nombre nuevo. Si el
@@ -270,9 +294,22 @@ bash VirtualW11.sh otro-alumnos.ini       # el de aula se deduce del grupo [SMRD
 bash VirtualW11.sh SMRD --solo-cache      # solo la parte 1
 bash VirtualW11.sh SMRD --sin-cache       # solo la parte 2
 bash VirtualW11.sh SMRD --forks-cache 3 --forks-alumno 10   # equipos a la vez
+bash VirtualW11.sh SMRD --bridge -l SMRD-04-SMRV24     # red del aula (bridged)
+bash VirtualW11.sh SMRD --nat                           # red NAT (por defecto)
 bash VirtualW11.sh --help
 ```
 
+- **Modo de red:** `--nat` (por defecto) o `--bridge`. Equivalen a
+  `-e VirtualW11_red=nat|bridged` y solo van a la parte 2. En una máquina ya
+  creada también vale: se cambia antes de encenderla. Si está encendida o
+  abierta en VMware, avisa y para.
+- **Tiempos** (2026-10-24): al final, tabla con lo que tarda cada **equipo**
+  en la parte 1 (sincronización NAS → caché), cada **usuario** en la parte 2
+  (configuración de Win11), el total de cada parte y el **total general**
+  (desde que se lanza el script). Cada playbook usa `strategy: free` (cada
+  equipo a su ritmo, así su tiempo es real) y, en un `always` (también si
+  falla), saca `TIEMPO|parte|equipo|segundos|OK/ERROR`. Los que no responden
+  (`unreachable` en el `PLAY RECAP`) salen como `SIN RESPUESTA`.
 - **Equipos a la vez** (`--forks` de Ansible), uno por parte, por defecto 5:
   - `--forks-cache N` (o `FORKS_CACHE=N`) para la parte 1: cada equipo lee
     ~15 GB del NAS la primera vez, así que conviene un número bajo;
@@ -331,11 +368,11 @@ y los equipos en los que el usuario no entra se quedan fuera.
 | `VirtualW11_timeout_tools` | `600` | Segundos máximos esperando a las Tools |
 | `VirtualW11_apagar_tras_comprobar` | `true` | Apagarla al terminar (si la encendió el rol) |
 | `VirtualW11_timeout_apagado` | `180` | Segundos de apagado `soft` antes del `hard` |
-| `VirtualW11_red` | `bridged` | Modo de red de `ethernet0` |
+| `VirtualW11_red` | `nat` | Modo de red de `ethernet0`: `nat` o `bridged` |
 | `VirtualW11_configurar_invitado` | `true` | Usuario, SSH, IP y nombre del invitado |
 | `VirtualW11_invitado_password` | `usuario@1` | Contraseña inicial del administrador `<usuario físico>` |
 | `VirtualW11_invitado_usuario` | `usuario` | Usuario de la plantilla: solo para entrar la primera vez (luego queda desactivado) |
-| `VirtualW11_ip_suma` | `30` | IP del invitado = IP física + esto |
+| `VirtualW11_ip_suma` | `30` | Solo `bridged`: IP del invitado = IP física + esto |
 | `VirtualW11_timeout_reinicio` | `600` | Espera tras reiniciar por el nombre |
 | `VirtualW11_remmina` | `true` | RDP en el invitado + lanzador en Remmina |
 | `VirtualW11_autologon_activar` | `true` | Arranque automático + acceso directo para cambiar la contraseña |
@@ -388,7 +425,10 @@ y los equipos en los que el usuario no entra se quedan fuera.
 - 2026-10-23, desde cero: solo se desactiva `usuario` (`adminw11` sigue
   activo), RDP ya activo, 3389 responde, perfil de Remmina creado sin
   contraseña.
-- **Intermitente**: una copia nueva (2026-10-23 07:26) no levantó las Tools en
+- **Intermitente** (también 2026-10-24, y no solo en el primer arranque: una
+  máquina que había arrancado bien no levantó las Tools en 600 s al arrancar
+  de nuevo; al minuto siguiente, sí). Ahora se guarda una captura automática al
+  fallar. Antes: una copia nueva (2026-10-23 07:26) no levantó las Tools en
   600 s (dos veces seguidas); a los 30 min, otra copia nueva las levantó en
   45 s. No reproducido; si vuelve a pasar, mirar la pantalla con
   `vmrun -gu usuario -gp usuario@1 captureScreen <vmx> pantalla.png`.
