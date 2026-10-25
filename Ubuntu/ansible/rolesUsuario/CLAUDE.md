@@ -53,6 +53,12 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
   llevaba `usuario=CEGSIABD14` y entraba como root.
 - La clave del que lanza el playbook tiene que estar en cada alumno:
   `ssh-copy-id SMRV05@iesmhp.local@10.0.32.160`.
+- **Grupos por módulo** (SMRD, desde 2026-10-24): `[AOD]` y `[SOR]` listan
+  solo el nombre del equipo (IP y usuario salen de `[SMRD]`). Un alumno puede
+  estar en varios o en ninguno (SMRV32 está en los dos). Alumno nuevo: su línea
+  en `[SMRD]` + su nombre en el grupo de cada módulo. Filtros con `-l`:
+  `AOD`, `SOR`, `'AOD:&SOR'` (los dos), `'AOD:!SOR'`, `'SMRD:!AOD:!SOR'`
+  (ninguno). Ver quién queda: `ansible -i <ini> 'AOD' --list-hosts`.
 
 Roles actuales:
 

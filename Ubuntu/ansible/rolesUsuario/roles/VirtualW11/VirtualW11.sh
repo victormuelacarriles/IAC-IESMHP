@@ -11,11 +11,24 @@
 #   bash VirtualW11.sh                      # en local (la caché con sudo -n)
 #   bash VirtualW11.sh SMRD                 # aula SMRD
 #   bash VirtualW11.sh IABD -l IABD-05      # aula IABD, un equipo
+#   bash VirtualW11.sh SMRD AOD             # solo los alumnos del módulo AOD
+#   bash VirtualW11.sh SMRD --modulo AOD -l 'SMRD-0*'   # de AOD, solo esos equipos
 #   bash VirtualW11.sh SMRD -l SMRD-04-SMRV24 -e VirtualW11_reemplazar=true   # BORRA y recopia
 #   bash VirtualW11.sh <alumnos.ini> [args de ansible-playbook]
 #   Opciones: --sin-cache (solo parte 2)   --solo-cache (solo parte 1)
+#             --modulo M  solo los alumnos del grupo M del inventario de alumnos
+#                       ([AOD], [SOR]...). Vale también poner el nombre suelto
+#                       tras el aula (SMRD AOD) y varios: --modulo AOD,SOR.
+#                       Con -l, se cogen los que cumplen las dos cosas.
+#             --claves F  fichero de claves de los alumnos (USUARIO,clave por línea;
+#                       # = comentario). Por defecto .clavesalumnos junto a este
+#                       script, si existe. Los dos usuarios de Windows de cada
+#                       alumno que esté en él llevan SU clave (en vez de usuario@1),
+#                       también en máquinas ya creadas, y no se pone el acceso
+#                       directo para cambiarla. --sin-claves: no usarlo.
 #             --forks-cache N   equipos a la vez en la parte 1 (5 por defecto)
-#             --forks-alumno N  alumnos a la vez en la parte 2 (5 por defecto)
+#             --forks-alumno N  alumnos a la vez en la parte 2 (5 por defecto), por
+#                       tandas de N (con 1, de uno en uno)
 #             (también con las variables FORKS_CACHE=N / FORKS_ALUMNO=N)
 #             --nat     red NAT de VMware (POR DEFECTO): IP fija <subred vmnet8>.(100+N)
 #                       si el usuario acaba en número N (SMRV02 → .102); si no,
@@ -40,12 +53,13 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INVDIR="$(cd "$DIR/../.." && pwd)"          # rolesUsuario/ (inventarios de alumnos)
 AULADIR="$(cd "$DIR/../../.." && pwd)"      # ansible/      (inventarios de aula)
 
-CACHE=1; ALUMNO=1; ALUMNOS=""; AULA=""; ARGS=(); LIMITE=""
+CACHE=1; ALUMNO=1; ALUMNOS=""; AULA=""; ARGS=(); LIMITE=""; MODULOS=(); SUELTOS=()
 FORKS_CACHE="${FORKS_CACHE:-5}"; FORKS_ALUMNO="${FORKS_ALUMNO:-5}"
+CLAVES="$DIR/.clavesalumnos"; CLAVES_DADO=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        -h|--help|--ayuda|-\?) sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help|--ayuda|-\?) sed -n '2,48p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --sin-cache)  CACHE=0 ;;
         --solo-cache) ALUMNO=0 ;;
         --nat)        ARGS+=(-e VirtualW11_red=nat) ;;
@@ -56,9 +70,14 @@ while [ $# -gt 0 ]; do
         --forks-alumno=*) FORKS_ALUMNO="${1#*=}" ;;
         SMRD|smrd)    ALUMNOS="$INVDIR/EquiposSMRD-alumnos2627.ini"; AULA="$AULADIR/equiposSMRD.ini" ;;
         IABD|iabd)    ALUMNOS="$INVDIR/equiposIABD-alumnos2627.ini"; AULA="$AULADIR/equiposIABD.ini" ;;
-        -l|--limit)   LIMITE="$2"; ARGS+=("$1" "$2"); shift ;;
-        --limit=*)    LIMITE="${1#--limit=}"; ARGS+=("$1") ;;
-        -l?*)         LIMITE="${1#-l}"; ARGS+=("$1") ;;
+        --claves)     CLAVES="$2"; CLAVES_DADO=1; shift ;;
+        --claves=*)   CLAVES="${1#*=}"; CLAVES_DADO=1 ;;
+        --sin-claves) CLAVES="" ;;
+        --modulo|-m)  MODULOS+=("$2"); shift ;;
+        --modulo=*)   MODULOS+=("${1#*=}") ;;
+        -l|--limit)   LIMITE="$2"; shift ;;
+        --limit=*)    LIMITE="${1#--limit=}" ;;
+        -l?*)         LIMITE="${1#-l}" ;;
         -*)           ARGS+=("$1") ;;
         *)
             if [ -z "$ALUMNOS" ] && [ "${#ARGS[@]}" -eq 0 ] && [ -f "$1" ]; then
@@ -70,12 +89,67 @@ while [ $# -gt 0 ]; do
                 esac
             elif [ -z "$ALUMNOS" ] && [ "${#ARGS[@]}" -eq 0 ]; then
                 echo "[ERR] No existe el inventario $1" >&2; exit 1
+            elif [ -n "$ALUMNOS" ] && [ "${#ARGS[@]}" -eq 0 ] && [[ "$1" =~ ^[A-Za-z][A-Za-z0-9_]*$ ]]; then
+                SUELTOS+=("$1")       # posible módulo (SMRD AOD): se comprueba abajo
             else
                 ARGS+=("$1")
             fi ;;
     esac
     shift
 done
+
+# Grupos que hay en el inventario de alumnos (para validar los módulos).
+grupos_inventario() {
+    ansible-inventory -i "$ALUMNOS" --list 2>/dev/null | python3 -c '
+import json, sys
+print(" ".join(g for g in json.load(sys.stdin) if g not in ("_meta", "all", "ungrouped")))'
+}
+# Nombres de equipo de un patrón de Ansible, separados por comas.
+equipos() {
+    ansible-inventory -i "$ALUMNOS" --list --limit "$1" 2>/dev/null | python3 -c '
+import json, sys
+try: d = json.load(sys.stdin)
+except Exception: sys.exit(0)
+print(",".join(sorted(d.get("_meta", {}).get("hostvars", {}))))'
+}
+
+if [ "${#MODULOS[@]}" -gt 0 ] || [ "${#SUELTOS[@]}" -gt 0 ]; then
+    [ -n "$ALUMNOS" ] || { echo "[ERR] --modulo necesita un inventario de alumnos (SMRD, IABD o <alumnos.ini>)" >&2; exit 1; }
+    GRUPOS=" $(grupos_inventario) "
+    for s in "${SUELTOS[@]}"; do
+        if [[ "$GRUPOS" == *" $s "* ]]; then MODULOS+=("$s")
+        else echo "[ERR] '$s' no es un módulo de $ALUMNOS (hay:$GRUPOS)" >&2; exit 1; fi
+    done
+    PATRON=""
+    for m in "${MODULOS[@]}"; do
+        for g in ${m//,/ }; do
+            [[ "$GRUPOS" == *" $g "* ]] || { echo "[ERR] No existe el módulo '$g' en $ALUMNOS (hay:$GRUPOS)" >&2; exit 1; }
+            PATRON="${PATRON:+$PATRON:}$g"
+        done
+    done
+    # Módulos (unión) y, si hay -l, solo los que también lo cumplen.
+    SEL=$(equipos "$PATRON")
+    if [ -n "$LIMITE" ]; then
+        SEL=$(comm -12 <(tr , '\n' <<<"$SEL" | sort) <(equipos "$LIMITE" | tr , '\n' | sort) | paste -sd,)
+    fi
+    [ -n "$SEL" ] || { echo "[ERR] Ningún alumno de '$PATRON'${LIMITE:+ con -l '$LIMITE'} en $ALUMNOS" >&2; exit 1; }
+    echo "Módulo $PATRON${LIMITE:+ y -l '$LIMITE'}: $(tr , '\n' <<<"$SEL" | wc -l) alumnos"
+    LIMITE="$SEL"
+fi
+[ -n "$LIMITE" ] && ARGS+=(-l "$LIMITE")
+
+# Fichero de claves: se lee en ESTE equipo (el que lanza Ansible).
+if [ -n "$CLAVES" ]; then
+    if [ -f "$CLAVES" ]; then
+        CLAVES="$(realpath "$CLAVES")"
+        echo "Claves de los alumnos: $CLAVES ($(grep -cvE '^[[:space:]]*(#|$)' "$CLAVES") alumnos)"
+        ARGS+=(-e "$(python3 -c 'import json,sys; print(json.dumps({"VirtualW11_claves_fichero": sys.argv[1]}))' "$CLAVES")")
+    elif [ "$CLAVES_DADO" = 1 ]; then
+        echo "[ERR] No existe el fichero de claves $CLAVES" >&2; exit 1
+    else
+        echo "Claves de los alumnos: no hay $CLAVES → contraseña inicial usuario@1"
+    fi
+fi
 
 for n in "$FORKS_CACHE" "$FORKS_ALUMNO"; do
     [[ "$n" =~ ^[1-9][0-9]*$ ]] || { echo "[ERR] Número de equipos a la vez no válido: '$n'" >&2; exit 1; }
@@ -100,9 +174,9 @@ mmss() { printf '%d:%02d' $(( $1 / 60 )) $(( $1 % 60 )); }
 tiempos() {   # tiempos <fichero de salida> <título>
     local f="$1"
     echo "  $2"
-    grep -oE 'TIEMPO\|[a-z]+\|[^|]+\|[0-9]+\|[A-Z]+' "$f" | sort -u -t'|' -k3,3 \
+    grep -oE 'TIEMPO\|[a-z]+\|[^|]+\|[0-9]+\|[A-Z_]+' "$f" | sort -u -t'|' -k3,3 \
         | while IFS='|' read -r _ _ eq seg est; do
-              printf '    %-26s %8s  %s\n' "$eq" "$(mmss "$seg")" "$est"
+              printf '    %-26s %8s  %s\n' "$eq" "$(mmss "$seg")" "${est//_/ }"
           done
     grep -E '^[^ ]+ +: ok=.*unreachable=[1-9]' "$f" | awk '{print $1}' | sort -u \
         | while read -r eq; do printf '    %-26s %8s  %s\n' "$eq" "-" "SIN RESPUESTA"; done
@@ -150,7 +224,7 @@ if [ "$ALUMNO" = 1 ]; then
     if [ -n "$ALUMNOS" ]; then INV=(-i "$ALUMNOS"); else INV=(-i localhost, --connection=local); fi
     echo "===== $(date '+%F %T') VirtualW11 parte 2 (alumno) ${INV[*]} --forks $FORKS_ALUMNO ${ARGS[*]}" | tee -a "$LOG"
     t=$(date +%s)
-    ansible-playbook "${INV[@]}" --forks "$FORKS_ALUMNO" VirtualW11.yaml "${ARGS[@]}" </dev/null 2>&1 | tee -a "$LOG" "$SAL2"
+    ansible-playbook "${INV[@]}" --forks "$FORKS_ALUMNO" -e "VirtualW11_serie=$FORKS_ALUMNO" VirtualW11.yaml "${ARGS[@]}" </dev/null 2>&1 | tee -a "$LOG" "$SAL2"
     RC2=$?; T2=$(( $(date +%s) - t ))
 fi
 

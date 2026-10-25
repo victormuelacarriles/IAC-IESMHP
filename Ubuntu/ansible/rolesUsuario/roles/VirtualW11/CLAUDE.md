@@ -86,7 +86,9 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
    - Si la máquina no está encendida (`vmrun -T ws list`), la arranca **sin
      ventana**: `vmrun -T ws start <vmx> nogui`, quitando `DISPLAY` y
      `WAYLAND_DISPLAY`, igual que por SSH en un equipo sin monitor.
-   - Espera a que `vmrun checkToolsState` diga `running`, como mucho
+   - Espera a que `vmrun checkToolsState` diga `running` **o** a que la última
+     `Tools: Changing running status: X => 1|2` del `vmware.log` de la máquina
+     diga que laten (checkToolsState solo da `running` un instante), como mucho
      `VirtualW11_timeout_tools` s. Si no llega, la tarea **falla** (el mensaje
      remite a `vmware.log` de la máquina).
      Antes de fallar **guarda una captura de la pantalla de Windows** en
@@ -156,6 +158,11 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
       - los dos con la **misma contraseña**, `usuario@1` al crearlos
         (`VirtualW11_invitado_password`). A los que ya existen **no** se les
         cambia;
+      - **fichero de claves** (`.clavesalumnos`, ver más abajo): si el alumno
+        está en él, los dos llevan **su clave** en vez de `usuario@1`, y se les
+        **pone también si ya existen** (solo si no la tienen ya: una
+        comprobación). La plantilla (`usuario`) sigue entrando con `usuario@1`
+        (`IAC_PLANTILLA`/`IAC_PASSWORD_PLANTILLA` en `invitado.sh`);
       - **máquinas de antes**, donde `<usuario físico>` era administrador: se
         le quita de *Administradores* solo cuando `admin<usuario>` ya existe y
         lo es. Si el alumno ya había cambiado su contraseña, `admin<usuario>`
@@ -176,6 +183,13 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
       - regla `OpenSSH-Server-In-TCP` (22) en todos los perfiles;
       - la clave pública va a `C:\ProgramData\ssh\administrators_authorized_keys`
         (el fichero de los administradores) con sus permisos.
+      - y también para `<usuario>` (estándar, 2026-10-25): en
+        `C:\ProgramData\ssh\claves\<usuario>` (administradores y SYSTEM
+        control total, el usuario solo lectura, propietario Administradores),
+        con `AuthorizedKeysFile .ssh/authorized_keys __PROGRAMDATA__/ssh/claves/%u`
+        en `sshd_config`. No en `C:\Users\<usuario>\.ssh`: ese perfil no
+        existe hasta el primer inicio de sesión. Si el rol entra por SSH, sshd
+        no se reinicia (cortaría la conexión): vale tras reiniciar Windows.
 
       **Después de fijar la IP** (paso 3; cambio 2026-10-24) se entra desde el equipo físico (`ssh <usuario físico>@<IP final>`) y se
       comprueba con `whoami /groups` (vale con cmd o PowerShell como shell) que
@@ -216,6 +230,14 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
       con **usuario e IP de destino, sin contraseña** (la guarda el usuario
       la primera vez que conecta). Si ya hay un perfil con ese nombre no lo
       toca, salvo `server=` si la IP ha cambiado.
+      **Marcador en el gestor de archivos** (`files/marcador-sftp.sh`,
+      `VirtualW11_marcador`; 2026-10-25): línea
+      `sftp://<usuario>@<IP>/C:/Users/<usuario> W11-<usuario>` en
+      `~/.config/gtk-3.0/bookmarks` (Nautilus); si ya hay uno con ese nombre y
+      otra IP, se sustituye. Entra con la clave SSH del alumno (necesita la del
+      usuario estándar, ver paso 2). Además mete la clave de host de la máquina
+      en `~/.ssh/known_hosts` (`ssh-keyscan`; se renueva si cambió) para que
+      Nautilus no pregunte la primera vez.
    7. **Arranque automático (último paso)** (`CambiarPassword.ps1`,
       `VirtualW11_autologon_activar`; 2026-10-23):
       - del usuario **estándar** `<usuario físico>`, y **solo si su contraseña
@@ -240,7 +262,11 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
            `admin<usuario>` con la misma y reconfigura el arranque;
         4. termina avisando de que **recuerde la contraseña para entrar por
            Remmina**;
-      - si lo configuró y la máquina la encendió el rol, **reinicia y comprueba**
+      - **con clave del fichero**: arranque automático con esa clave y **sin**
+        acceso directo (si lo había, se quita): la contraseña la fija el
+        profesor;
+      - si lo configuró (o puso la clave del fichero) y la máquina la encendió
+        el rol, **reinicia y comprueba**
         que el usuario entra solo (su `explorer.exe` en `listProcessesInGuest`).
    5. **Comprobación final** por SSH a la IP final (`hostname`) y resumen:
       ```
@@ -296,6 +322,9 @@ cd /opt/IAC-IESMHP/Ubuntu/ansible/rolesUsuario/roles/VirtualW11
 bash VirtualW11.sh                        # local (caché con sudo -n; si no, avisa)
 bash VirtualW11.sh SMRD                   # caché equiposSMRD.ini + alumnos SMRD
 bash VirtualW11.sh IABD -l IABD-05        # un equipo
+bash VirtualW11.sh SMRD AOD               # solo los alumnos del módulo AOD
+bash VirtualW11.sh SMRD --modulo AOD,SOR  # varios módulos (unión)
+bash VirtualW11.sh SMRD AOD -l 'SMRD-0*'  # de AOD, solo esos equipos (intersección)
 bash VirtualW11.sh SMRD -l SMRD-04-SMRV24 -e VirtualW11_reemplazar=true   # BORRA y recopia
 bash VirtualW11.sh otro-alumnos.ini       # el de aula se deduce del grupo [SMRD]/[IABD]
 bash VirtualW11.sh SMRD --solo-cache      # solo la parte 1
@@ -306,6 +335,20 @@ bash VirtualW11.sh SMRD --nat                           # red NAT (por defecto)
 bash VirtualW11.sh --help
 ```
 
+- **Claves de los alumnos:** `--claves F` (por defecto `.clavesalumnos` junto
+  al script, si existe; `--sin-claves` para no usarlo). Formato: una línea
+  `USUARIO,clave` por alumno, `#` = comentario; el usuario no distingue
+  mayúsculas. Se lee en el **equipo que lanza** el script (lookup de Ansible),
+  no hace falta en los equipos de los alumnos. Está en `.gitignore` (texto
+  plano: no subirlo nunca). Alumno que no esté en el fichero → `usuario@1` y
+  acceso directo, como siempre. Si se da `--claves` con un fichero que no
+  existe, error.
+- **Módulo:** `--modulo M` (o `-m M`, o el nombre suelto tras el aula:
+  `SMRD AOD`) elige los alumnos de los grupos `[AOD]`/`[SOR]`... del
+  inventario de alumnos. Varios con comas (unión). Con `-l`, solo los que
+  cumplen las dos cosas. El script lo traduce a una lista de equipos (`-l`
+  de la parte 2 y, por su IP, equipos físicos de la parte 1). Si el módulo no
+  existe en el inventario o no queda nadie, da error y para.
 - **Modo de red:** `--nat` (por defecto) o `--bridge`. Equivalen a
   `-e VirtualW11_red=nat|bridged` y solo van a la parte 2. En una máquina ya
   creada también vale: se cambia antes de encenderla. Si está encendida o
@@ -322,7 +365,10 @@ bash VirtualW11.sh --help
     ~15 GB del NAS la primera vez, así que conviene un número bajo;
   - `--forks-alumno N` (o `FORKS_ALUMNO=N`) para la parte 2: en SMRD hay
     varios alumnos por equipo y cada uno copia y arranca su máquina (8 GB de
-    RAM).
+    RAM). Va por **tandas** de N alumnos (`serial`, variable
+    `VirtualW11_serie`): con 1, de uno en uno de verdad (solo `--forks` no
+    basta con `strategy: free`). Un equipo apagado (`SIN RESPUESTA`) o un
+    alumno que falla (`ERROR`) no paran a los siguientes.
 
   Un valor que no sea un número positivo da error.
 
@@ -377,12 +423,15 @@ y los equipos en los que el usuario no entra se quedan fuera.
 | `VirtualW11_timeout_apagado` | `180` | Segundos de apagado `soft` antes del `hard` |
 | `VirtualW11_red` | `nat` | Modo de red de `ethernet0`: `nat` o `bridged` |
 | `VirtualW11_configurar_invitado` | `true` | Usuario, SSH, IP y nombre del invitado |
-| `VirtualW11_invitado_password` | `usuario@1` | Contraseña inicial de `<usuario>` y `admin<usuario>` |
+| `VirtualW11_invitado_password` | `usuario@1` | Contraseña inicial de `<usuario>` y `admin<usuario>` (y la de `usuario` de la plantilla) |
+| `VirtualW11_claves_fichero` | `""` | Fichero `USUARIO,clave` (en el equipo que lanza). `VirtualW11.sh` pasa `.clavesalumnos` si existe |
 | `VirtualW11_admin_prefijo` | `admin` | Nombre del administrador: `admin<usuario>` |
 | `VirtualW11_invitado_usuario` | `usuario` | Usuario de la plantilla: solo para entrar la primera vez (luego queda desactivado) |
 | `VirtualW11_ip_suma` | `30` | Solo `bridged`: IP del invitado = IP física + esto |
 | `VirtualW11_timeout_reinicio` | `600` | Espera tras reiniciar por el nombre |
 | `VirtualW11_remmina` | `true` | RDP en el invitado + lanzador en Remmina |
+| `VirtualW11_marcador` | `true` | Marcador SFTP al perfil de Windows en el gestor de archivos |
+| `VirtualW11_marcador_nombre` | `W11-<usuario>` | Nombre del marcador |
 | `VirtualW11_autologon_activar` | `true` | Arranque automático + acceso directo para cambiar la contraseña |
 
 ## Pruebas
@@ -433,6 +482,11 @@ y los equipos en los que el usuario no entra se quedan fuera.
 - 2026-10-23, desde cero: solo se desactiva `usuario` (`adminw11` sigue
   activo), RDP ya activo, 3389 responde, perfil de Remmina creado sin
   contraseña.
+- **Arranque lento de las Tools — RESUELTO el 2026-10-25**: no era Windows,
+  era `checkToolsState`, que solo devuelve `running` en el instante de una
+  operación en el invitado y el resto del tiempo `installed`, aunque las Tools
+  funcionen (en `vmware.log`: `running status: 0 => 1` a los ~12 s). Ahora la
+  espera mira también el `vmware.log`. Lo de abajo queda como historia.
 - **Arranque lento de las Tools — causa sin aclarar** (2026-10-24, tras varias
   pruebas): a veces Windows tarda muchos minutos (6, 7, más de 10) en arrancar
   el servicio de las Tools, tanto en copias nuevas (que se quedan en la

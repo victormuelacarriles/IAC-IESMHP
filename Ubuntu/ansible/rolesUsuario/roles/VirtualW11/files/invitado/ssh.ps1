@@ -1,7 +1,16 @@
 ﻿# Deja OpenSSH Server instalado, arrancado y automático, con el puerto 22
-# abierto, y autoriza una clave pública para los administradores.
-# Uso: ssh.ps1 "<clave pública>"
-param([Parameter(Mandatory)][string]$ClavePublica)
+# abierto, y autoriza una clave pública para los administradores y para
+# <usuario> (el estándar del alumno).
+# Uso: ssh.ps1 "<clave pública>" [<usuario>]
+#
+# La clave de <usuario> NO va a C:\Users\<usuario>\.ssh: ese perfil no existe
+# hasta que el alumno entra por primera vez (y si se crea a mano, Windows le da
+# otra carpeta). Va a C:\ProgramData\ssh\claves\<usuario>, que sshd lee porque
+# se añade a AuthorizedKeysFile en sshd_config.
+param(
+    [Parameter(Mandatory)][string]$ClavePublica,
+    [string]$Usuario = ''
+)
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
 
@@ -39,6 +48,47 @@ try {
     }
     # sshd ignora el fichero si tiene otros permisos.
     icacls.exe $f /inheritance:r /grant '*S-1-5-32-544:F' '*S-1-5-18:F' | Out-Null
+
+    if ($Usuario) {
+        # sshd_config: AuthorizedKeysFile (la línea general, antes de los Match)
+        # con el fichero de ProgramData además del del perfil.
+        $cfg = Join-Path $env:ProgramData 'ssh\sshd_config'
+        $extra = '__PROGRAMDATA__/ssh/claves/%u'
+        $lineas = @(Get-Content $cfg)
+        if (-not ($lineas -match [regex]::Escape($extra))) {
+            $hecho = $false
+            $nuevas = foreach ($l in $lineas) {
+                if (-not $hecho -and $l -match '^\s*#?\s*AuthorizedKeysFile\s') {
+                    $hecho = $true
+                    "AuthorizedKeysFile .ssh/authorized_keys $extra"
+                } else { $l }
+            }
+            if (-not $hecho) { $nuevas = @("AuthorizedKeysFile .ssh/authorized_keys $extra") + $lineas }
+            Set-Content -Path $cfg -Value $nuevas -Encoding ascii
+            "sshd_config   : AuthorizedKeysFile también en $extra"
+            # Por SSH no se reinicia sshd (cortaría esta misma conexión): se
+            # aplica en el siguiente arranque de Windows.
+            if ($env:SSH_CONNECTION) {
+                "sshd          : se aplicará al reiniciar Windows (se está usando SSH)"
+            } else {
+                Restart-Service sshd
+                "sshd          : reiniciado"
+            }
+        }
+        $d = Join-Path $env:ProgramData 'ssh\claves'
+        New-Item $d -ItemType Directory -Force | Out-Null
+        $fu = Join-Path $d $Usuario
+        $actual = if (Test-Path $fu) { @(Get-Content $fu) } else { @() }
+        if ($actual -contains $ClavePublica) {
+            "Clave $Usuario : ya autorizada"
+        } else {
+            Add-Content -Path $fu -Value $ClavePublica -Encoding ascii
+            "Clave $Usuario : añadida a $fu"
+        }
+        # Solo administradores y SYSTEM pueden cambiarla; el usuario, leerla.
+        icacls.exe $fu /inheritance:r /grant '*S-1-5-32-544:F' '*S-1-5-18:F' "${Usuario}:R" | Out-Null
+        icacls.exe $fu /setowner '*S-1-5-32-544' | Out-Null
+    }
     exit 0
 } catch {
     "[ERR] $_"

@@ -20,6 +20,7 @@
 # Tools como el resto de IAC_USUARIOS (p. ej. el de la plantilla, la 1ª vez).
 #
 # Variables: IAC_USUARIOS="u1 u2"  IAC_PASSWORD  IAC_SSH_KEY  IAC_SSH_USUARIO
+#            IAC_PLANTILLA + IAC_PASSWORD_PLANTILLA (contraseña de ese usuario)
 #            IAC_IP  IAC_METODO  IAC_SSH_INTENTOS (6, cada 5 s)
 #            TIMEOUT (segundos por llamada a vmrun, 300 por defecto)
 #
@@ -34,8 +35,12 @@ SSH_O=(-i "${IAC_SSH_KEY:-/dev/null}" -o BatchMode=yes -o StrictHostKeyChecking=
        -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=10)
 
 vm() {   # vm <usuario> <orden vmrun...>
-    local u="$1"; shift
-    timeout "${TIMEOUT:-300}" vmrun -T ws -gu "$u" -gp "${IAC_PASSWORD:-}" "$@"
+    local u="$1" p="${IAC_PASSWORD:-}"; shift
+    # El usuario de la plantilla tiene su propia contraseña (usuario@1).
+    if [ -n "${IAC_PLANTILLA:-}" ] && [ "${u,,}" = "${IAC_PLANTILLA,,}" ]; then
+        p="${IAC_PASSWORD_PLANTILLA:-$p}"
+    fi
+    timeout "${TIMEOUT:-300}" vmrun -T ws -gu "$u" -gp "$p" "$@"
 }
 
 hay_ssh() {

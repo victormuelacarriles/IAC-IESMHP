@@ -5,15 +5,17 @@
 #    lo era) solo cuando <Admin> ya existe y es administrador.
 #  - Desactiva el usuario de la plantilla (<Desactivar>), si existe y es otro.
 #  - Quita la pantalla de privacidad del primer inicio de sesión.
-# Los que se crean llevan la contraseña inicial; a los que ya existen NO se les
-# cambia (la puede haber cambiado el alumno).
-# Uso: usuario.ps1 <nombre> <admin> <contraseña inicial> <usuario a desactivar>
+# Los que se crean llevan la contraseña dada; a los que ya existen NO se les
+# cambia (la puede haber cambiado el alumno), salvo con <forzar>=si (contraseña
+# del fichero de claves del profesor): entonces se les pone a los dos.
+# Uso: usuario.ps1 <nombre> <admin> <contraseña> <usuario a desactivar> [si|no]
 # Salida: 0 = correcto, 1 = error.
 param(
     [Parameter(Mandatory)][string]$Nombre,
     [Parameter(Mandatory)][string]$Admin,
     [Parameter(Mandatory)][string]$Password,
-    [Parameter(Mandatory)][string]$Desactivar
+    [Parameter(Mandatory)][string]$Desactivar,
+    [string]$Forzar = 'no'
 )
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
@@ -25,6 +27,19 @@ function Asegurar-Usuario([string]$N) {
         $u = New-LocalUser -Name $N -Password $clave -FullName $N `
                  -Description 'Creado por IAC-IESMHP' -PasswordNeverExpires -AccountNeverExpires
         "Usuario       : $N creado (contraseña inicial)"
+    } elseif ($Forzar -eq 'si') {
+        # Solo se cambia si no la tiene ya (una comprobación: si no coincide,
+        # cuenta como un fallo para el bloqueo de cuentas).
+        Add-Type -AssemblyName System.DirectoryServices.AccountManagement
+        $ctx = New-Object System.DirectoryServices.AccountManagement.PrincipalContext('Machine')
+        $ok = $false
+        try { $ok = $ctx.ValidateCredentials($N, $Password) } catch { }
+        if ($ok) {
+            "Usuario       : $N ya existe (ya tiene la contraseña del fichero de claves)"
+        } else {
+            Set-LocalUser -Name $N -Password (ConvertTo-SecureString $Password -AsPlainText -Force)
+            "Usuario       : $N ya existe (contraseña del fichero de claves puesta)"
+        }
     } else {
         "Usuario       : $N ya existe (no se cambia su contraseña)"
     }

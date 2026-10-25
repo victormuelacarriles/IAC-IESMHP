@@ -3,3 +3,4 @@ Ubuntu/ISO/26.04/logs/
 .claude/settings.local.json
 #Configuración local de Visual Studio Code (personal, no se sube)
 .vscode
+Ubuntu/ansible/rolesUsuario/roles/VirtualW11/.clavesalumnos

@@ -6,7 +6,9 @@
 #
 # Dos modos:
 #  - Instalación (lo lanza el rol, sin preguntas; argumentos por posición):
-#      CambiarPassword.ps1 instalar <usuario> si|no <contraseña inicial> <admin>
+#      CambiarPassword.ps1 instalar <usuario> si|no <contraseña inicial> <admin> [si|no]
+#    El último (por defecto si) es el acceso directo: "no" cuando la contraseña
+#    la fija el profesor (fichero de claves); entonces se quita si lo había.
 #    Se copia a C:\ProgramData\IAC-IESMHP\, deja en el escritorio público el
 #    acceso directo "Cambiar contraseña y arranque automático" y, con "si",
 #    configura el arranque automático de <usuario> con la contraseña inicial,
@@ -26,7 +28,8 @@ param(
     [Parameter(Position = 1)][string]$Usuario = $env:USERNAME,
     [Parameter(Position = 2)][string]$Autologon = 'no',         # 'si' = configurarlo
     [Parameter(Position = 3)][string]$PasswordInicial = 'usuario@1',
-    [Parameter(Position = 4)][string]$Admin = ''
+    [Parameter(Position = 4)][string]$Admin = '',
+    [Parameter(Position = 5)][string]$AccesoDirecto = 'si'      # 'no' = sin acceso directo
 )
 if (-not $Admin) { $Admin = "admin$Usuario" }
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -106,17 +109,26 @@ function Get-Texto([Security.SecureString]$s) {
 if ($Accion -eq 'instalar') {
     $ErrorActionPreference = 'Stop'
     try {
-        New-Item (Split-Path $Destino) -ItemType Directory -Force | Out-Null
-        if ($PSCommandPath -ne $Destino) { Copy-Item $PSCommandPath $Destino -Force }
-        $sh = New-Object -ComObject WScript.Shell
-        $l = $sh.CreateShortcut($Acceso)
-        $l.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-        $l.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$Destino`" -Usuario `"$Usuario`" -Admin `"$Admin`" -PasswordInicial `"$PasswordInicial`""
-        $l.IconLocation = "$env:SystemRoot\System32\imageres.dll,77"
-        $l.Description = 'Cambia la contraseña inicial y configura el arranque automático'
-        $l.Save()
-        "Script        : $Destino"
-        "Escritorio    : $Acceso"
+        if ($AccesoDirecto -eq 'no') {
+            if (Test-Path $Acceso) {
+                Remove-Item $Acceso -Force
+                "Escritorio    : acceso directo quitado (contraseña fijada por el profesor)"
+            } else {
+                "Escritorio    : sin acceso directo (contraseña fijada por el profesor)"
+            }
+        } else {
+            New-Item (Split-Path $Destino) -ItemType Directory -Force | Out-Null
+            if ($PSCommandPath -ne $Destino) { Copy-Item $PSCommandPath $Destino -Force }
+            $sh = New-Object -ComObject WScript.Shell
+            $l = $sh.CreateShortcut($Acceso)
+            $l.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+            $l.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$Destino`" -Usuario `"$Usuario`" -Admin `"$Admin`" -PasswordInicial `"$PasswordInicial`""
+            $l.IconLocation = "$env:SystemRoot\System32\imageres.dll,77"
+            $l.Description = 'Cambia la contraseña inicial y configura el arranque automático'
+            $l.Save()
+            "Script        : $Destino"
+            "Escritorio    : $Acceso"
+        }
         # Una sola comprobación de la contraseña de <usuario> (cada fallo
         # cuenta para el bloqueo de cuentas de Windows).
         if ($Autologon -eq 'si' -and -not (Test-Password $Usuario $PasswordInicial)) {
@@ -125,9 +137,9 @@ if ($Accion -eq 'instalar') {
             $antes = (Get-ItemProperty $Winlogon -ErrorAction SilentlyContinue)
             Set-ArranqueAutomatico $Usuario $PasswordInicial
             if ($antes.AutoAdminLogon -eq '1' -and $antes.DefaultUserName -eq $Usuario) {
-                "Autologon     : $Usuario (ya estaba; contraseña inicial)"
+                "Autologon     : $Usuario (ya estaba; contraseña actualizada)"
             } else {
-                "Autologon     : $Usuario configurado (contraseña inicial)"
+                "Autologon     : $Usuario configurado"
             }
         } else {
             "Autologon     : no se toca (el usuario ya cambió la contraseña)"

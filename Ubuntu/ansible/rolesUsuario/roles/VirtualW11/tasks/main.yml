@@ -16,6 +16,41 @@
     VirtualW11_nombre: "{{ VirtualW11_prefijo }}-{{ (ansible_user | default(lookup('env', 'USER'))).split('@')[0] }}"
   tags: [VirtualW11]
 
+# Contraseña de los dos usuarios del alumno en Windows: la suya del fichero de
+# claves (se lee en el equipo que lanza Ansible), o la inicial si no hay
+# fichero o el alumno no está en él.
+- name: Contraseña de {{ VirtualW11_id }} en el fichero de claves
+  ansible.builtin.set_fact:
+    VirtualW11_password: "{{ _clave if _clave | length > 0 else VirtualW11_invitado_password }}"
+    VirtualW11_password_fichero: "{{ _clave | length > 0 }}"
+  vars:
+    _texto: >-
+      {{ lookup('ansible.builtin.file', VirtualW11_claves_fichero)
+         if (VirtualW11_claves_fichero | length > 0 and VirtualW11_claves_fichero is file) else '' }}
+    _clave: >-
+      {{ _texto.splitlines() | map('trim') | reject('match', '#')
+         | select('match', '(?i)^' ~ VirtualW11_id ~ ' *,')
+         | map('regex_replace', '^[^,]*,', '') | map('trim') | first | default('') }}
+  no_log: true
+  tags: [VirtualW11]
+
+- name: El fichero de claves tiene que existir
+  ansible.builtin.fail:
+    msg: "No existe el fichero de claves {{ VirtualW11_claves_fichero }}"
+  when:
+    - VirtualW11_claves_fichero | length > 0
+    - VirtualW11_claves_fichero is not file
+  tags: [VirtualW11]
+
+- name: Contraseña de Windows para {{ VirtualW11_id }}
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'la del fichero de claves (' ~ VirtualW11_claves_fichero ~ '), sin acceso directo para cambiarla'
+         if VirtualW11_password_fichero | bool else
+         ('NO está en el fichero de claves ' ~ VirtualW11_claves_fichero ~ ': ' if VirtualW11_claves_fichero | length > 0 else '')
+         ~ 'la inicial (' ~ VirtualW11_invitado_password ~ '), con acceso directo para cambiarla' }}
+  tags: [VirtualW11]
+
 - name: No se copia al perfil de root
   ansible.builtin.fail:
     msg: "Se ha entrado como root: el inventario tiene que llevar ansible_user=<alumno> en cada equipo"
@@ -389,9 +424,21 @@
                 VirtualW11_arrancada: true
               when: (VirtualW11_start_nogui is changed) or (VirtualW11_start_gui is changed)
 
+            # checkToolsState solo dice "running" un instante (cuando alguien usa
+            # las Tools); el resto del tiempo dice "installed" aunque funcionen.
+            # Por eso se mira también el vmware.log de la máquina: la última
+            # "Tools: Changing running status: X => 1|2" = las Tools laten y
+            # admiten operaciones (suele ser ~15 s tras arrancar Windows).
             - name: Esperar a las VMware Tools (hasta {{ VirtualW11_timeout_tools }} s)
-              ansible.builtin.command:
-                argv: "{{ VirtualW11_vmrun + ['checkToolsState', VirtualW11_vmx] }}"
+              ansible.builtin.shell:
+                cmd: |
+                  s=$({{ VirtualW11_vmrun | map('quote') | join(' ') }} checkToolsState {{ VirtualW11_vmx | quote }} 2>&1)
+                  if [ "$s" != running ]; then
+                    u=$(grep -aoE 'Tools: Changing running status: [0-9] => [0-9]' {{ (VirtualW11_destino ~ '/vmware.log') | quote }} 2>/dev/null | tail -1)
+                    case "$u" in *'=> 1'|*'=> 2') s=running ;; esac
+                  fi
+                  echo "$s"
+                executable: /bin/bash
               register: VirtualW11_tools
               until: VirtualW11_tools.stdout | trim == 'running'
               retries: "{{ ((VirtualW11_timeout_tools | int) / 10) | round(0, 'ceil') | int }}"
@@ -406,7 +453,9 @@
                 cmd: |
                   f={{ (VirtualW11_destino ~ '/fallo-tools-') | quote }}$(date +%Y%m%d-%H%M%S).png
                   for u in {{ VirtualW11_admin | quote }} {{ VirtualW11_id | quote }} {{ VirtualW11_invitado_usuario | quote }}; do
-                    timeout 60 vmrun -T ws -gu "$u" -gp {{ VirtualW11_invitado_password | quote }} \
+                    p={{ VirtualW11_password | quote }}
+                    [ "$u" = {{ VirtualW11_invitado_usuario | quote }} ] && p={{ VirtualW11_invitado_password | quote }}
+                    timeout 60 vmrun -T ws -gu "$u" -gp "$p" \
                       captureScreen {{ VirtualW11_vmx | quote }} "$f" >/dev/null 2>&1 && { echo "$f"; exit 0; }
                   done
                   echo "(no se pudo capturar la pantalla)"
@@ -479,7 +528,10 @@
                 # Orden: administrador (lo normal) → [SSH] → usuario del alumno
                 # (máquinas de antes, en las que era administrador) → plantilla.
                 IAC_USUARIOS: "{{ VirtualW11_admin }} {{ VirtualW11_id }} {{ VirtualW11_invitado_usuario }}"
-                IAC_PASSWORD: "{{ VirtualW11_invitado_password }}"
+                IAC_PASSWORD: "{{ VirtualW11_password }}"
+                # El de la plantilla entra con la suya (usuario@1).
+                IAC_PLANTILLA: "{{ VirtualW11_invitado_usuario }}"
+                IAC_PASSWORD_PLANTILLA: "{{ VirtualW11_invitado_password }}"
                 IAC_SSH_USUARIO: "{{ VirtualW11_admin }} {{ VirtualW11_id }}"
                 IAC_SSH_KEY: "{{ VirtualW11_clave | default('') }}"
                 IAC_IP: "{{ VirtualW11_ip_final | default(VirtualW11_ip.stdout | default('') | trim) }}"
@@ -538,18 +590,20 @@
                   ansible.builtin.set_fact:
                     VirtualW11_acceso: "{{ VirtualW11_metodo.stdout | trim }}"
 
-                # ------------------------------ 1. administrador = usuario físico
-                # Crea <usuario físico> administrador con la contraseña inicial
-                # (si ya existe no se la cambia) y desactiva el de la plantilla.
+                # ------------------------------ 1. usuarios del alumno
+                # Crea <usuario> (estándar) y admin<usuario> con su contraseña
+                # y desactiva el de la plantilla. Si ya existen no se les cambia,
+                # salvo con contraseña del fichero de claves (se les pone siempre).
                 - name: Usuarios {{ VirtualW11_id }} (estándar) y {{ VirtualW11_admin }} (administrador); {{ VirtualW11_invitado_usuario }} desactivado
                   ansible.builtin.command:
                     argv: >-
                       {{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/usuario.ps1',
-                         VirtualW11_id, VirtualW11_admin, VirtualW11_invitado_password, VirtualW11_invitado_usuario] }}
+                         VirtualW11_id, VirtualW11_admin, VirtualW11_password, VirtualW11_invitado_usuario,
+                         ('si' if VirtualW11_password_fichero | bool else 'no')] }}
                   register: VirtualW11_usuario_cfg
                   changed_when: >-
                     VirtualW11_usuario_cfg.stdout_lines
-                    | select('search', '^(Usuario .*(creado|activado)|Administrador .*añadido|Desactivado )')
+                    | select('search', '^(Usuario .*(creado|activado|claves puesta)|Grupo .*añadido|Estándar |Desactivado )')
                     | list | length > 0
                   failed_when: false
 
@@ -587,9 +641,9 @@
                   when: VirtualW11_metodo2 is not skipped
 
                 # ---------------------------------------------------- 2. SSH
-                - name: OpenSSH en el invitado (instalado, arrancado, puerto 22, clave autorizada)
+                - name: OpenSSH en el invitado (instalado, arrancado, puerto 22, clave para {{ VirtualW11_admin }} y {{ VirtualW11_id }})
                   ansible.builtin.command:
-                    argv: "{{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/ssh.ps1', VirtualW11_clave_pub.stdout | trim] }}"
+                    argv: "{{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/ssh.ps1', VirtualW11_clave_pub.stdout | trim, VirtualW11_id] }}"
                   register: VirtualW11_ssh_cfg
                   changed_when: "'añadida' in VirtualW11_ssh_cfg.stdout"
                   failed_when: false
@@ -824,6 +878,17 @@
                   changed_when: VirtualW11_remmina_perfil.stdout is search('^(CREADO|ACTUALIZADO)')
                   when: VirtualW11_remmina | bool
 
+                # Marcador en el gestor de archivos del equipo físico: abre por
+                # SFTP el perfil de Windows del alumno (entra con su clave).
+                - name: Marcador {{ VirtualW11_marcador_nombre }} en el gestor de archivos
+                  ansible.builtin.script:
+                    cmd: >-
+                      marcador-sftp.sh {{ VirtualW11_marcador_nombre | quote }} {{ VirtualW11_id | quote }}
+                      {{ VirtualW11_ip_final | quote }}
+                  register: VirtualW11_marcador_res
+                  changed_when: VirtualW11_marcador_res.stdout is search('^(CREADO|ACTUALIZADO)|añadida')
+                  when: VirtualW11_marcador | bool
+
                 # --------------------------- 7. arranque automático (último paso)
                 # Solo con la contraseña inicial: si el rol entra por Tools con
                 # ella, sigue siendo la buena. Si el alumno la cambió (se entra por
@@ -833,8 +898,9 @@
                   ansible.builtin.command:
                     argv: >-
                       {{ VirtualW11_inv + [VirtualW11_dir_inv ~ '/CambiarPassword.ps1', 'instalar', VirtualW11_id,
-                         ('si' if VirtualW11_acceso == 'tools:' ~ VirtualW11_admin else 'no'),
-                         VirtualW11_invitado_password, VirtualW11_admin] }}
+                         ('si' if (VirtualW11_acceso == 'tools:' ~ VirtualW11_admin or VirtualW11_password_fichero | bool) else 'no'),
+                         VirtualW11_password, VirtualW11_admin,
+                         ('no' if VirtualW11_password_fichero | bool else 'si')] }}
                   register: VirtualW11_autologon
                   changed_when: VirtualW11_autologon.stdout is search('configurado')
                   failed_when: VirtualW11_autologon.rc != 0
@@ -846,14 +912,15 @@
                   ansible.builtin.command:
                     argv: [env, -u, DISPLAY, -u, WAYLAND_DISPLAY, timeout, '300', vmrun, -T, ws, reset, "{{ VirtualW11_vmx }}", soft]
                   when:
-                    - VirtualW11_autologon is changed
+                    - VirtualW11_autologon is changed or VirtualW11_usuario_cfg.stdout is search('contraseña del fichero de claves puesta')
+                    - VirtualW11_autologon is not skipped
                     - VirtualW11_arrancada | bool
 
                 - name: Esperar a que {{ VirtualW11_id }} entre solo (hasta {{ VirtualW11_timeout_reinicio }} s)
                   ansible.builtin.shell:
                     cmd: >-
                       sleep 5;
-                      timeout 60 vmrun -T ws -gu {{ VirtualW11_admin | quote }} -gp {{ VirtualW11_invitado_password | quote }}
+                      timeout 60 vmrun -T ws -gu {{ VirtualW11_admin | quote }} -gp {{ VirtualW11_password | quote }}
                       listProcessesInGuest {{ VirtualW11_vmx | quote }}
                       | grep -i 'explorer.exe' | grep -iE {{ ('[^a-z0-9]' ~ VirtualW11_id ~ ',') | quote }}
                     executable: /bin/bash
@@ -863,17 +930,19 @@
                   delay: 10
                   changed_when: false
                   when:
-                    - VirtualW11_autologon is changed
+                    - VirtualW11_autologon is changed or VirtualW11_usuario_cfg.stdout is search('contraseña del fichero de claves puesta')
+                    - VirtualW11_autologon is not skipped
                     - VirtualW11_arrancada | bool
 
                 - name: Resumen del invitado
                   ansible.builtin.debug:
                     msg:
-                      - "Usuarios: {{ VirtualW11_id }} (estándar, arranque automático y Remmina) + {{ VirtualW11_admin }} (administrador), contraseña inicial {{ VirtualW11_invitado_password }}; {{ VirtualW11_usuario_cfg.stdout_lines | select('search', '^Desactiva') | first | default('') | regex_replace('\\s+:\\s+', ': ') }}"
+                      - "Usuarios: {{ VirtualW11_id }} (estándar, arranque automático y Remmina) + {{ VirtualW11_admin }} (administrador), contraseña {{ ('del fichero de claves' if VirtualW11_password_fichero | bool else 'inicial ' ~ VirtualW11_invitado_password) }}; {{ VirtualW11_usuario_cfg.stdout_lines | select('search', '^Desactiva') | first | default('') | regex_replace('\\s+:\\s+', ': ') }}"
                       - "SSH     : ssh -i {{ VirtualW11_clave }} {{ VirtualW11_admin }}@{{ VirtualW11_ip_final }}"
                       - "IP      : {{ VirtualW11_ip_final }}{{ ('/' ~ VirtualW11_prefijo ~ ' estática, puerta ' ~ VirtualW11_puerta ~ ', DNS ' ~ VirtualW11_dns) if VirtualW11_ip_modo in ['ESTATICA', 'YA'] else ' (sin cambiar: ' ~ VirtualW11_ip_modo ~ ')' }}"
                       - "Nombre  : {{ VirtualW11_ssh_fin.stdout | trim }}"
                       - "Remmina : {{ VirtualW11_remmina_perfil.stdout | default('(desactivado)') | trim }}"
+                      - "Archivos: {{ (VirtualW11_marcador_res.stdout_lines | default(['(desactivado)']) | first) | trim }}"
                       - "Autologon: {{ (VirtualW11_autologon.stdout_lines | default([]) | select('search', '^Autologon') | first | default('(desactivado)')) | regex_replace('^Autologon\\s*:\\s*', '') }}{{ ' — comprobado: entra solo tras reiniciar' if (VirtualW11_autologon_ok.rc | default(1)) == 0 else '' }}"
 
           # Siempre (también si las Tools no responden): apagar si la encendió el

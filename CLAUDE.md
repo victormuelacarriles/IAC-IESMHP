@@ -22,6 +22,27 @@ los cambios de código a GitHub.**
 > de los arreglos de `W11/ISO/0b-GitHub.ps1`. A partir de ahí el propietario pidió
 > expresamente que **no** se gestione git. Respétalo.
 
+## ⛔ Otros equipos — NUNCA los toques tú (regla del propietario, 25/10/2026)
+
+**NUNCA** hagas comprobaciones ni operaciones en **otros equipos** (los del aula,
+servidores, NAS, máquinas de alumnos...): nada de `ssh`, `scp`, `ping`,
+`ansible`/`ansible-playbook` contra inventarios reales, `vmrun` sobre máquinas
+de otros, `rsync`, `curl` a equipos de la red, etc. Tu trabajo y tus pruebas se
+quedan en **este equipo** (el del propietario) y, como mucho, en las máquinas
+virtuales de prueba que crees tú aquí mismo.
+
+- Para probar playbooks usa `localhost`/`--connection=local`, inventarios falsos
+  con `ansible_connection=local`, o un `ansible-playbook` falso que solo muestre
+  los argumentos. **No** pongas en esos inventarios IPs que puedan existir en la
+  red del centro (toda la `10.x.x.x`); usa solo `ansible_connection=local`.
+- Si una comprobación necesita otro equipo, **dilo y para**: da al propietario
+  el comando exacto para que lo ejecute él y te pegue el resultado.
+- Solo con permiso **expreso y puntual** del propietario puedes conectarte a
+  **UN SOLO equipo** para **UNA prueba concreta**. Ese permiso no vale para
+  otras pruebas, otros equipos ni otras sesiones.
+- Leer los logs que el propietario genera en este equipo (p. ej.
+  `~/.local/state/IAC-IESMHP/*.log`) sí está permitido: es solo lectura local.
+
 ---
 
 ## 🖥️❌ Requisito principal: TODO debe funcionar SIN MONITOR (headless)

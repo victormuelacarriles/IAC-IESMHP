@@ -15,12 +15,23 @@
 #
 # strategy: free → cada alumno avanza a su ritmo (sin esperar a los demás en
 # cada tarea) y su tiempo es real. Al final (también si falla) saca una línea
-# "TIEMPO|alumno|<equipo>|<segundos>|OK/ERROR" que resume VirtualW11.sh.
+# "TIEMPO|alumno|<equipo>|<segundos>|OK/ERROR/SIN_RESPUESTA" que resume
+# VirtualW11.sh.
+#
+# serial (VirtualW11_serie, 0 = todos): alumnos por tanda. VirtualW11.sh lo
+# iguala a --forks-alumno: con 1, de uno en uno DE VERDAD (solo forks no basta:
+# con strategy free todos los alumnos avanzan a la vez, una tarea cada vez).
+# Con serial, si fallan todos los de una tanda Ansible PARA el playbook (los
+# siguientes se quedarían sin hacer): por eso un equipo sin respuesta se salta
+# (ping + end_host) y un fallo del rol se recoge (rescue) y se anota; el
+# segundo play marca al final como fallidos a esos alumnos.
 
-- hosts: all
+- name: VirtualW11 (por alumno)
+  hosts: all
   become: no
   gather_facts: no
   strategy: free
+  serial: "{{ VirtualW11_serie | default(0) }}"
 
   tasks:
     - name: Inicio
@@ -28,14 +39,50 @@
         VirtualW11_t0: "{{ now().timestamp() | int }}"
       tags: [always]
 
+    - name: ¿Responde el equipo?
+      ansible.builtin.ping:
+      ignore_unreachable: true
+      register: VirtualW11_ping
+      tags: [always]
+
+    - name: Equipo sin respuesta (se salta)
+      when: VirtualW11_ping.unreachable | default(false)
+      tags: [always]
+      block:
+        - name: Equipo sin respuesta
+          ansible.builtin.debug:
+            msg: >-
+              TIEMPO|alumno|{{ inventory_hostname }}|{{ now().timestamp() | int - VirtualW11_t0 | int }}|SIN_RESPUESTA
+              {{ VirtualW11_ping.msg | default('') }}
+        - name: Anotar el fallo
+          ansible.builtin.set_fact:
+            VirtualW11_fallo: "no responde por SSH: {{ VirtualW11_ping.msg | default('') }}"
+        - name: Saltar este alumno
+          ansible.builtin.meta: end_host
+
     - name: VirtualW11
       tags: [always]
       block:
         - name: Rol VirtualW11
           ansible.builtin.include_role:
             name: "{{ playbook_dir }}"   # esta misma carpeta es el rol
+      rescue:
+        - name: Anotar el fallo (se sigue con los demás alumnos)
+          ansible.builtin.set_fact:
+            VirtualW11_fallo: "{{ ansible_failed_task.name | default('?') }}: {{ ansible_failed_result.msg | default('') }}"
       always:
         - name: Tiempo
           ansible.builtin.debug:
             msg: >-
-              TIEMPO|alumno|{{ inventory_hostname }}|{{ now().timestamp() | int - VirtualW11_t0 | int }}|{{ 'ERROR' if ansible_failed_task is defined else 'OK' }}
+              TIEMPO|alumno|{{ inventory_hostname }}|{{ now().timestamp() | int - VirtualW11_t0 | int }}|{{ 'ERROR' if VirtualW11_fallo is defined else 'OK' }}
+
+- name: VirtualW11 (resultado)
+  hosts: all
+  become: no
+  gather_facts: no
+  tasks:
+    - name: Alumnos con fallo
+      ansible.builtin.fail:
+        msg: "{{ VirtualW11_fallo }}"
+      when: VirtualW11_fallo is defined
+      tags: [always]
