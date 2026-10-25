@@ -36,6 +36,13 @@
 #             --bridge  red del aula (bridged): IP fija = IP del equipo físico + 30
 #                       (10.0.32.138 → 10.0.32.168). Equivale a -e VirtualW11_red=bridged.
 #   bash VirtualW11.sh SMRD --forks-cache 3 --forks-alumno 10
+#   bash VirtualW11.sh SMRD AOD --BORRAR -l SMRD-04-SMRV24   # BORRA máquina + accesos
+#
+#   --BORRAR   deshace todo para los alumnos elegidos (mismos filtros: aula,
+#              módulo, -l): apaga y BORRA ~/vmware/Win11-<usuario>, la quita de
+#              VMware y borra su lanzador de Remmina y su marcador de Archivos.
+#              No hace la parte 1. Antes enseña la lista y pide escribir BORRAR
+#              (--si: sin preguntar, para usarlo desde otro script).
 #   bash VirtualW11.sh SMRD --bridge -l SMRD-04-SMRV24   # ese alumno, en modo bridge
 #
 # Cambiar de modo en una máquina ya creada funciona igual (se cambia antes de
@@ -55,12 +62,14 @@ AULADIR="$(cd "$DIR/../../.." && pwd)"      # ansible/      (inventarios de aula
 
 CACHE=1; ALUMNO=1; ALUMNOS=""; AULA=""; ARGS=(); LIMITE=""; MODULOS=(); SUELTOS=()
 FORKS_CACHE="${FORKS_CACHE:-5}"; FORKS_ALUMNO="${FORKS_ALUMNO:-5}"
-CLAVES="$DIR/.clavesalumnos"; CLAVES_DADO=0
+CLAVES="$DIR/.clavesalumnos"; CLAVES_DADO=0; BORRAR=0; SIN_PREGUNTAR=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        -h|--help|--ayuda|-\?) sed -n '2,48p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help|--ayuda|-\?) sed -n '2,55p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --sin-cache)  CACHE=0 ;;
+        --BORRAR|--borrar) BORRAR=1 ;;
+        --si)         SIN_PREGUNTAR=1 ;;
         --solo-cache) ALUMNO=0 ;;
         --nat)        ARGS+=(-e VirtualW11_red=nat) ;;
         --bridge|--bridged) ARGS+=(-e VirtualW11_red=bridged) ;;
@@ -139,6 +148,7 @@ fi
 [ -n "$LIMITE" ] && ARGS+=(-l "$LIMITE")
 
 # Fichero de claves: se lee en ESTE equipo (el que lanza Ansible).
+[ "$BORRAR" = 1 ] && CLAVES=""
 if [ -n "$CLAVES" ]; then
     if [ -f "$CLAVES" ]; then
         CLAVES="$(realpath "$CLAVES")"
@@ -149,6 +159,28 @@ if [ -n "$CLAVES" ]; then
     else
         echo "Claves de los alumnos: no hay $CLAVES → contraseña inicial usuario@1"
     fi
+fi
+
+# --BORRAR: sin parte 1, lista de afectados y confirmación (herramienta manual:
+# es la única pregunta del script; con --si no pregunta).
+if [ "$BORRAR" = 1 ]; then
+    CACHE=0
+    if [ -n "$ALUMNOS" ]; then
+        LISTA=$(equipos "${LIMITE:-all}" | tr , '\n')
+        [ -n "$LISTA" ] || { echo "[ERR] Ningún alumno coincide con la selección" >&2; exit 1; }
+        echo "Se va a BORRAR la máquina Win11 (y su lanzador de Remmina y su marcador de Archivos) de $(wc -l <<<"$LISTA") alumnos de $ALUMNOS:"
+        sed 's/^/    /' <<<"$LISTA"
+    else
+        echo "Se va a BORRAR ~/vmware/Win11-$(id -un) de $(id -un) en este equipo (y su lanzador de Remmina y su marcador de Archivos)."
+    fi
+    if [ "$SIN_PREGUNTAR" != 1 ]; then
+        if [ ! -t 0 ] && [ ! -r /dev/tty ]; then
+            echo "[ERR] Sin terminal para confirmar: usa --si para borrar sin preguntar" >&2; exit 1
+        fi
+        read -r -p "Se perderá todo lo que haya dentro. Escribe BORRAR para confirmar: " RESP </dev/tty
+        [ "$RESP" = "BORRAR" ] || { echo "Cancelado: no se ha borrado nada."; exit 1; }
+    fi
+    ARGS+=(-e VirtualW11_borrar=true)
 fi
 
 for n in "$FORKS_CACHE" "$FORKS_ALUMNO"; do
@@ -222,7 +254,7 @@ fi
 # --------------------------------------------------------- 2. alumno (rol)
 if [ "$ALUMNO" = 1 ]; then
     if [ -n "$ALUMNOS" ]; then INV=(-i "$ALUMNOS"); else INV=(-i localhost, --connection=local); fi
-    echo "===== $(date '+%F %T') VirtualW11 parte 2 (alumno) ${INV[*]} --forks $FORKS_ALUMNO ${ARGS[*]}" | tee -a "$LOG"
+    echo "===== $(date '+%F %T') VirtualW11 parte 2 (alumno$([ "$BORRAR" = 1 ] && echo ', BORRAR')) ${INV[*]} --forks $FORKS_ALUMNO ${ARGS[*]}" | tee -a "$LOG"
     t=$(date +%s)
     ansible-playbook "${INV[@]}" --forks "$FORKS_ALUMNO" -e "VirtualW11_serie=$FORKS_ALUMNO" VirtualW11.yaml "${ARGS[@]}" </dev/null 2>&1 | tee -a "$LOG" "$SAL2"
     RC2=$?; T2=$(( $(date +%s) - t ))
@@ -233,7 +265,7 @@ RC=$(( RC2 != 0 ? RC2 : RC1 ))
     echo ""
     echo "===== TIEMPOS"
     if [ -s "$SAL1" ]; then tiempos "$SAL1" "Parte 1 — sincronización NAS → caché, por equipo (total parte: $(mmss $T1))"; fi
-    if [ -s "$SAL2" ]; then tiempos "$SAL2" "Parte 2 — configuración de Win11, por usuario (total parte: $(mmss $T2))"; fi
+    if [ -s "$SAL2" ]; then tiempos "$SAL2" "Parte 2 — $([ "$BORRAR" = 1 ] && echo borrado || echo configuración) de Win11, por usuario (total parte: $(mmss $T2))"; fi
     echo "  TOTAL GENERAL: $(mmss $(( $(date +%s) - T0 )))"
     echo "===== fin (caché: código $RC1, alumno: código $RC2). Log: $LOG"
 } | tee -a "$LOG"

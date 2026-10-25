@@ -13,6 +13,8 @@ IABDxx  10.6.XX.0/24	10.6.1.0/24	10.6.50.0/24
 
 Para la red Nat, el direccioniento dhcp ira de 
 172.16.179.151 a 172.16.179.254
+Todos los alumnos tienen que tener el mismo redireccionamiento nat
+
 
 Se definirán los siguientes reenvios de puertos 
 de los usuarios asignados a la máquina

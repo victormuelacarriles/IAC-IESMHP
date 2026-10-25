@@ -66,6 +66,8 @@
         - name: Rol VirtualW11
           ansible.builtin.include_role:
             name: "{{ playbook_dir }}"   # esta misma carpeta es el rol
+            # VirtualW11.sh --BORRAR → tasks/borrar.yml (deshace todo).
+            tasks_from: "{{ 'borrar' if (VirtualW11_borrar | default(false) | bool) else 'main' }}"
       rescue:
         - name: Anotar el fallo (se sigue con los demás alumnos)
           ansible.builtin.set_fact:

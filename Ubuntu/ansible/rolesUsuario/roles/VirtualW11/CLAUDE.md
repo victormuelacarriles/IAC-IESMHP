@@ -335,6 +335,18 @@ bash VirtualW11.sh SMRD --nat                           # red NAT (por defecto)
 bash VirtualW11.sh --help
 ```
 
+- **Borrar (`--BORRAR`, 2026-10-25):** deshace todo para los alumnos elegidos
+  con los **mismos filtros** (aula, módulo, `-l`): `tasks/borrar.yml` →
+  `files/borrar.sh`, como cada alumno: apaga la máquina (soft y, si no, hard;
+  si no se apaga, no borra), la quita de `~/.vmware/inventory.vmls` (solo sus
+  `vmlistN`), **borra** `~/vmware/Win11-<usuario>` (y `.copiando`), el perfil
+  de Remmina `Win11-<usuario>`, el marcador `W11-<usuario>` de Archivos, la
+  clave de host de su IP en `known_hosts` y `~/.cache/IAC-IESMHP/VirtualW11`.
+  Solo acepta nombres simples (nada de rutas). No hace la parte 1. Antes
+  enseña la lista de alumnos y pide escribir `BORRAR` (lee de `/dev/tty`: es
+  una herramienta manual); cualquier otra respuesta, o sin terminal, cancela.
+  `--si` borra sin preguntar. Ejemplo:
+  `bash VirtualW11.sh SMRD AOD --BORRAR -l SMRD-04-SMRV24`.
 - **Claves de los alumnos:** `--claves F` (por defecto `.clavesalumnos` junto
   al script, si existe; `--sin-claves` para no usarlo). Formato: una línea
   `USUARIO,clave` por alumno, `#` = comentario; el usuario no distingue

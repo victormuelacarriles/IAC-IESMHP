@@ -1,0 +1,33 @@
+---
+# VirtualW11 — BORRAR (VirtualW11.sh --BORRAR, o tasks_from: borrar): deshace lo
+# que hace el rol para el alumno: apaga y borra su máquina ~/vmware/Win11-<usuario>,
+# la quita de VMware y borra su lanzador de Remmina y su marcador de Archivos.
+# La confirmación la pide VirtualW11.sh antes de lanzar Ansible.
+
+- name: Usuario y máquina a borrar en {{ inventory_hostname }}
+  ansible.builtin.set_fact:
+    VirtualW11_login: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+    VirtualW11_id: "{{ (ansible_user | default(lookup('env', 'USER'))).split('@')[0] }}"
+    VirtualW11_nombre: "{{ VirtualW11_prefijo }}-{{ (ansible_user | default(lookup('env', 'USER'))).split('@')[0] }}"
+  tags: [VirtualW11]
+
+- name: No se borra nada en el perfil de root
+  ansible.builtin.fail:
+    msg: "Se ha entrado como root: el inventario tiene que llevar ansible_user=<alumno> en cada equipo"
+  when: VirtualW11_login == 'root'
+  tags: [VirtualW11]
+
+- name: Borrar {{ VirtualW11_nombre }}, su lanzador de Remmina y su marcador de Archivos
+  ansible.builtin.script:
+    cmd: >-
+      borrar.sh {{ VirtualW11_carpeta | quote }} {{ VirtualW11_nombre | quote }}
+      {{ VirtualW11_marcador_nombre | quote }}
+  register: VirtualW11_borrado
+  changed_when: VirtualW11_borrado.stdout is search('BORRADA|borrado|quitad|apagada')
+  failed_when: VirtualW11_borrado.rc != 0
+  tags: [VirtualW11]
+
+- name: Resultado del borrado de {{ VirtualW11_nombre }}
+  ansible.builtin.debug:
+    msg: "{{ VirtualW11_borrado.stdout_lines }}"
+  tags: [VirtualW11]
