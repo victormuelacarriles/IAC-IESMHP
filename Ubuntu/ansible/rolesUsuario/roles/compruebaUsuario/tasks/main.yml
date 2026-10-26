@@ -35,11 +35,23 @@
   changed_when: false
   tags: [compruebaUsuario]
 
+# stderr con default: alguna vez (2026-10-26, prueba local) el resultado llegó
+# sin stderr y el set_fact rompía. sshpass con contraseña mala sale con rc=5 y
+# sin mensaje: es NO ACCEDE, no APAGADO.
 - name: Resultado
   ansible.builtin.set_fact:
+    compruebaUsuario_login: >-
+      {{ compruebaUsuario_login | combine({
+           'rc': compruebaUsuario_login.rc | default(-1),
+           'stderr': compruebaUsuario_login.stderr | default(compruebaUsuario_login.msg | default('')) | string
+                     ~ (' (sshpass: contraseña incorrecta)' if compruebaUsuario_password | length > 0
+                        and (compruebaUsuario_login.rc | default(-1)) == 5 else '') }) }}
     compruebaUsuario_estado: >-
-      {%- if compruebaUsuario_login.rc == 0 -%}OK
-      {%- elif compruebaUsuario_login.stderr is search('Permission denied|Too many authentication|Authentication failed') -%}NO ACCEDE
+      {%- set rc = compruebaUsuario_login.rc | default(-1) -%}
+      {%- set err = compruebaUsuario_login.stderr | default(compruebaUsuario_login.msg | default('')) | string -%}
+      {%- if rc == 0 -%}OK
+      {%- elif err is search('Permission denied|Too many authentication|Authentication failed')
+               or (compruebaUsuario_password | length > 0 and rc == 5) -%}NO ACCEDE
       {%- else -%}APAGADO
       {%- endif -%}
   tags: [compruebaUsuario]

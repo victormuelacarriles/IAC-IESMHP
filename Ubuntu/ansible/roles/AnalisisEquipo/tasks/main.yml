@@ -1,0 +1,139 @@
+# AnalisisEquipo — análisis de hardware de cada equipo, COMO ROOT.
+# Copia files/analiza.sh al equipo, lo ejecuta en segundo plano (async: puede
+# tardar más de media hora con el estrés) y se trae su resumen.
+# Saca "AnalisisEquipo|..." con las líneas TIEMPOPASO/DATOS/GLOBAL que resume
+# AnalisisEquipo.sh.
+
+- name: ¿Soy root?
+  ansible.builtin.command: id -u
+  register: AnalisisEquipo_uid
+  changed_when: false
+  tags: [AnalisisEquipo]
+
+- name: Hay que entrar como root
+  ansible.builtin.fail:
+    msg: "En {{ inventory_hostname }} no se es root (uid {{ AnalisisEquipo_uid.stdout }}): inventario con ansible_user=root o, en local, sudo bash AnalisisEquipo.sh"
+  when:
+    - AnalisisEquipo_uid.stdout != '0'
+    - not (AnalisisEquipo_sin_root | bool)
+  tags: [AnalisisEquipo]
+
+# --------------------------------------------------------------------- paquetes
+- name: ¿Hay GPU NVIDIA?
+  ansible.builtin.shell: lspci 2>/dev/null | grep -qi nvidia && echo SI || echo NO
+  register: AnalisisEquipo_nvidia
+  changed_when: false
+  tags: [AnalisisEquipo]
+
+- name: Paquetes de medida
+  when:
+    - AnalisisEquipo_instalar | bool
+    - AnalisisEquipo_uid.stdout == '0'
+  tags: [AnalisisEquipo]
+  block:
+    - name: Instalar herramientas de medida
+      ansible.builtin.apt:
+        name: "{{ AnalisisEquipo_paquetes }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+        lock_timeout: 600
+      register: AnalisisEquipo_apt
+      failed_when: false
+
+    - name: Instalar herramientas de GPU (OpenCL)
+      ansible.builtin.apt:
+        name: "{{ AnalisisEquipo_paquetes_gpu }}"
+        state: present
+        lock_timeout: 600
+      register: AnalisisEquipo_aptgpu
+      failed_when: false
+      when: "'SI' in AnalisisEquipo_nvidia.stdout"
+
+    - name: No se pudo instalar todo (se sigue y lo que falte sale como no medido)
+      ansible.builtin.debug:
+        msg: "{{ item.msg | default('') | truncate(300) }}"
+      loop: "{{ [AnalisisEquipo_apt, AnalisisEquipo_aptgpu | default({})] | selectattr('failed', 'defined') | selectattr('failed') | list }}"
+      loop_control:
+        label: apt
+
+# ------------------------------------------------------------------- análisis
+- name: Carpeta del script
+  ansible.builtin.file:
+    path: "{{ AnalisisEquipo_script | dirname }}"
+    state: directory
+    mode: "0755"
+  tags: [AnalisisEquipo]
+
+- name: Copiar analiza.sh
+  ansible.builtin.copy:
+    src: analiza.sh
+    dest: "{{ AnalisisEquipo_script }}"
+    mode: "0755"
+  tags: [AnalisisEquipo]
+
+- name: Tiempo máximo del análisis
+  ansible.builtin.set_fact:
+    AnalisisEquipo_timeout_s: >-
+      {{ 1500
+         + (AnalisisEquipo_estres_min | int) * 60
+         + ((AnalisisEquipo_memtester_max | int) * 60 if AnalisisEquipo_memtester_pct | int > 0 else 0)
+         + (AnalisisEquipo_gpu_min | int) * 60 }}
+  tags: [AnalisisEquipo]
+
+- name: Aviso (no saldrá nada hasta que acabe)
+  ansible.builtin.debug:
+    msg: >-
+      Analizando {{ inventory_hostname }}: hasta ~{{ (AnalisisEquipo_timeout_s | int / 60) | int }} min como mucho.
+      Para seguirlo por SSH: tail -f /var/log/IAC-IESMHP/AnalisisEquipo/analisis-*.log
+  tags: [AnalisisEquipo]
+
+- name: Análisis (puede tardar)
+  ansible.builtin.shell: >-
+    bash {{ AnalisisEquipo_script | quote }}
+    --equipo {{ inventory_hostname | quote }}
+    --pasos {{ AnalisisEquipo_pasos | quote }}
+    {{ '' if AnalisisEquipo_pruebas | bool else '--sin-pruebas' }}
+    --estres-min {{ AnalisisEquipo_estres_min | int }}
+    --memtester-pct {{ AnalisisEquipo_memtester_pct | int }}
+    --memtester-max {{ AnalisisEquipo_memtester_max | int }}
+    --gpu-min {{ AnalisisEquipo_gpu_min | int }}
+    --disco-gb {{ AnalisisEquipo_disco_gb | int }}
+    --dirs {{ AnalisisEquipo_dirs | quote }}
+    --temp-max {{ AnalisisEquipo_temp_max | int }}
+    {{ '--forzar' if AnalisisEquipo_forzar | bool else '' }}
+    </dev/null
+  environment:
+    ANALISIS_SIN_ROOT: "{{ '1' if AnalisisEquipo_sin_root | bool else '0' }}"
+    ANALISIS_DIR_SAL: "{{ '/var/log/IAC-IESMHP/AnalisisEquipo' if AnalisisEquipo_uid.stdout == '0' else lookup('env', 'HOME') ~ '/.local/state/IAC-IESMHP/AnalisisEquipo-equipo' }}"
+  async: "{{ AnalisisEquipo_timeout_s | int }}"
+  poll: 30
+  register: AnalisisEquipo_res
+  changed_when: false
+  # 0 OK · 1 avisos · 2 errores de hardware: se informa, no es un fallo de Ansible.
+  failed_when: AnalisisEquipo_res.rc is not defined or AnalisisEquipo_res.rc not in [0, 1, 2]
+  tags: [AnalisisEquipo]
+
+- name: Resumen
+  ansible.builtin.debug:
+    msg: "{{ AnalisisEquipo_res.stdout_lines | reject('match', '^(TIEMPOPASO|DATOS|GLOBAL|FICHERO)\\|') | list }}"
+  tags: [AnalisisEquipo]
+
+- name: Datos para el lanzador
+  ansible.builtin.debug:
+    msg: "{{ AnalisisEquipo_res.stdout_lines | select('match', '^(TIEMPOPASO|DATOS|GLOBAL)\\|') | list }}"
+  tags: [AnalisisEquipo]
+
+- name: Estado del análisis
+  ansible.builtin.set_fact:
+    AnalisisEquipo_estado: "{{ (AnalisisEquipo_res.stdout | regex_search('GLOBAL\\|[^|]*\\|[0-9]+\\|([A-Z_]+)', '\\1') or ['?']) | first }}"
+    AnalisisEquipo_fichero: "{{ (AnalisisEquipo_res.stdout | regex_search('FICHERO\\|(\\S+)', '\\1') or ['']) | first }}"
+  tags: [AnalisisEquipo]
+
+- name: Traer el resumen al equipo que lanza
+  ansible.builtin.fetch:
+    src: "{{ AnalisisEquipo_fichero }}"
+    dest: "{{ AnalisisEquipo_destino }}/{{ inventory_hostname }}/"
+    flat: true
+  when: AnalisisEquipo_fichero | length > 0
+  tags: [AnalisisEquipo]

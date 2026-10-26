@@ -1,0 +1,56 @@
+---
+# Playbook independiente del rol compruebaUsuario (no depende de rolesUsuario.yaml).
+# Comprueba, alumno a alumno, si su usuario entra por SSH en su equipo. No
+# cambia nada. Lo más cómodo es lanzarlo con compruebaUsuario.sh (misma carpeta).
+#
+# Desde esta carpeta:
+#   ansible-playbook -i localhost, --connection=local compruebaUsuario.yaml     # local, el usuario actual
+#   ansible-playbook -i ../../EquiposSMRD-alumnos2627.ini compruebaUsuario.yaml -l AOD
+#   ... -e compruebaUsuario_timeout=10
+#
+# Sin ping previo (a diferencia de VirtualW11/AODappsflatpack): el rol no usa
+# la conexión de Ansible, lanza él el ssh desde el controlador, así que un
+# equipo apagado no da UNREACHABLE.
+#
+# Un fallo del rol (su "fail" final: NO ACCEDE / APAGADO) se recoge (rescue)
+# para que el segundo play saque, por alumno, una línea
+#   COMPRUEBA|<alumno>|<ip>|<usuario>|<estado>|<motivo>
+# (la resume compruebaUsuario.sh) y marque como fallidos a los que no son OK.
+
+- name: compruebaUsuario (por alumno)
+  hosts: all
+  become: no
+  gather_facts: no
+
+  tasks:
+    - name: compruebaUsuario
+      tags: [always]
+      block:
+        - name: Rol compruebaUsuario
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir }}"   # esta misma carpeta es el rol
+      rescue:
+        - name: Anotar el fallo (se sigue con los demás alumnos)
+          ansible.builtin.set_fact:
+            compruebaUsuario_fallo: "{{ ansible_failed_result.msg | default('?') }}"
+
+- name: compruebaUsuario (resultado)
+  hosts: all
+  become: no
+  gather_facts: no
+  tasks:
+    - name: Resultado por alumno
+      ansible.builtin.debug:
+        msg: >-
+          COMPRUEBA|{{ inventory_hostname }}|{{ compruebaUsuario_ip | default(ansible_host | default(inventory_hostname)) }}|{{
+          compruebaUsuario_usuario | default(ansible_user | default('?')) }}|{{
+          compruebaUsuario_estado | default('ERROR') }}|{{
+          (compruebaUsuario_login.stderr | default(compruebaUsuario_fallo | default('')))
+          | trim | regex_replace('\s+', ' ') | replace('|', '/') }}
+      tags: [always]
+
+    - name: Alumnos con fallo
+      ansible.builtin.fail:
+        msg: "{{ compruebaUsuario_fallo }}"
+      when: compruebaUsuario_fallo is defined
+      tags: [always]

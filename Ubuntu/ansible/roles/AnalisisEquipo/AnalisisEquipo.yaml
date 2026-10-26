@@ -1,0 +1,77 @@
+---
+# Playbook independiente del rol AnalisisEquipo (no está en roles.yaml).
+# Analiza el hardware de cada equipo COMO ROOT: memoria, discos, CPU, GPU
+# NVIDIA, estrés largo y errores del kernel; mide tiempos y deja un resumen por
+# equipo. Lo más cómodo es lanzarlo con AnalisisEquipo.sh (misma carpeta).
+#
+# Desde esta carpeta:
+#   ansible-playbook -i ../../equiposSMRD.ini AnalisisEquipo.yaml -l SMRD-05
+#   sudo ansible-playbook -i localhost, --connection=local AnalisisEquipo.yaml
+#   ... -e AnalisisEquipo_estres_min=0 -e AnalisisEquipo_memtester_pct=0   → sin estrés
+#
+# become: yes — los inventarios de aula ya entran como root (ansible_user=root).
+#
+# strategy: free → cada equipo avanza a su ritmo y su tiempo es real. Al final
+# (también si falla) saca "TIEMPO|equipo|<equipo>|<segundos>|<estado>". Un
+# equipo sin respuesta se salta (ping + end_host) y un fallo se recoge (rescue)
+# para seguir con los demás; el segundo play los marca como fallidos.
+
+- name: AnalisisEquipo (por equipo)
+  hosts: all
+  become: yes
+  gather_facts: no
+  strategy: free
+
+  tasks:
+    - name: Inicio
+      ansible.builtin.set_fact:
+        AnalisisEquipo_t0: "{{ now().timestamp() | int }}"
+      tags: [always]
+
+    - name: ¿Responde el equipo?
+      ansible.builtin.ping:
+      ignore_unreachable: true
+      register: AnalisisEquipo_ping
+      tags: [always]
+
+    - name: Equipo sin respuesta (se salta)
+      when: AnalisisEquipo_ping.unreachable | default(false)
+      tags: [always]
+      block:
+        - name: Equipo sin respuesta
+          ansible.builtin.debug:
+            msg: >-
+              TIEMPO|equipo|{{ inventory_hostname }}|{{ now().timestamp() | int - AnalisisEquipo_t0 | int }}|SIN_RESPUESTA
+              {{ AnalisisEquipo_ping.msg | default('') }}
+        - name: Anotar el fallo
+          ansible.builtin.set_fact:
+            AnalisisEquipo_fallo: "no responde por SSH: {{ AnalisisEquipo_ping.msg | default('') }}"
+        - name: Saltar este equipo
+          ansible.builtin.meta: end_host
+
+    - name: AnalisisEquipo
+      tags: [always]
+      block:
+        - name: Rol AnalisisEquipo
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir }}"   # esta misma carpeta es el rol
+      rescue:
+        - name: Anotar el fallo (se sigue con los demás equipos)
+          ansible.builtin.set_fact:
+            AnalisisEquipo_fallo: "{{ ansible_failed_task.name | default('?') }}: {{ ansible_failed_result.msg | default(ansible_failed_result.stderr | default('')) | truncate(300) }}"
+      always:
+        - name: Tiempo
+          ansible.builtin.debug:
+            msg: >-
+              TIEMPO|equipo|{{ inventory_hostname }}|{{ now().timestamp() | int - AnalisisEquipo_t0 | int }}|{{ 'FALLO_ANALISIS' if AnalisisEquipo_fallo is defined else AnalisisEquipo_estado | default('?') }}
+
+- name: AnalisisEquipo (resultado)
+  hosts: all
+  become: no
+  gather_facts: no
+  tasks:
+    - name: Equipos que no se pudieron analizar
+      ansible.builtin.fail:
+        msg: "{{ AnalisisEquipo_fallo }}"
+      when: AnalisisEquipo_fallo is defined
+      tags: [always]

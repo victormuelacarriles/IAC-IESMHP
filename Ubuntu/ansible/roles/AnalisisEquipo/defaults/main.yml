@@ -1,0 +1,56 @@
+# ------------------------------------------------------------------ qué se hace
+# Pasos de files/analiza.sh, separados por comas. AnalisisEquipo.sh --pasos lo cambia.
+AnalisisEquipo_pasos: "sistema,cpu,memoria,discos,gpu,estres,kernel"
+
+# false = solo datos y salud (sin sysbench, fio, clpeak ni estrés). --sin-pruebas
+AnalisisEquipo_pruebas: true
+
+# ------------------------------------------------------------------ estrés
+# Minutos de stress-ng (todos los hilos de CPU + 40 % de la RAM disponible con
+# verificación). 0 = no.
+AnalisisEquipo_estres_min: 10
+# % de la RAM disponible que prueba memtester (1 pasada). 0 = no.
+AnalisisEquipo_memtester_pct: 25
+# Minutos máximos de memtester (si no acaba, AVISO "incompleto").
+AnalisisEquipo_memtester_max: 30
+# Minutos de estrés de la GPU NVIDIA (gpu_burn si está, si no clpeak en bucle). 0 = no.
+AnalisisEquipo_gpu_min: 5
+# °C de CPU a los que se corta el estrés (ERROR de refrigeración).
+AnalisisEquipo_temp_max: 95
+# true = estrés aunque haya alumnos/usuarios con sesión abierta (por defecto se salta).
+AnalisisEquipo_forzar: false
+
+# ------------------------------------------------------------------ discos
+# GB del fichero de prueba de escritura (se borra al acabar).
+AnalisisEquipo_disco_gb: 2
+# Dónde se prueba la escritura: una vez por disco/pool (/ ext4, /home rpool, /datos tank).
+AnalisisEquipo_dirs: "/ /home /datos"
+
+# ------------------------------------------------------------------ paquetes
+# true = instala con apt lo que falte para medir (si no se puede, se sigue y
+# lo que falte sale como "no medido").
+AnalisisEquipo_instalar: true
+AnalisisEquipo_paquetes:
+  - smartmontools   # SMART de SATA y NVMe
+  - sysbench        # CPU y memoria
+  - fio             # discos
+  - stress-ng       # estrés CPU+RAM
+  - memtester       # RAM
+  - lm-sensors      # temperaturas (sensors)
+  - dmidecode       # módulos de RAM
+  - pciutils        # lspci
+  - mokutil         # estado de Secure Boot
+# Solo si hay GPU NVIDIA (OpenCL; el ICD de NVIDIA viene con el driver).
+AnalisisEquipo_paquetes_gpu:
+  - clpeak
+  - clinfo
+
+# ------------------------------------------------------------------ resultados
+# Carpeta del equipo que lanza donde se traen los resúmenes (una subcarpeta por
+# equipo). AnalisisEquipo.sh la fija; esto es para el playbook a pelo.
+AnalisisEquipo_destino: "{{ lookup('env', 'HOME') }}/.local/state/IAC-IESMHP/AnalisisEquipo"
+# Dónde copia el script en el equipo.
+AnalisisEquipo_script: /var/tmp/IAC-IESMHP/analiza.sh
+
+# Solo para probar el rol sin root en local (analiza.sh se salta lo que necesita root).
+AnalisisEquipo_sin_root: false
