@@ -27,7 +27,7 @@
 #                       también en máquinas ya creadas, y no se pone el acceso
 #                       directo para cambiarla. --sin-claves: no usarlo.
 #             --forks-cache N   equipos a la vez en la parte 1 (5 por defecto)
-#             --forks-alumno N  alumnos a la vez en la parte 2 (5 por defecto), por
+#             --forks-alumno N  alumnos a la vez en la parte 2 (50 por defecto), por
 #                       tandas de N (con 1, de uno en uno)
 #             (también con las variables FORKS_CACHE=N / FORKS_ALUMNO=N)
 #             --nat     red NAT de VMware (POR DEFECTO): IP fija <subred vmnet8>.(100+N)
@@ -52,21 +52,25 @@
 # El -l (nombres del inventario de alumnos) se traduce para la parte 1 a los
 # equipos físicos por su IP. El resto de argumentos van solo a la parte 2.
 # Sin preguntas (headless). Salida en pantalla y en
-# /var/log/IAC-IESMHP/VirtualW11.log (o ~/.local/state/IAC-IESMHP/).
+# /var/log/IAC-IESMHP/VirtualW11.log (o ~/.local/state/IAC-IESMHP/), más un log
+# por equipo/alumno en la carpeta VirtualW11/ de al lado:
+#   VirtualW11-<alumno>.log (parte 2)   VirtualW11-cache-<equipo>.log (parte 1)
+# Todos se van añadiendo, con una cabecera "=====" por ejecución.
 set -o pipefail
 T0=$(date +%s)            # total general: desde aquí hasta el final
+INICIO=$(date '+%d/%m %H:%M')
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INVDIR="$(cd "$DIR/../.." && pwd)"          # rolesUsuario/ (inventarios de alumnos)
 AULADIR="$(cd "$DIR/../../.." && pwd)"      # ansible/      (inventarios de aula)
 
 CACHE=1; ALUMNO=1; ALUMNOS=""; AULA=""; ARGS=(); LIMITE=""; MODULOS=(); SUELTOS=()
-FORKS_CACHE="${FORKS_CACHE:-5}"; FORKS_ALUMNO="${FORKS_ALUMNO:-5}"
+FORKS_CACHE="${FORKS_CACHE:-5}"; FORKS_ALUMNO="${FORKS_ALUMNO:-50}"
 CLAVES="$DIR/.clavesalumnos"; CLAVES_DADO=0; BORRAR=0; SIN_PREGUNTAR=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        -h|--help|--ayuda|-\?) sed -n '2,55p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help|--ayuda|-\?) sed -n '2,58p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --sin-cache)  CACHE=0 ;;
         --BORRAR|--borrar) BORRAR=1 ;;
         --si)         SIN_PREGUNTAR=1 ;;
@@ -192,11 +196,52 @@ LOGDIR=/var/log/IAC-IESMHP
     || LOGDIR="$HOME/.local/state/IAC-IESMHP"
 mkdir -p "$LOGDIR"
 LOG="$LOGDIR/VirtualW11.log"
+LOGEQ="$LOGDIR/VirtualW11"            # un log por equipo/alumno
+mkdir -p "$LOGEQ"
 cd "$DIR" || exit 1
 
 # Salida de cada parte (para el resumen de tiempos del final).
 SAL1=$(mktemp); SAL2=$(mktemp); trap 'rm -f "$SAL1" "$SAL2"' EXIT
 T1=0; T2=0
+
+# Reparte la salida de Ansible de una parte en un log por equipo
+# (<carpeta>/<prefijo><equipo>.log). Cada línea va al equipo que nombra
+# ("ok: [SMRD-04-SMRV24]", "fatal: [...]", "FAILED - RETRYING: [...]", el
+# PLAY RECAP...) con el nombre de la tarea delante; las de continuación
+# (resultado en varias líneas) van al último equipo, y los bloques [ERROR]
+# al siguiente que aparece. Así se lee aunque los equipos vayan a la vez.
+separa_log() {   # separa_log <salida> <prefijo> <cabecera>
+    python3 - "$1" "$LOGEQ" "$2" "$3" <<'PY'
+import re, sys, os
+sal, carpeta, prefijo, cabecera = sys.argv[1:5]
+estado = re.compile(r'^(ok|changed|skipping|failed|fatal|FAILED - RETRYING|unreachable|rescued|ignored): \[([^\]]+)\]')
+recap = re.compile(r'^(\S+)\s+: ok=\d+')
+por_equipo, tarea, actual, pendiente, ya = {}, '', None, [], set()
+def poner(eq, linea):
+    l = por_equipo.setdefault(eq, [])
+    if tarea and (eq, tarea) not in ya:
+        ya.add((eq, tarea)); l.append(''); l.append(tarea)
+    l.extend(pendiente); pendiente.clear()
+    l.append(linea)
+for linea in open(sal, encoding='utf-8', errors='replace').read().splitlines():
+    if linea.startswith(('TASK [', 'PLAY [', 'PLAY RECAP')):
+        tarea = re.sub(r'^TASK \[\S*/VirtualW11 : ', 'TASK [', linea.rstrip('* '))
+        actual = None; pendiente.clear(); continue
+    m = estado.match(linea) or recap.match(linea)
+    if m:
+        actual = m.group(m.lastindex); poner(actual, linea); continue
+    if linea.startswith('[ERROR]') or linea.startswith('[WARNING]'):
+        actual = None
+    if actual is None:
+        if linea.strip(): pendiente.append(linea)
+    elif linea.strip():
+        por_equipo[actual].append(linea)
+for eq, lineas in por_equipo.items():
+    nombre = re.sub(r'[^A-Za-z0-9._-]', '_', eq)
+    with open(os.path.join(carpeta, prefijo + nombre + '.log'), 'a', encoding='utf-8') as f:
+        f.write(cabecera + '\n' + '\n'.join(lineas) + '\n\n')
+PY
+}
 
 mmss() { printf '%d:%02d' $(( $1 / 60 )) $(( $1 % 60 )); }
 
@@ -261,12 +306,16 @@ if [ "$ALUMNO" = 1 ]; then
 fi
 
 RC=$(( RC2 != 0 ? RC2 : RC1 ))
+CAB="===== $INICIO VirtualW11$([ "$BORRAR" = 1 ] && echo ' (BORRAR)')"
+[ -s "$SAL1" ] && separa_log "$SAL1" "VirtualW11-cache-" "$CAB parte 1 (caché)"
+[ -s "$SAL2" ] && separa_log "$SAL2" "VirtualW11-" "$CAB parte 2 (alumno)"
 {
     echo ""
     echo "===== TIEMPOS"
     if [ -s "$SAL1" ]; then tiempos "$SAL1" "Parte 1 — sincronización NAS → caché, por equipo (total parte: $(mmss $T1))"; fi
     if [ -s "$SAL2" ]; then tiempos "$SAL2" "Parte 2 — $([ "$BORRAR" = 1 ] && echo borrado || echo configuración) de Win11, por usuario (total parte: $(mmss $T2))"; fi
-    echo "  TOTAL GENERAL: $(mmss $(( $(date +%s) - T0 )))"
+    echo "  TOTAL GENERAL: $(mmss $(( $(date +%s) - T0 )))   (inicio $INICIO, fin $(date '+%d/%m %H:%M'))"
     echo "===== fin (caché: código $RC1, alumno: código $RC2). Log: $LOG"
+    echo "      Logs por equipo/alumno: $LOGEQ/" 
 } | tee -a "$LOG"
 exit $RC

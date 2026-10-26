@@ -1,0 +1,83 @@
+---
+# Playbook independiente del rol AODappsflatpack (no depende de rolesUsuario.yaml).
+# Instala como Flatpak del usuario la última versión de LibreOffice, OBS,
+# Shotcut y OpenShot y oculta del menú las versiones del sistema.
+# Lo más cómodo es lanzarlo con AODappsflatpack.sh (misma carpeta).
+#
+# Desde esta carpeta:
+#   ansible-playbook -i localhost, --connection=local AODappsflatpack.yaml        # local, como el usuario
+#   ansible-playbook -i ../../EquiposSMRD-alumnos2627.ini AODappsflatpack.yaml -l AOD
+#   ... -e AODappsflatpack_elegidas=libreoffice,obs   → solo esas
+#   ... -e AODappsflatpack_deshacer=true              → las quita y devuelve los lanzadores
+#
+# become: no — se entra como el alumno (ansible_user del inventario).
+#
+# strategy: free → cada alumno avanza a su ritmo y su tiempo es real. Al final
+# (también si falla) saca "TIEMPO|alumno|<equipo>|<segundos>|OK/ERROR/SIN_RESPUESTA"
+# y, por aplicación, "TIEMPOAPP|..." (tasks/app.yml). Los resume AODappsflatpack.sh.
+#
+# serial (AODappsflatpack_serie, 0 = todos): alumnos por tanda; el .sh lo
+# iguala a --forks. Con serial, si fallan todos los de una tanda Ansible para el
+# playbook: por eso un equipo sin respuesta se salta (ping + end_host) y un
+# fallo del rol se recoge (rescue); el segundo play los marca como fallidos.
+
+- name: AODappsflatpack (por alumno)
+  hosts: all
+  become: no
+  gather_facts: no
+  strategy: free
+  serial: "{{ AODappsflatpack_serie | default(0) }}"
+
+  tasks:
+    - name: Inicio
+      ansible.builtin.set_fact:
+        AODappsflatpack_t0: "{{ now().timestamp() | int }}"
+      tags: [always]
+
+    - name: ¿Responde el equipo?
+      ansible.builtin.ping:
+      ignore_unreachable: true
+      register: AODappsflatpack_ping
+      tags: [always]
+
+    - name: Equipo sin respuesta (se salta)
+      when: AODappsflatpack_ping.unreachable | default(false)
+      tags: [always]
+      block:
+        - name: Equipo sin respuesta
+          ansible.builtin.debug:
+            msg: >-
+              TIEMPO|alumno|{{ inventory_hostname }}|{{ now().timestamp() | int - AODappsflatpack_t0 | int }}|SIN_RESPUESTA
+              {{ AODappsflatpack_ping.msg | default('') }}
+        - name: Anotar el fallo
+          ansible.builtin.set_fact:
+            AODappsflatpack_fallo: "no responde por SSH: {{ AODappsflatpack_ping.msg | default('') }}"
+        - name: Saltar este alumno
+          ansible.builtin.meta: end_host
+
+    - name: AODappsflatpack
+      tags: [always]
+      block:
+        - name: Rol AODappsflatpack
+          ansible.builtin.include_role:
+            name: "{{ playbook_dir }}"   # esta misma carpeta es el rol
+      rescue:
+        - name: Anotar el fallo (se sigue con los demás alumnos)
+          ansible.builtin.set_fact:
+            AODappsflatpack_fallo: "{{ ansible_failed_task.name | default('?') }}: {{ ansible_failed_result.msg | default('') }}"
+      always:
+        - name: Tiempo
+          ansible.builtin.debug:
+            msg: >-
+              TIEMPO|alumno|{{ inventory_hostname }}|{{ now().timestamp() | int - AODappsflatpack_t0 | int }}|{{ 'ERROR' if AODappsflatpack_fallo is defined else 'OK' }}
+
+- name: AODappsflatpack (resultado)
+  hosts: all
+  become: no
+  gather_facts: no
+  tasks:
+    - name: Alumnos con fallo
+      ansible.builtin.fail:
+        msg: "{{ AODappsflatpack_fallo }}"
+      when: AODappsflatpack_fallo is defined
+      tags: [always]

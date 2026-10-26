@@ -1,0 +1,137 @@
+---
+# AODappsflatpack — instala (o actualiza) como Flatpak DEL USUARIO la última
+# versión de LibreOffice, OBS Studio, Shotcut y OpenShot, y oculta del menú de
+# ese usuario las versiones instaladas por el sistema.
+#
+# - Se entra como el alumno (ansible_user del inventario de alumnos) o el
+#   usuario actual en local. Nada como root: todo queda en su HOME.
+# - Cada aplicación va por separado (tasks/app.yml): si una falla, se anota y
+#   se sigue con las demás. Solo se ocultan los lanzadores del sistema de las
+#   que se han instalado bien.
+# - Por cada aplicación saca "TIEMPOAPP|<equipo>|<app>|<seg>|<estado>|<versión>"
+#   (lo resume AODappsflatpack.sh).
+
+- name: Usuario en {{ inventory_hostname }}
+  ansible.builtin.set_fact:
+    AODappsflatpack_login: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+    AODappsflatpack_fallos: []
+    AODappsflatpack_ok: []
+    # Aplicaciones elegidas (--apps); vacío = todas.
+    AODappsflatpack_lista: >-
+      {{ AODappsflatpack_apps
+         if (AODappsflatpack_elegidas | trim | length == 0) else
+         AODappsflatpack_apps | selectattr('nombre', 'in', AODappsflatpack_elegidas.split(',') | map('trim') | list) | list }}
+  tags: [AODappsflatpack]
+
+- name: Ninguna aplicación con ese nombre
+  ansible.builtin.fail:
+    msg: >-
+      '{{ AODappsflatpack_elegidas }}' no coincide con ninguna aplicación
+      (hay: {{ AODappsflatpack_apps | map(attribute='nombre') | join(', ') }})
+  when: AODappsflatpack_lista | length == 0
+  tags: [AODappsflatpack]
+
+- name: No se instala en el perfil de root
+  ansible.builtin.fail:
+    msg: "Se ha entrado como root: el inventario tiene que llevar ansible_user=<alumno> en cada equipo"
+  when: AODappsflatpack_login == 'root'
+  tags: [AODappsflatpack]
+
+- name: Tareas como {{ AODappsflatpack_login }}
+  tags: [AODappsflatpack]
+  environment: "{{ {'http_proxy': AODappsflatpack_proxy, 'https_proxy': AODappsflatpack_proxy} if AODappsflatpack_proxy | length > 0 else {} }}"
+  block:
+    # -------------------------------------------------------- comprobaciones
+    - name: ¿Está flatpak instalado y quién soy?
+      ansible.builtin.shell: |
+        command -v flatpak >/dev/null || { echo NOFLATPAK; exit 0; }
+        echo "uid=$(id -u) home=$HOME"
+        df -Pk "$HOME" | awk 'NR==2 {print "libre_kb=" $4}'
+        LC_ALL=C flatpak --version
+      register: AODappsflatpack_pre
+      changed_when: false
+
+    - name: Sin flatpak no se sigue
+      ansible.builtin.fail:
+        msg: "No está flatpak en {{ inventory_hostname }}: aplicar antes el rol de sistema flatpak (Ubuntu/ansible/roles/flatpak, como root)"
+      when: "'NOFLATPAK' in AODappsflatpack_pre.stdout"
+
+    - name: Root nunca
+      ansible.builtin.fail:
+        msg: "El usuario remoto es root (uid 0): el Flatpak tiene que ir al perfil del alumno"
+      when: "'uid=0 ' in AODappsflatpack_pre.stdout"
+
+    - name: Espacio libre en el HOME
+      ansible.builtin.set_fact:
+        AODappsflatpack_libre_gb: "{{ ((AODappsflatpack_pre.stdout | regex_search('libre_kb=([0-9]+)', '\\1') | first | int) / 1048576) | round(1) }}"
+
+    - name: Flatpak y espacio libre
+      ansible.builtin.debug:
+        msg: "{{ AODappsflatpack_pre.stdout_lines[-1] }} · libre en el HOME: {{ AODappsflatpack_libre_gb }} GB"
+
+    - name: Poco espacio en el HOME
+      ansible.builtin.fail:
+        msg: "Solo hay {{ AODappsflatpack_libre_gb }} GB libres en el HOME (mínimo {{ AODappsflatpack_margen_gb }} GB)"
+      when:
+        - not (AODappsflatpack_deshacer | bool)
+        - AODappsflatpack_libre_gb | float < AODappsflatpack_margen_gb | float
+
+    # ------------------------------------------------------------- deshacer
+    - name: Deshacer
+      ansible.builtin.include_tasks: deshacer.yml
+      when: AODappsflatpack_deshacer | bool
+
+    - name: Instalar
+      when: not (AODappsflatpack_deshacer | bool)
+      block:
+        # ------------------------------------------------------- Flathub
+        - name: Remoto {{ AODappsflatpack_remoto }} del usuario
+          ansible.builtin.shell: |
+            if flatpak remotes --user --columns=name | grep -qx '{{ AODappsflatpack_remoto }}'; then
+                echo EXISTE
+            else
+                flatpak remote-add --user --if-not-exists '{{ AODappsflatpack_remoto }}' '{{ AODappsflatpack_url }}' && echo NUEVO
+            fi
+          register: AODappsflatpack_remote
+          changed_when: "'NUEVO' in AODappsflatpack_remote.stdout"
+
+        # ------------------------------------------------- aplicaciones
+        - name: Aplicaciones
+          ansible.builtin.include_tasks: app.yml
+          loop: "{{ AODappsflatpack_lista }}"
+          loop_control:
+            loop_var: app
+            label: "{{ app.nombre }}"
+
+        # ---------------------------------------------------- lanzadores
+        - name: Ocultar los lanzadores del sistema de las instaladas
+          ansible.builtin.script:
+            cmd: >-
+              lanzadores.sh --ocultar
+              {% for a in AODappsflatpack_lista if a.nombre in AODappsflatpack_ok %}
+              '{{ a.id }}|{{ a.nativos | join(",") }}|{{ 1 if a.documentos | default(false) else 0 }}'
+              {% endfor %}
+          register: AODappsflatpack_lanz
+          changed_when: AODappsflatpack_lanz.stdout is search('RESUMEN\|ocultos=[1-9]|mime=cambiado|favoritos=cambiados')
+          when:
+            - AODappsflatpack_ocultar | bool
+            - AODappsflatpack_ok | length > 0
+
+        - name: Lanzadores
+          ansible.builtin.debug:
+            msg: "{{ AODappsflatpack_lanz.stdout_lines | select('search', '\\[(OK|WARN)\\]|RESUMEN') | map('regex_replace', '^\\[[^]]*\\] ', '') | list }}"
+          when: AODappsflatpack_lanz.stdout_lines is defined
+
+        # ---------------------------------------------------- limpieza
+        - name: Borrar runtimes que ya no usa nadie
+          ansible.builtin.shell: LC_ALL=C flatpak uninstall --user --unused -y --noninteractive
+          register: AODappsflatpack_unused
+          changed_when: AODappsflatpack_unused.rc == 0 and AODappsflatpack_unused.stdout is not search('Nothing unused')
+          failed_when: false
+          when: AODappsflatpack_limpiar | bool
+
+    # ------------------------------------------------------------ resultado
+    - name: Aplicaciones con fallo
+      ansible.builtin.fail:
+        msg: "Fallaron: {{ AODappsflatpack_fallos | join('; ') }}"
+      when: AODappsflatpack_fallos | length > 0

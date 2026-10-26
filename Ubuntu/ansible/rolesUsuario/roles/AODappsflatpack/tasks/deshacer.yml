@@ -1,0 +1,58 @@
+---
+# AODappsflatpack.sh --deshacer: desinstala los Flatpak de usuario de las
+# aplicaciones elegidas y vuelve a mostrar los lanzadores del sistema.
+# Los datos y ajustes del alumno (~/.var/app/<ID>) NO se borran.
+# Por cada aplicación: TIEMPOAPP|<equipo>|<app>|<seg>|QUITADA/NO_ESTABA/ERROR|-
+
+- name: Volver a mostrar los lanzadores del sistema
+  ansible.builtin.script:
+    cmd: >-
+      lanzadores.sh --deshacer
+      {% for a in AODappsflatpack_lista %}
+      '{{ a.id }}|{{ a.nativos | join(",") }}|{{ 1 if a.documentos | default(false) else 0 }}'
+      {% endfor %}
+  register: AODappsflatpack_lanz
+  changed_when: AODappsflatpack_lanz.stdout is search('RESUMEN\|ocultos=[1-9]|mime=cambiado|favoritos=cambiados')
+  tags: [AODappsflatpack]
+
+- name: Lanzadores
+  ansible.builtin.debug:
+    msg: "{{ AODappsflatpack_lanz.stdout_lines | select('search', '\\[(OK|WARN)\\]|RESUMEN') | map('regex_replace', '^\\[[^]]*\\] ', '') | list }}"
+  tags: [AODappsflatpack]
+
+- name: Desinstalar los Flatpak del usuario
+  ansible.builtin.shell: |
+    t=$(date +%s)
+    if ! flatpak info --user {{ app.id }} >/dev/null 2>&1; then e=NO_ESTABA
+    elif flatpak uninstall --user -y --noninteractive {{ app.id }}; then e=QUITADA
+    else e=ERROR; fi
+    echo "TIEMPOAPP|{{ inventory_hostname }}|{{ app.nombre }}|$(( $(date +%s) - t ))|$e|-"
+    [ "$e" != ERROR ]
+  loop: "{{ AODappsflatpack_lista }}"
+  loop_control:
+    loop_var: app
+    label: "{{ app.nombre }}"
+  register: AODappsflatpack_quitar
+  changed_when: AODappsflatpack_quitar.stdout is search('\|QUITADA\|')
+  failed_when: false
+  tags: [AODappsflatpack]
+
+- name: Resultado
+  ansible.builtin.debug:
+    msg: "{{ item.stdout_lines | select('match', 'TIEMPOAPP') | first | default('?') }}"
+  loop: "{{ AODappsflatpack_quitar.results }}"
+  loop_control:
+    label: "{{ item.app.nombre }}"
+  tags: [AODappsflatpack]
+
+- name: Anotar los fallos
+  ansible.builtin.set_fact:
+    AODappsflatpack_fallos: "{{ AODappsflatpack_quitar.results | selectattr('rc', 'ne', 0) | map(attribute='app.nombre') | map('regex_replace', '$', ': no se pudo desinstalar') | list }}"
+  tags: [AODappsflatpack]
+
+- name: Borrar runtimes que ya no usa nadie
+  ansible.builtin.shell: LC_ALL=C flatpak uninstall --user --unused -y --noninteractive
+  register: AODappsflatpack_unused
+  changed_when: AODappsflatpack_unused.rc == 0 and AODappsflatpack_unused.stdout is not search('Nothing unused')
+  failed_when: false
+  tags: [AODappsflatpack]

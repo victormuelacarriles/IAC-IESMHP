@@ -66,6 +66,7 @@ Roles actuales:
 |-----|----------|
 | [`compruebaUsuario`](roles/compruebaUsuario/CLAUDE.md) | Entra por SSH como el usuario asignado a cada equipo y dice `OK` / `NO ACCEDE` / `APAGADO`. No cambia nada (2026-10-22) |
 | [`VirtualW11`](roles/VirtualW11/CLAUDE.md) | Copia la VM Windows 11 de plantilla a `~/vmware/Win11-<usuario>`, la añade a VMware Workstation y configura el Windows (administrador, SSH, RDP, IP, nombre, lanzador en Remmina). La plantilla sale de una caché local por equipo (`/datos` o `/home/nasCache`, parte 1 como root) o del NAS. Lanzador `roles/VirtualW11/VirtualW11.sh` (2026-10-22, en construcción) |
+| [`AODappsflatpack`](roles/AODappsflatpack/CLAUDE.md) | Instala/actualiza como Flatpak **del alumno** la última versión de LibreOffice, OBS, Shotcut y OpenShot y le oculta del menú (y del dock) las versiones del sistema; asocia los documentos al LibreOffice Flatpak. Mismo esquema que VirtualW11: playbook propio, lanzador `roles/AODappsflatpack/AODappsflatpack.sh SMRD AOD` (`--apps`, `--forks`, `--deshacer`…), log por alumno y tabla de tiempos por alumno y aplicación (2026-10-26) |
 
 > **2026-10-21**: se eliminó el rol `DockerRootless` (era el único). El Docker
 > rootless de **cada usuario** (local o de dominio) lo configura ya el rol de

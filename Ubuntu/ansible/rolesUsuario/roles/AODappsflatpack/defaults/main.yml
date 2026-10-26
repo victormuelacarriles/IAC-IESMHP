@@ -1,0 +1,76 @@
+---
+# ------------------------------------------------------------------ aplicaciones
+# Aplicaciones que se instalan como Flatpak DEL USUARIO (--user, en
+# ~/.local/share/flatpak). Siempre la última versión de Flathub.
+#   nombre:     el que se usa en --apps de AODappsflatpack.sh
+#   id:         ID de Flathub
+#   nativos:    lanzadores (.desktop) de la versión instalada por el sistema
+#               (.deb en /usr/share/applications o snap en
+#               /var/lib/snapd/desktop/applications) que se ocultan del menú
+#               de ESTE usuario. Patrones concretos: uno amplio ("obs*")
+#               ocultaría otras aplicaciones.
+#   documentos: true = los tipos de documento (MimeType) de sus lanzadores se
+#               abren con el Flatpak. Solo LibreOffice: con Shotcut/OpenShot
+#               los vídeos se abrirían en el editor en vez de en el reproductor.
+AODappsflatpack_apps:
+  - nombre: libreoffice
+    id: org.libreoffice.LibreOffice
+    nativos: ['libreoffice*.desktop']
+    documentos: true
+  - nombre: obs
+    id: com.obsproject.Studio
+    nativos: ['com.obsproject.Studio.desktop', 'obs.desktop', 'obs-studio*.desktop']
+    documentos: false
+  - nombre: shotcut
+    id: org.shotcut.Shotcut
+    nativos: ['org.shotcut.Shotcut.desktop', 'shotcut*.desktop']
+    documentos: false
+  - nombre: openshot
+    id: org.openshot.OpenShot
+    nativos: ['org.openshot.OpenShot.desktop', 'openshot*.desktop']
+    documentos: false
+
+# Solo algunas, por nombre y separadas por comas ("libreoffice,obs").
+# Vacío = todas. AODappsflatpack.sh --apps lo rellena.
+AODappsflatpack_elegidas: ""
+
+# ------------------------------------------------------------------ Flathub
+AODappsflatpack_remoto: flathub
+AODappsflatpack_url: https://dl.flathub.org/repo/flathub.flatpakrepo
+
+# Proxy para flatpak (http://IP:puerto). Vacío = conexión directa (en el aula
+# el HTTPS va directo; el proxy de comun.sh es solo para apt).
+AODappsflatpack_proxy: ""
+
+# ------------------------------------------------------------------ instalación
+# true = si ya está instalada, se actualiza a la última versión.
+AODappsflatpack_actualizar: true
+
+# true = si la aplicación ya está como Flatpak de SISTEMA, se usa esa y no se
+# instala otra copia del usuario.
+AODappsflatpack_usar_sistema: true
+
+# Espacio libre mínimo en el HOME antes de instalar (GB). Cada aplicación
+# con sus runtimes ocupa ~0,5-1 GB la primera vez.
+AODappsflatpack_margen_gb: 5
+
+# Segundos máximos por aplicación (descarga + instalación). Va en segundo
+# plano (async) para que no se corte la conexión SSH.
+AODappsflatpack_timeout: 3600
+
+# true = al final borra los runtimes que ya no usa ninguna aplicación del
+# usuario (quedan versiones viejas al actualizar).
+AODappsflatpack_limpiar: true
+
+# ------------------------------------------------------------------ lanzadores
+# true = oculta del menú de este usuario los lanzadores de la versión del
+# sistema (copia en ~/.local/share/applications con NoDisplay=true), cambia
+# los favoritos del dock a los del Flatpak y asocia los documentos.
+# Solo de las aplicaciones que se han instalado bien.
+AODappsflatpack_ocultar: true
+
+# ------------------------------------------------------------------ deshacer
+# true = tasks/deshacer.yml: desinstala estos Flatpak del usuario y vuelve a
+# mostrar los lanzadores del sistema. Los datos de ~/.var/app se conservan.
+# Solo con -e (AODappsflatpack.sh --deshacer), nunca aquí.
+AODappsflatpack_deshacer: false

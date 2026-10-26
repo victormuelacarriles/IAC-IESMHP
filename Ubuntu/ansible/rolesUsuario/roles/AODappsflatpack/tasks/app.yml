@@ -1,0 +1,114 @@
+---
+# Una aplicación (loop_var: app) de AODappsflatpack_lista: instalar o
+# actualizar el Flatpak del usuario. Un fallo se anota en
+# AODappsflatpack_fallos y se sigue con la siguiente. Al final, siempre:
+#   TIEMPOAPP|<equipo>|<app>|<segundos>|<estado>|<versión>
+# Estados: NUEVA, ACTUALIZADA, AL_DIA, SISTEMA (ya está como Flatpak de
+# sistema y se usa esa), SIN_ACTUALIZAR (AODappsflatpack_actualizar=false), ERROR.
+
+- name: "{{ app.nombre }}: inicio"
+  ansible.builtin.set_fact:
+    AODappsflatpack_t_app: "{{ now().timestamp() | int }}"
+    AODappsflatpack_estado: ""
+    AODappsflatpack_version: ""
+  tags: [AODappsflatpack]
+
+- name: "{{ app.nombre }}"
+  tags: [AODappsflatpack]
+  block:
+    - name: "{{ app.nombre }}: ¿ya instalada?"
+      ansible.builtin.shell: |
+        echo "usuario=$(flatpak info --user --show-commit {{ app.id }} 2>/dev/null)"
+        echo "sistema=$(flatpak info --system --show-commit {{ app.id }} 2>/dev/null)"
+      register: AODappsflatpack_antes
+      changed_when: false
+
+    - name: "{{ app.nombre }}: qué hacer"
+      ansible.builtin.set_fact:
+        AODappsflatpack_c_usuario: "{{ AODappsflatpack_antes.stdout | regex_search('usuario=(\\S*)', '\\1') | first }}"
+        AODappsflatpack_c_sistema: "{{ AODappsflatpack_antes.stdout | regex_search('sistema=(\\S*)', '\\1') | first }}"
+
+    - name: "{{ app.nombre }}: qué hacer"
+      ansible.builtin.set_fact:
+        AODappsflatpack_accion: >-
+          {{ 'sistema' if (AODappsflatpack_c_usuario == '' and AODappsflatpack_c_sistema != '' and AODappsflatpack_usar_sistema | bool)
+             else 'nada' if (AODappsflatpack_c_usuario != '' and not (AODappsflatpack_actualizar | bool))
+             else 'instalar' }}
+
+    - name: "{{ app.nombre }}: aviso"
+      ansible.builtin.debug:
+        msg: >-
+          {{ ('Actualizando ' if AODappsflatpack_c_usuario != '' else 'Instalando ') ~ app.id }}
+          desde Flathub. La primera vez descarga la aplicación y sus runtimes
+          (LibreOffice ~5 min): Ansible no saca nada hasta que termina.
+      when: AODappsflatpack_accion == 'instalar'
+
+    - name: "{{ app.nombre }}: instalar / actualizar {{ app.id }}"
+      when: AODappsflatpack_accion == 'instalar'
+      block:
+        - name: "{{ app.nombre }}: flatpak install --user --or-update {{ app.id }}"
+          ansible.builtin.command: >-
+            flatpak install --user --or-update -y --noninteractive
+            {{ AODappsflatpack_remoto }} {{ app.id }}
+          async: "{{ AODappsflatpack_timeout | int }}"
+          poll: 10
+          changed_when: false        # se decide por el commit, más abajo
+      rescue:
+        # Error típico: "GPG verification enabled, but no summary found" →
+        # se recrea el remoto del usuario y se reintenta una vez.
+        - name: "{{ app.nombre }}: falló; se recrea el remoto {{ AODappsflatpack_remoto }} y se reintenta"
+          ansible.builtin.shell: |
+            flatpak remote-delete --user --force '{{ AODappsflatpack_remoto }}' 2>/dev/null || true
+            flatpak remote-add --user --if-not-exists '{{ AODappsflatpack_remoto }}' '{{ AODappsflatpack_url }}'
+
+        - name: "{{ app.nombre }}: reintento"
+          ansible.builtin.command: >-
+            flatpak install --user --or-update -y --noninteractive
+            {{ AODappsflatpack_remoto }} {{ app.id }}
+          async: "{{ AODappsflatpack_timeout | int }}"
+          poll: 10
+          changed_when: false
+
+    - name: "{{ app.nombre }}: versión"
+      ansible.builtin.shell: |
+        echo "usuario=$(flatpak info --user --show-commit {{ app.id }} 2>/dev/null)"
+        LC_ALL=C flatpak list --app --columns=application,version | awk '$1=="{{ app.id }}" {print "version=" $2; exit}'
+      register: AODappsflatpack_despues
+      changed_when: >-
+        (AODappsflatpack_despues.stdout | regex_search('usuario=(\\S*)', '\\1') | first) != AODappsflatpack_c_usuario
+
+    - name: "{{ app.nombre }}: estado"
+      ansible.builtin.set_fact:
+        AODappsflatpack_version: "{{ AODappsflatpack_despues.stdout | regex_search('version=(\\S*)', '\\1') | default(['?'], true) | first }}"
+        AODappsflatpack_estado: >-
+          {%- set c = AODappsflatpack_despues.stdout | regex_search('usuario=(\\S*)', '\\1') | first -%}
+          {{ 'SISTEMA' if AODappsflatpack_accion == 'sistema'
+             else 'SIN_ACTUALIZAR' if AODappsflatpack_accion == 'nada'
+             else 'ERROR' if c == ''
+             else 'NUEVA' if AODappsflatpack_c_usuario == ''
+             else 'ACTUALIZADA' if c != AODappsflatpack_c_usuario
+             else 'AL_DIA' }}
+
+    - name: "{{ app.nombre }}: no ha quedado instalada"
+      ansible.builtin.fail:
+        msg: "{{ app.id }} no aparece como Flatpak del usuario tras instalarla"
+      when: AODappsflatpack_estado == 'ERROR'
+
+    - name: "{{ app.nombre }}: bien"
+      ansible.builtin.set_fact:
+        AODappsflatpack_ok: "{{ AODappsflatpack_ok + [app.nombre] }}"
+
+  rescue:
+    - name: "{{ app.nombre }}: anotar el fallo (se sigue con las demás)"
+      ansible.builtin.set_fact:
+        AODappsflatpack_estado: ERROR
+        AODappsflatpack_fallos: >-
+          {{ AODappsflatpack_fallos + [app.nombre ~ ' (' ~ ansible_failed_task.name | default('?') ~ '): ' ~
+             (ansible_failed_result.msg | default('', true)
+              or ((ansible_failed_result.stderr | default('') | trim).splitlines() or ['?']) | last)] }}
+
+  always:
+    - name: "{{ app.nombre }}: tiempo"
+      ansible.builtin.debug:
+        msg: >-
+          TIEMPOAPP|{{ inventory_hostname }}|{{ app.nombre }}|{{ now().timestamp() | int - AODappsflatpack_t_app | int }}|{{ AODappsflatpack_estado | default('ERROR', true) | trim }}|{{ AODappsflatpack_version | default('-', true) }}

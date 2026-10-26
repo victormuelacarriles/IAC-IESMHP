@@ -372,7 +372,8 @@ bash VirtualW11.sh --help
   equipo a su ritmo, así su tiempo es real) y, en un `always` (también si
   falla), saca `TIEMPO|parte|equipo|segundos|OK/ERROR`. Los que no responden
   (`unreachable` en el `PLAY RECAP`) salen como `SIN RESPUESTA`.
-- **Equipos a la vez** (`--forks` de Ansible), uno por parte, por defecto 5:
+- **Equipos a la vez** (`--forks` de Ansible), uno por parte (por defecto 5
+  en la parte 1 y **50** en la 2, desde 2026-10-26):
   - `--forks-cache N` (o `FORKS_CACHE=N`) para la parte 1: cada equipo lee
     ~15 GB del NAS la primera vez, así que conviene un número bajo;
   - `--forks-alumno N` (o `FORKS_ALUMNO=N`) para la parte 2: en SMRD hay
@@ -394,6 +395,14 @@ bash VirtualW11.sh --help
   si esa va bien, el de la 1.
 - **Log:** `/var/log/IAC-IESMHP/VirtualW11.log` o
   `~/.local/state/IAC-IESMHP/VirtualW11.log`, con una línea `=====` por parte.
+  Además (2026-10-26) **un log por equipo/alumno** en la carpeta `VirtualW11/`
+  de al lado: `VirtualW11-<alumno>.log` (parte 2) y
+  `VirtualW11-cache-<equipo>.log` (parte 1). Se sacan al terminar cada
+  ejecución repartiendo la salida de Ansible (`separa_log`): cada línea al
+  equipo que nombra, con su `TASK [...]` delante; las de continuación al último
+  equipo y los bloques `[ERROR]` al siguiente. Se van añadiendo, con una
+  cabecera `===== <inicio> VirtualW11 parte N` por ejecución.
+- **Final:** `TOTAL GENERAL` con la fecha y hora de inicio y de fin.
 - **No pasa por `compruebaUsuario`.**
 
 ## Uso dentro de `rolesUsuario.yaml`
