@@ -22,6 +22,7 @@ bash AnalisisEquipo.sh IABD -l IABD-05            # un equipo
 bash AnalisisEquipo.sh SMRD --sin-estres          # rápido (~3-5 min por equipo)
 bash AnalisisEquipo.sh SMRD --estres-min 30 --gpu-min 15
 bash AnalisisEquipo.sh SMRD --pasos discos,kernel # solo salud de discos y errores
+bash AnalisisEquipo.sh SMRD --soloKernelPanics    # solo kernels + panics (segundos)
 sudo bash AnalisisEquipo.sh                       # en local (este equipo)
 bash AnalisisEquipo.sh --ayuda
 ```
@@ -31,7 +32,9 @@ bash AnalisisEquipo.sh --ayuda
 | `SMRD` / `IABD` / `<equipos.ini>` | Inventario de aula (`Ubuntu/ansible/equipos*.ini`). Sin él, en local (como root) |
 | `-l PATRÓN` | Equipos, como en Ansible (`SMRD-05`, `'SMRD-0*'`, `'all:!SMRD-00'`) |
 | `--forks N` | Equipos a la vez (**30**: cada uno se mide a sí mismo; también `FORKS=N`) |
-| `--pasos L` | Solo esos: `sistema,cpu,memoria,discos,gpu,estres,kernel` |
+| `--pasos L` | Solo esos: `kernels,sistema,cpu,memoria,discos,gpu,estres,kernel,panics` |
+| `--soloKernelPanics` | Solo `kernels,panics`: kernels instalados y panics/oops/cuelgues de los arranques anteriores. **No instala nada ni mide nada más**; tarda segundos (también `--solo-kernel-panics`) |
+| `--arranques N` | Arranques anteriores que revisa `panics` (**10**) |
 | `--sin-estres` | Sin stress-ng, memtester ni estrés de GPU |
 | `--sin-pruebas` | Solo datos y salud: sin pruebas de rendimiento ni estrés |
 | `--estres-min N` | Minutos de stress-ng CPU+RAM (**10**; 0 = no) |
@@ -86,12 +89,14 @@ errores de hardware **no** cuentan como fallo de Ansible.
 
 | Paso | Datos y salud | Prueba con tiempos | Avisos / errores |
 |---|---|---|---|
+| `kernels` (el **primero**) | Kernels de `/boot` (los **5 más nuevos** si hay más), fecha de instalación, cuál está en uso y cuál arranca por defecto (`GRUB_DEFAULT=0` → el más nuevo); carpetas de `/lib/modules` de kernels ya quitados | — | Kernel sin `initrd` o sin módulos; no arranca con el más nuevo aunque ya estaba instalado al arrancar (si se instaló después, solo dice «falta reiniciar») |
 | `sistema` | Fabricante, modelo, placa, BIOS, nº de serie, SO, kernel, red (IP, MAC, velocidad), Secure Boot, sesiones abiertas | — | Red < 1000 Mb/s |
 | `cpu` | Modelo, núcleos/hilos, MHz máx, gobernador, temperatura en reposo | sysbench (primos hasta 10000): 20000 eventos con 1 hilo y 20000×N con todos → **segundos** y eventos/s | ≥ 70 °C en reposo |
 | `memoria` | Total, disponible, swap, módulos (dmidecode: ranura, tamaño, tipo, velocidad configurada/máxima, fabricante, modelo), ECC/EDAC | sysbench memory: 20 GB con 1 hilo y 100 GB con todos → segundos y MiB/s | EDAC: corregibles = AVISO, no corregibles = ERROR |
 | `discos` | Por disco: tipo, tamaño, modelo, SMART (smartctl JSON: estado, temperatura, horas, desgaste/reserva/errores NVMe, sectores reasignados/pendientes SATA); ocupación; pools ZFS (salud, dedup, errores, último scrub) | `fio` **solo lectura** sobre el disco en bruto (secuencial 1M y aleatoria 4k, 15 s cada una) y, una vez por disco/pool, escribir y leer `--disco-gb` GB en `/`, `/home`, `/datos` (+ 4k aleatoria 15 s); fichero borrado al acabar | SMART falla o aviso crítico NVMe = ERROR; desgaste ≥ 90 %, reserva ≤ 10 %, sectores malos, ≥ 70 °C, NVMe < 500 MB/s, SSD < 200 MB/s, FS ≥ 90 %; pool ZFS no ONLINE = ERROR |
 | `gpu` | Solo NVIDIA: modelo, driver, memoria, temperatura, consumo, enlace PCIe actual/máximo | `clpeak` (OpenCL): GFLOPS simple precisión y GB/s de memoria, tiempo, gen PCIe con carga | NVIDIA sin driver = ERROR; PCIe con menos carriles o generación de la posible |
 | `estres` | — | **stress-ng** N min (todos los hilos `--cpu-method all` + 2 trabajadores con el 40 % de la RAM disponible y `--verify`), vigilando temperatura y MHz cada 5 s; **memtester** (1 pasada, % de la RAM disponible); **GPU** N min con `gpu_burn` si está o `clpeak` en bucle, vigilando temperatura, consumo, reloj y motivos de bajada | Corte por `--temp-max` = ERROR; fallos de stress-ng/memtester/gpu_burn = ERROR; CPU ≥ 90 °C, bajadas de frecuencia por calor, < 50 % de los MHz máx; GPU ≥ 90 °C, bajada de reloj por calor/hardware; errores Xid nuevos = ERROR |
+| `panics` (el último) | Por cada uno de los últimos `--arranques` arranques del journal: fecha, duración, kernel con el que arrancó, si acabó con **apagado limpio** y las primeras líneas de panic/oops/cuelgue con su hora; resumen **por kernel**. Además los volcados de **pstore** (`/var/lib/systemd/pstore`, `/sys/fs/pstore`) y de `/var/crash` (kdump, oops de apport) | — | Panic/oops/BUG/GPF/hard lockup/MCE = ERROR; soft lockup, stalls RCU, tareas bloqueadas, Xid = AVISO; ≥ 2 arranques sin apagado limpio = AVISO (1 solo se anota: puede ser un corte de luz); volcados en pstore/kdump = ERROR |
 | `kernel` | Mensajes del kernel desde el arranque: MCE, Hardware Error, EDAC, I/O error, NVMe timeout/reset, ATA, Xid, Oops, lockups, thermal (agrupados, los 8 más repetidos) | — | MCE = ERROR; otros = AVISO (cuenta aparte los aparecidos durante el análisis) |
 
 ## Notas y avisos
@@ -118,6 +123,13 @@ errores de hardware **no** cuentan como fallo de Ansible.
   `gpu_burn` en el `PATH` (se usa si está; detecta resultados `FAULTY`).
 - Con un fallo de `apt` (sin red, repo roto) el rol **sigue**: lo que falte
   sale `NO_MEDIDO`. `clpeak`/`clinfo` solo se instalan si hay NVIDIA.
+- **Panics**: un panic casi nunca queda en el journal del arranque en el que
+  ocurre (el equipo se para antes de escribir). Por eso cuenta también los
+  arranques que acaban **sin apagado limpio** (no hay `Journal stopped` /
+  `systemd-shutdown` al final) y mira pstore, donde la UEFI guarda el
+  volcado. Necesita el journal persistente (`/var/log/journal`, por defecto en
+  26.04); si no lo hay, sale `NO_MEDIDO`. Para borrar los volcados ya
+  revisados: `rm -rf /var/lib/systemd/pstore/*`.
 - Tiempo máximo del `async`: 25 min + estrés + memtester-max + gpu-min.
 - Sin dependencias gráficas: nada de `zenity`/`notify-send`, stdin a
   `/dev/null`, todo a fichero.
@@ -137,5 +149,10 @@ y las herramientas extraídas de sus `.deb` (sin instalar), en un Ryzen 9 7900X:
   (`-l` inexistente, número mal, inventario o paso desconocido).
 - Corregido en las pruebas: `gdm-greeter` contaba como sesión (saltaba siempre
   el estrés) y la línea «failed: 0» de stress-ng daba un ERROR falso.
-- **Pendiente**: probarlo como root en un equipo real (`SMRD -l <uno>`), en
+- 2026-10-27: pasos `kernels` y `panics` + `--soloKernelPanics` y
+  `--arranques`. `kernels` probado con los kernels reales de este equipo;
+  `panics` con un `journalctl` falso (un panic con NULL pointer + Oops, un
+  soft lockup y dos arranques sin apagado limpio): detecta todo y da el
+  resumen por kernel. La cadena completa con `--soloKernelPanics` no instala nada.
+- **Pendiente**: probar `panics` como root con el journal real, y probarlo como root en un equipo real (`SMRD -l <uno>`), en
   uno con NVIDIA (IABD) y la duración real del estrés completo.

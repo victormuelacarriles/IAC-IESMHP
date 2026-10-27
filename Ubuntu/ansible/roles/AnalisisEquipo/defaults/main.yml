@@ -1,6 +1,10 @@
 # ------------------------------------------------------------------ qué se hace
-# Pasos de files/analiza.sh, separados por comas. AnalisisEquipo.sh --pasos lo cambia.
-AnalisisEquipo_pasos: "sistema,cpu,memoria,discos,gpu,estres,kernel"
+# Pasos de files/analiza.sh, separados por comas. AnalisisEquipo.sh --pasos lo cambia
+# (--soloKernelPanics = "kernels,panics"). "kernels" va siempre el primero.
+AnalisisEquipo_pasos: "kernels,sistema,cpu,memoria,discos,gpu,estres,kernel,panics"
+
+# Arranques anteriores que revisa el paso "panics" (journal persistente).
+AnalisisEquipo_arranques: 10
 
 # false = solo datos y salud (sin sysbench, fio, clpeak ni estrés). --sin-pruebas
 AnalisisEquipo_pruebas: true

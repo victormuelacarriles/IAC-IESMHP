@@ -8,6 +8,7 @@
 #   bash AnalisisEquipo.sh IABD -l IABD-05          # un equipo
 #   bash AnalisisEquipo.sh SMRD --sin-estres        # rápido (~3-5 min por equipo)
 #   bash AnalisisEquipo.sh SMRD --estres-min 30 --gpu-min 15
+#   bash AnalisisEquipo.sh SMRD --soloKernelPanics  # solo kernels + panics (segundos)
 #   bash AnalisisEquipo.sh <equipos.ini> [args de ansible-playbook]
 #   sudo bash AnalisisEquipo.sh                     # en local (este equipo)
 #
@@ -15,7 +16,11 @@
 #   SMRD | IABD | <equipos.ini>   inventario de aula (ansible_user=root). Sin él: en local
 #   -l PATRÓN          equipos como en ansible (SMRD-05, 'SMRD-0*', 'all:!SMRD-00')
 #   --forks N          equipos a la vez (30 por defecto; cada uno se mide a sí mismo)
-#   --pasos L          solo esos: sistema,cpu,memoria,discos,gpu,estres,kernel
+#   --pasos L          solo esos: kernels,sistema,cpu,memoria,discos,gpu,estres,kernel,panics
+#   --soloKernelPanics solo los kernels instalados y los panics/oops/cuelgues de
+#                      los arranques anteriores: no instala nada ni mide nada más
+#                      (también --solo-kernel-panics)
+#   --arranques N      arranques anteriores que se revisan buscando panics (10)
 #   --sin-estres       sin stress-ng, memtester ni estrés de GPU
 #   --sin-pruebas      solo datos y salud (sin pruebas de rendimiento ni estrés)
 #   --estres-min N     minutos de estrés CPU+RAM (10; 0 = no)
@@ -45,12 +50,12 @@ FECHA=$(date +%Y%m%d-%H%M)
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INVDIR="$(cd "$DIR/../.." && pwd)"          # Ubuntu/ansible/ (inventarios de aula)
 
-INVENTARIO=""; ARGS=(); LIMITE=""; RESUMEN_OPC=""
+INVENTARIO=""; ARGS=(); LIMITE=""; RESUMEN_OPC=""; SOLO_PANICS=0
 FORKS="${FORKS:-30}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        -h|--help|--ayuda|-\?) sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help|--ayuda|-\?) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
         SMRD|smrd)        INVENTARIO="$INVDIR/equiposSMRD.ini" ;;
         IABD|iabd)        INVENTARIO="$INVDIR/equiposIABD.ini" ;;
         -l|--limit)       LIMITE="$2"; shift ;;
@@ -61,7 +66,10 @@ while [ $# -gt 0 ]; do
         --pasos)          ARGS+=(-e "AnalisisEquipo_pasos=$2"); RESUMEN_OPC+=" pasos=$2"; shift ;;
         --sin-estres)     ARGS+=(-e AnalisisEquipo_estres_min=0 -e AnalisisEquipo_memtester_pct=0 -e AnalisisEquipo_gpu_min=0); RESUMEN_OPC+=" sin-estrés" ;;
         --sin-pruebas)    ARGS+=(-e AnalisisEquipo_pruebas=false); RESUMEN_OPC+=" sin-pruebas" ;;
-        --estres-min|--memtester-pct|--memtester-max|--gpu-min|--disco-gb|--temp-max)
+        --soloKernelPanics|--solo-kernel-panics)
+            ARGS+=(-e AnalisisEquipo_pasos=kernels,panics -e AnalisisEquipo_instalar=false)
+            RESUMEN_OPC+=" solo-kernel-panics"; SOLO_PANICS=1 ;;
+        --estres-min|--memtester-pct|--memtester-max|--gpu-min|--disco-gb|--temp-max|--arranques)
             [[ "$2" =~ ^[0-9]+$ ]] || { echo "[ERR] $1 necesita un número: '$2'" >&2; exit 1; }
             V=${1#--}; V=${V//-/_}
             ARGS+=(-e "AnalisisEquipo_$V=$2"); RESUMEN_OPC+=" ${1#--}=$2"; shift ;;
@@ -159,7 +167,11 @@ PY
 
 if [ -n "$INVENTARIO" ]; then INV=(-i "$INVENTARIO"); else INV=(-i localhost, --connection=local); fi
 echo "===== $(date '+%F %T') AnalisisEquipo (${RESUMEN_OPC:- completo}) ${INV[*]} --forks $FORKS ${ARGS[*]}" | tee -a "$LOG"
-echo "      Con estrés tarda ~30-50 min por equipo (van $FORKS a la vez). No se ve nada hasta que acaba cada uno." | tee -a "$LOG"
+if [ "$SOLO_PANICS" = 1 ]; then
+    echo "      Solo kernels y panics: unos segundos por equipo (van $FORKS a la vez)." | tee -a "$LOG"
+else
+    echo "      Con estrés tarda ~30-50 min por equipo (van $FORKS a la vez). No se ve nada hasta que acaba cada uno." | tee -a "$LOG"
+fi
 
 # Latido: el análisis va en async y Ansible no saca nada en pantalla hasta que
 # termina. Si la salida lleva 60 s quieta, se avisa en pantalla (no en el log)

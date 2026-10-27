@@ -10,7 +10,10 @@
 #
 # Opciones:
 #   --equipo NOMBRE      nombre en el resumen (por defecto, hostname)
-#   --pasos L            sistema,cpu,memoria,discos,gpu,estres,kernel (todos)
+#   --pasos L            kernels,sistema,cpu,memoria,discos,gpu,estres,kernel,panics (todos)
+#   --solo-kernel-panics solo kernels instalados + panics/cuelgues de los
+#                        arranques anteriores (sin pruebas; también --soloKernelPanics)
+#   --arranques N        arranques anteriores que se revisan en "panics" (10)
 #   --sin-pruebas        solo datos y salud: sin pruebas de rendimiento ni estrés
 #   --sin-estres         igual que quitar "estres" de --pasos
 #   --estres-min N       minutos de estrés de CPU+RAM con stress-ng (10; 0 = no)
@@ -32,7 +35,8 @@ export LC_ALL=C
 exec </dev/null
 
 EQUIPO=$(hostname -s)
-PASOS="sistema,cpu,memoria,discos,gpu,estres,kernel"
+PASOS="kernels,sistema,cpu,memoria,discos,gpu,estres,kernel,panics"
+ARRANQUES=10
 PRUEBAS=1
 ESTRES_MIN=10
 MEMTESTER_PCT=25
@@ -48,7 +52,7 @@ DIR_SAL="${ANALISIS_DIR_SAL:-/var/log/IAC-IESMHP/AnalisisEquipo}"
 numero() { [[ "$2" =~ ^[0-9]+$ ]] || { echo "[ERR] $1 necesita un número: '$2'" >&2; exit 3; }; }
 while [ $# -gt 0 ]; do
     case "$1" in
-        -h|--help|--ayuda) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help|--ayuda) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
         --equipo)        EQUIPO="$2"; shift ;;
         --pasos)         PASOS="$2"; shift ;;
         --sin-pruebas)   PRUEBAS=0 ;;
@@ -61,13 +65,15 @@ while [ $# -gt 0 ]; do
         --dirs)          DIRS_DISCO="$2"; shift ;;
         --temp-max)      numero "$1" "$2"; TEMP_MAX="$2"; shift ;;
         --forzar)        FORZAR=1 ;;
+        --solo-kernel-panics|--soloKernelPanics) PASOS="kernels,panics" ;;
+        --arranques)     numero "$1" "$2"; ARRANQUES="$2"; shift ;;
         *) echo "[ERR] Opción desconocida: $1" >&2; exit 3 ;;
     esac
     shift
 done
 for p in ${PASOS//,/ }; do
-    case "$p" in sistema|cpu|memoria|discos|gpu|estres|kernel) ;;
-        *) echo "[ERR] Paso desconocido: '$p' (hay: sistema,cpu,memoria,discos,gpu,estres,kernel)" >&2; exit 3 ;;
+    case "$p" in kernels|sistema|cpu|memoria|discos|gpu|estres|kernel|panics) ;;
+        *) echo "[ERR] Paso desconocido: '$p' (hay: kernels,sistema,cpu,memoria,discos,gpu,estres,kernel,panics)" >&2; exit 3 ;;
     esac
 done
 [ "$MEMTESTER_PCT" -le 80 ] || { echo "[ERR] --memtester-pct como mucho 80" >&2; exit 3; }
@@ -163,6 +169,47 @@ log "===== analiza.sh en $EQUIPO: pasos=$PASOS pruebas=$PRUEBAS estres=${ESTRES_
 NVIDIA=0; NVIDIA_OK=0
 lspci 2>/dev/null | grep -qi 'nvidia' && NVIDIA=1
 [ "$NVIDIA" = 1 ] && hay nvidia-smi && nvidia-smi -L >/dev/null 2>&1 && NVIDIA_OK=1
+
+# =================================================================== KERNELS
+# Lo primero: qué kernels hay (los 5 más nuevos) y con cuál se ha arrancado.
+if quiere kernels; then
+    paso kernels "Kernels instalados"
+    ACTUAL=$(uname -r)
+    mapfile -t KBOOT < <(ls -1 /boot/vmlinuz-* 2>/dev/null | sed 's|^/boot/vmlinuz-||' | sort -V)
+    NK=${#KBOOT[@]}
+    if [ "$NK" -eq 0 ]; then
+        nomedido "no hay /boot/vmlinuz-*"
+    else
+        NUEVO=${KBOOT[$((NK - 1))]}
+        GDEF=$(sed -n 's/^GRUB_DEFAULT=//p' /etc/default/grub 2>/dev/null | tr -d '"' | tail -1)
+        ARRANQUE=$(date -d "$(uptime -s 2>/dev/null)" +%s 2>/dev/null || echo 0)
+        r "   $NK en /boot$([ "$NK" -gt 5 ] && echo ', se muestran los 5 más nuevos') · en uso: $ACTUAL · GRUB_DEFAULT=${GDEF:-?}"
+        for (( i = NK - 1; i >= 0 && i >= NK - 5; i-- )); do
+            k=${KBOOT[$i]}; notas=""
+            [ "$k" = "$ACTUAL" ] && notas+=" ← EN USO"
+            [ "$k" = "$NUEVO" ] && [ "${GDEF:-0}" = 0 ] && notas+=" · arranca por defecto"
+            [ -e "/boot/initrd.img-$k" ] || { notas+=" · SIN initrd"; aviso "kernel $k sin /boot/initrd.img-$k: no arrancaría"; }
+            [ -d "/lib/modules/$k" ] || { notas+=" · SIN módulos"; aviso "kernel $k sin /lib/modules/$k"; }
+            r "     $k  (instalado $(date -r "/boot/vmlinuz-$k" '+%F %H:%M' 2>/dev/null))$notas"
+        done
+        RESTOS=0
+        for d in /lib/modules/*/; do
+            d=${d%/}; d=${d##*/}
+            [ -e "/boot/vmlinuz-$d" ] || RESTOS=$((RESTOS + 1))
+        done
+        [ "$RESTOS" -gt 0 ] && r "   + $RESTOS carpetas en /lib/modules de kernels ya quitados"
+        if [ "$ACTUAL" != "$NUEVO" ]; then
+            if [ "$(stat -c %Y "/boot/vmlinuz-$NUEVO")" -gt "$ARRANQUE" ]; then
+                r "   El más nuevo ($NUEVO) se instaló después de arrancar: falta reiniciar"
+            else
+                aviso "no arranca con el kernel más nuevo ($NUEVO) aunque ya estaba al arrancar: ¿GRUB_DEFAULT o falló y se eligió otro a mano?"
+            fi
+        fi
+        dato kernel_actual "$ACTUAL"; dato kernel_nuevo "$NUEVO"; dato kernels_n "$NK"
+        corto "$NK kernels, en uso $ACTUAL"
+    fi
+    fin_paso
+fi
 
 # =================================================================== SISTEMA
 if quiere sistema; then
@@ -667,6 +714,98 @@ if quiere kernel; then
         fi
         dato kernel_errores "$N"; corto "$N errores"
     fi
+    fin_paso
+fi
+
+# ==================================================================== PANICS
+# Panics, oops y cuelgues de los ARRANQUES ANTERIORES (un panic no se ve en el
+# arranque en el que ocurre: el equipo se para). Fuentes: el journal de cada
+# arranque (persistente en /var/log/journal), pstore (volcado del panic que la
+# UEFI guarda y systemd-pstore deja en /var/lib/systemd/pstore) y /var/crash
+# (kdump, apport). Un arranque que acaba sin apagado limpio = cuelgue, panic
+# sin registrar o corte de luz.
+if quiere panics; then
+    paso panics "Kernel panics y cuelgues (últimos $ARRANQUES arranques)"
+    GRAVE_RE='Kernel panic|kernel BUG at|BUG: unable to handle|BUG: kernel NULL|Oops:|general protection fault|Unable to handle kernel|hard LOCKUP|Machine Check Exception|mce: \[Hardware Error\]'
+    LEVE_RE='soft lockup|rcu: INFO: rcu_[a-z]+ (self-)?detected stall|detected stalls on CPUs|blocked for more than [0-9]+ seconds|NVRM: Xid'
+    [ -d /var/log/journal ] || nomedido "journal no persistente (/var/log/journal no existe): solo se ve el arranque actual"
+    # índice id primera-entrada última-entrada (segundos)
+    journalctl --list-boots --no-pager -o json 2>/dev/null | python3 -c '
+import json, sys
+try: l = json.load(sys.stdin)
+except Exception: sys.exit(0)
+for b in l: print(b["index"], b["boot_id"], int(b["first_entry"]) // 10**6, int(b["last_entry"]) // 10**6)' >"$TMP/arranques"
+    if [ ! -s "$TMP/arranques" ]; then      # systemd viejo: formato texto
+        journalctl --list-boots --no-pager 2>/dev/null | awk '$1 ~ /^-?[0-9]+$/' | while read -r i id d1 f1 h1 z1 d2 f2 h2 z2; do
+            echo "$i $id $(date -d "$f1 $h1 $z1" +%s 2>/dev/null || echo 0) $(date -d "$f2 $h2 $z2" +%s 2>/dev/null || echo 0)"
+        done >"$TMP/arranques"
+    fi
+    tail -n "$((ARRANQUES + 1))" "$TMP/arranques" >"$TMP/arr" 2>/dev/null
+    NB=0; SUCIOS=0; CONGRAVE=0; CONLEVE=0
+    declare -A PK_N=() PK_S=() PK_P=()
+    if [ ! -s "$TMP/arr" ]; then
+        nomedido "no se puede leer la lista de arranques del journal"
+    else
+        r "   Arranque              Duración  Kernel              Final"
+        while read -r i id t1 t2; do
+            NB=$((NB + 1))
+            journalctl -b "$id" -k -o short-iso --no-pager 2>/dev/null >"$TMP/bk"
+            K=$(grep -m1 -o 'Linux version [^ ]*' "$TMP/bk" | awk '{ print $3 }')
+            grep -E "$GRAVE_RE" "$TMP/bk" >"$TMP/bg"; NG=$(wc -l <"$TMP/bg")
+            grep -E "$LEVE_RE" "$TMP/bk" >"$TMP/bl"; NL=$(wc -l <"$TMP/bl")
+            if [ "$i" = 0 ]; then
+                FINAL="en curso"
+            elif journalctl -b "$id" -n 80 -o cat --no-pager 2>/dev/null \
+                   | grep -qE 'Journal stopped|systemd-shutdown|Reached target .*(Power-Off|Reboot|Halt|Kexec|Shutdown)|reboot: (Restarting|Power down)'; then
+                FINAL="apagado limpio"
+            else
+                FINAL="SIN APAGADO LIMPIO"; SUCIOS=$((SUCIOS + 1)); PK_S[${K:-?}]=$(( ${PK_S[${K:-?}]:-0} + 1 ))
+            fi
+            PK_N[${K:-?}]=$(( ${PK_N[${K:-?}]:-0} + 1 ))
+            [ "$NG" -gt 0 ] && { CONGRAVE=$((CONGRAVE + 1)); PK_P[${K:-?}]=$(( ${PK_P[${K:-?}]:-0} + 1 )); FINAL+=" · $NG panic/oops"; }
+            [ "$NL" -gt 0 ] && { CONLEVE=$((CONLEVE + 1)); FINAL+=" · $NL cuelgues/stalls"; }
+            r "$(printf '   %3s %s  %8s  %-18s  %s' "$i" "$(date -d "@$t1" '+%F %H:%M')" "$(mmss $(( (t2 - t1) / 60 )) | sed 's/:/h/')" "${K:-?}" "$FINAL")"
+            # Las primeras líneas distintas de cada tipo, con su hora.
+            cat "$TMP/bg" "$TMP/bl" | awk '{ t = $1; $1 = $2 = ""; sub(/^ +kernel: /, ""); sub(/^ +/, ""); m = $0; gsub(/[0-9a-f]{8,}|[0-9]+/, "N", m); if (!(m in v)) { v[m] = 1; print "         " substr(t, 12, 8) " " substr($0, 1, 140) } }' \
+                | head -4 | while IFS= read -r l; do r "$l"; done
+        done <"$TMP/arr"
+        r "   Por kernel:"
+        for k in "${!PK_N[@]}"; do
+            r "     $k: ${PK_N[$k]} arranques · ${PK_S[$k]:-0} sin apagado limpio · ${PK_P[$k]:-0} con panic/oops"
+        done
+        [ "$NB" -le 1 ] && r "   (en el journal solo está el arranque actual)"
+    fi
+    # ---- pstore: volcados de panic guardados por la UEFI
+    NPS=0
+    for f in /var/lib/systemd/pstore/* /sys/fs/pstore/*; do
+        [ -e "$f" ] || continue
+        NPS=$((NPS + 1))
+        L=$(grep -rhaE -m1 "$GRAVE_RE|$LEVE_RE" "$f" 2>/dev/null | head -1 | tr -d '\r' | cut -c1-140)
+        r "   pstore $(date -r "$f" '+%F %H:%M') ${f##*/}: ${L:-(sin línea de panic reconocible)}"
+    done
+    [ "$NPS" -gt 0 ] && error "$NPS volcados de kernel panic en pstore (ver arriba; se pueden borrar tras revisarlos)"
+    # ---- /var/crash: kdump (carpetas con fecha) y oops del kernel recogidos por apport
+    NKD=0
+    for d in /var/crash/[0-9]*/; do
+        [ -d "$d" ] || continue
+        NKD=$((NKD + 1))
+        L=$(grep -haE -m1 "$GRAVE_RE" "$d"dmesg* 2>/dev/null | head -1 | cut -c1-140)
+        r "   kdump ${d#/var/crash/}: ${L:-volcado sin dmesg}"
+    done
+    [ "$NKD" -gt 0 ] && error "$NKD volcados de kdump en /var/crash"
+    for f in /var/crash/linux-image-*.crash /var/crash/*kernel*.crash; do
+        [ -e "$f" ] || continue
+        r "   apport $(date -r "$f" '+%F %H:%M') ${f##*/}"
+        aviso "oops del kernel recogido por apport: ${f##*/}"
+    done
+    # ---- veredicto
+    [ "$CONGRAVE" -gt 0 ] && error "$CONGRAVE de $NB arranques con kernel panic/oops"
+    [ "$CONLEVE" -gt 0 ] && aviso "$CONLEVE de $NB arranques con cuelgues de CPU/tareas (soft lockup, stall, tareas bloqueadas, Xid)"
+    [ "$SUCIOS" -ge 2 ] && aviso "$SUCIOS de $NB arranques terminaron sin apagado limpio (cuelgue, panic sin registrar o corte de luz)"
+    [ "$SUCIOS" -eq 1 ] && r "   1 arranque terminó sin apagado limpio (puede ser un corte de luz o apagado a botón)"
+    dato arranques "$NB"; dato arranques_sucios "$SUCIOS"; dato arranques_panic "$CONGRAVE"; dato pstore "$NPS"
+    corto "$NB arranques · $SUCIOS sin apagado limpio · $CONGRAVE con panic · pstore $NPS"
+    unset PK_N PK_S PK_P
     fin_paso
 fi
 

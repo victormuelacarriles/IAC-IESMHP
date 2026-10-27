@@ -101,13 +101,15 @@
     --disco-gb {{ AnalisisEquipo_disco_gb | int }}
     --dirs {{ AnalisisEquipo_dirs | quote }}
     --temp-max {{ AnalisisEquipo_temp_max | int }}
+    --arranques {{ AnalisisEquipo_arranques | int }}
     {{ '--forzar' if AnalisisEquipo_forzar | bool else '' }}
     </dev/null
   environment:
     ANALISIS_SIN_ROOT: "{{ '1' if AnalisisEquipo_sin_root | bool else '0' }}"
     ANALISIS_DIR_SAL: "{{ '/var/log/IAC-IESMHP/AnalisisEquipo' if AnalisisEquipo_uid.stdout == '0' else lookup('env', 'HOME') ~ '/.local/state/IAC-IESMHP/AnalisisEquipo-equipo' }}"
   async: "{{ AnalisisEquipo_timeout_s | int }}"
-  poll: 30
+  # Sin estrés (p. ej. --soloKernelPanics) acaba en segundos: se mira cada 5 s.
+  poll: "{{ 30 if 'estres' in AnalisisEquipo_pasos else 5 }}"
   register: AnalisisEquipo_res
   changed_when: false
   # 0 OK · 1 avisos · 2 errores de hardware: se informa, no es un fallo de Ansible.
