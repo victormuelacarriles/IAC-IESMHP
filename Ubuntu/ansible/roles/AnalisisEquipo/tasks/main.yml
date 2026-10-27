@@ -118,7 +118,7 @@
 
 - name: Resumen
   ansible.builtin.debug:
-    msg: "{{ AnalisisEquipo_res.stdout_lines | reject('match', '^(TIEMPOPASO|DATOS|GLOBAL|FICHERO)\\|') | list }}"
+    msg: "{{ AnalisisEquipo_res.stdout_lines | reject('match', '^(TIEMPOPASO|DATOS|GLOBAL|FICHERO|PANICFILE)\\|') | list }}"
   tags: [AnalisisEquipo]
 
 - name: Datos para el lanzador
@@ -138,4 +138,14 @@
     dest: "{{ AnalisisEquipo_destino }}/{{ inventory_hostname }}/"
     flat: true
   when: AnalisisEquipo_fichero | length > 0
+  tags: [AnalisisEquipo]
+
+- name: Traer un fichero por cada kernel panic
+  ansible.builtin.fetch:
+    src: "{{ item }}"
+    dest: "{{ AnalisisEquipo_destino }}/{{ inventory_hostname }}/panics/"
+    flat: true
+  loop: "{{ AnalisisEquipo_res.stdout_lines | select('match', '^PANICFILE\\|') | map('regex_replace', '^PANICFILE\\|', '') | list }}"
+  loop_control:
+    label: "{{ item | basename }}"
   tags: [AnalisisEquipo]

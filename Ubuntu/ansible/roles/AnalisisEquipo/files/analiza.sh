@@ -27,7 +27,8 @@
 #
 # Sin preguntas (headless): stdin a /dev/null, nada gráfico.
 # Salida: resumen en pantalla + líneas para el lanzador (TIEMPOPASO|..., DATOS|...,
-# GLOBAL|..., FICHERO|...). Detalle bruto en analisis-<fecha>.log.
+# GLOBAL|..., FICHERO|..., PANICFILE|...). Detalle bruto en analisis-<fecha>.log.
+# Un fichero por kernel panic en panics/panic-<equipo>-<fecha>-<arranque>.txt.
 # Código de salida: 0 = OK · 1 = hay AVISOS · 2 = hay ERRORES de hardware ·
 # 3 = no se pudo analizar (no es root, ya hay otro análisis, opción mala).
 set -u
@@ -724,10 +725,237 @@ fi
 # UEFI guarda y systemd-pstore deja en /var/lib/systemd/pstore) y /var/crash
 # (kdump, apport). Un arranque que acaba sin apagado limpio = cuelgue, panic
 # sin registrar o corte de luz.
+# Cada panic distinto (un arranque con panic/oops, o un volcado que no es de
+# ninguno) deja su propio fichero en $DIR_SAL/panics/ con todo lo que se sabe.
+GRAVE_RE='Kernel panic|kernel BUG at|BUG: unable to handle|BUG: kernel NULL|Oops:|general protection fault|Unable to handle kernel|hard LOCKUP|Machine Check Exception|mce: \[Hardware Error\]'
+LEVE_RE='soft lockup|rcu: INFO: rcu_[a-z]+ (self-)?detected stall|detected stalls on CPUs|blocked for more than [0-9]+ seconds|NVRM: Xid'
+
+# Firma de un panic: primera línea grave (sin números ni direcciones) + la
+# función de la línea RIP/PC. Dos panics con la misma firma son el mismo fallo.
+firma_panic() {   # firma_panic <fichero>
+    python3 - "$1" "$GRAVE_RE" <<'PY'
+import re, sys
+t = open(sys.argv[1], errors='replace').read()
+g = re.compile(sys.argv[2])
+prim = next((l for l in t.splitlines() if g.search(l)), '')
+prim = re.sub(r'^.*?kernel: ', '', prim)
+prim = re.sub(r'^\S+\s+\S+\s+kernel:\s*', '', prim)
+prim = re.sub(r'^<\d+>', '', prim)
+prim = re.sub(r'^\[\s*[\d.]+\]\s*', '', prim)
+prim = re.sub(r'0x[0-9a-fA-F]+|[0-9a-f]{8,}|\d+', 'N', prim).strip()
+m = re.search(r'(?:RIP|pc) ?: ?(?:\S+:)?([A-Za-z_][\w.]*)', t)
+f = (prim[:100] or 'sin traza reconocible') + (' @ ' + m.group(1) if m else '')
+print(f.replace('|', '/'))
+PY
+}
+
+# Letras de "Tainted:" del kernel → texto.
+explica_tainted() {   # explica_tainted "P           OE"
+    local l
+    for l in $(grep -o '[A-Z]' <<<"$1" | sort -u); do
+        case "$l" in
+            P) echo "     P: módulo propietario cargado (p. ej. nvidia)" ;;
+            O) echo "     O: módulo fuera del árbol del kernel (zfs, nvidia, vmmon/vmnet…)" ;;
+            E) echo "     E: módulo sin firmar" ;;
+            G) ;;
+            D) echo "     D: el kernel ya había muerto antes (oops previo): mirar el PRIMER error" ;;
+            W) echo "     W: hubo un WARNING del kernel antes" ;;
+            M) echo "     M: la CPU avisó de un Machine Check (hardware)" ;;
+            B) echo "     B: página de memoria mala detectada (hardware/RAM)" ;;
+            L) echo "     L: hubo un soft lockup antes" ;;
+            C) echo "     C: driver de staging" ;;
+            I) echo "     I: apaño por firmware/BIOS defectuoso" ;;
+            F) echo "     F: módulo cargado a la fuerza" ;;
+            R) echo "     R: módulo descargado a la fuerza" ;;
+            S) echo "     S: CPU fuera de especificación" ;;
+            U) echo "     U: marcado por el usuario" ;;
+            A) echo "     A: tabla ACPI sustituida" ;;
+            K) echo "     K: kernel con live patch" ;;
+            *) echo "     $l: (ver https://docs.kernel.org/admin-guide/tainted-kernels.html)" ;;
+        esac
+    done
+}
+
+# Paquetes instalados/actualizados/quitados en los 7 días antes del panic.
+apt_antes() {   # apt_antes <epoch>
+    python3 - "$1" "$APTLOG_DIR" <<'PY'
+import gzip, glob, os, re, sys, time
+t = int(sys.argv[1]); d = sys.argv[2]
+bloques = []
+for f in sorted(glob.glob(os.path.join(d, 'history.log*'))):
+    try:
+        txt = (gzip.open(f, 'rt', errors='replace') if f.endswith('.gz') else open(f, errors='replace')).read()
+    except Exception:
+        continue
+    for b in txt.split('\n\n'):
+        m = re.search(r'Start-Date: (\S+\s+\S+)', b)
+        if not m: continue
+        try: e = time.mktime(time.strptime(m.group(1), '%Y-%m-%d %H:%M:%S'))
+        except Exception: continue
+        if t - 7 * 86400 <= e <= t:
+            bloques.append((e, b.strip()))
+if not bloques:
+    print('   (ningún cambio de paquetes con apt en esos 7 días)')
+for e, b in sorted(bloques):
+    for l in b.splitlines():
+        if l.startswith(('Start-Date', 'Commandline', 'Install', 'Upgrade', 'Remove', 'Purge')):
+            k, _, v = l.partition(': ')
+            # Lo que más afecta a un panic, delante.
+            imp = [p for p in re.split(r'\), ', v) if re.search(r'linux-|nvidia|zfs|firmware|mesa|vmware|microcode|dkms', p)]
+            if k in ('Install', 'Upgrade', 'Remove', 'Purge') and imp:
+                print('   %-11s %s' % (k + ':', '), '.join(imp)[:900]))
+                resto = len(re.split(r'\), ', v)) - len(imp)
+                if resto: print('   %-11s + %d paquetes más' % ('', resto))
+            else:
+                print('   %-11s %s' % (k + ':', v[:300]))
+    print()
+PY
+}
+
+# Escribe el fichero de un panic. Deja su ruta y su firma en INC_FICH/INC_FIRMA.
+incidente() {   # incidente <boot id o -> <volcados "tipo|ruta" por línea> <epoch de referencia>
+    local id=$1 volc=$2 tref=$3 tipo1="" idx="-" t1=0 t2=0 sig="" k="?" fin="-" f nom tipo ruta x fuentes="" sigl
+    : >"$TMP/ik"; : >"$TMP/iv"
+    if [ "$id" != - ]; then
+        read -r idx _ t1 t2 < <(awk -v id="$id" '$2 == id' "$TMP/arranques")
+        sig=$(awk -v id="$id" 'f { print $2; exit } $2 == id { f = 1 }' "$TMP/arranques")
+        journalctl -b "$id" -k -o short-iso --no-pager >"$TMP/ik" 2>/dev/null
+        k=$(grep -m1 -o 'Linux version [^ ]*' "$TMP/ik" | awk '{ print $3 }')
+        tref=$t2
+        if journalctl -b "$id" -n 80 -o cat --no-pager 2>/dev/null \
+               | grep -qE 'Journal stopped|systemd-shutdown|Reached target .*(Power-Off|Reboot|Halt|Kexec|Shutdown)|reboot: (Restarting|Power down)'; then
+            fin="apagado limpio"
+        else
+            fin="SIN APAGADO LIMPIO"
+        fi
+        [ "$idx" = 0 ] && fin="en curso"
+        fuentes="journal ($(grep -cE "$GRAVE_RE" "$TMP/ik") líneas de fallo)"
+    fi
+    # Contenido de los volcados (texto; las partes binarias/base64 de apport fuera).
+    while IFS='|' read -r tipo ruta; do
+        [ -n "$tipo" ] || continue
+        tipo1=${tipo1:-$tipo}
+        fuentes+="${fuentes:+ · }$tipo ${ruta##*/}"
+        for x in $ruta; do
+            if [ -d "$x" ]; then
+                find "$x" -type f | sort -V | while read -r y; do
+                    echo "----- $tipo: $y ($(date -r "$y" '+%F %H:%M'))"; tr -d '\000' <"$y" | head -3000
+                done
+            elif [ -f "$x" ]; then
+                echo "----- $tipo: $x ($(date -r "$x" '+%F %H:%M'))"
+                tr -d '\000' <"$x" | grep -av '^ [A-Za-z0-9+/=]\{60,\}$' | head -3000
+            fi
+        done >>"$TMP/iv"
+    done <<<"$volc"
+    cat "$TMP/ik" "$TMP/iv" >"$TMP/itodo"
+    sigl=$(firma_panic "$TMP/itodo")
+    nom="panic-${EQUIPO}-$(date -d "@$tref" '+%Y%m%d-%H%M')-$([ "$id" != - ] && echo "${id:0:8}" || echo "${tipo1:-volcado}").txt"
+    f="$PANDIR/$nom"
+    {
+        echo "================================================================"
+        echo " Kernel panic en $EQUIPO · $(date -d "@$tref" '+%F %H:%M')"
+        echo "================================================================"
+        echo " Firma:      $sigl"
+        if [ "$id" != - ]; then
+            echo " Arranque:   índice $idx · id $id"
+            echo "             $(date -d "@$t1" '+%F %H:%M:%S') → $(date -d "@$t2" '+%F %H:%M:%S') ($(mmss $(( (t2 - t1) / 60 )) | sed 's/:/h/'))"
+            echo " Kernel:     $k"
+            echo " Final:      $fin"
+        else
+            echo " Arranque:   no está en el journal (volcado más antiguo que el journal)"
+        fi
+        echo " Fuentes:    ${fuentes:-?}"
+        echo " Generado:   $(date '+%F %H:%M') por analiza.sh ($RAW)"
+        echo ""
+        echo "== Resumen del fallo"
+        grep -ahE "$GRAVE_RE|$LEVE_RE" "$TMP/itodo" | awk '{ m = $0; sub(/^[^ ]+ [^ ]+ kernel: /, "", m); n = m; gsub(/[0-9a-f]{8,}|[0-9]+/, "N", n); if (!(n in v)) { v[n] = 1; print "   " substr($0, 1, 220) } }' | head -12
+        TAINT=$(grep -aoE 'Tainted: [A-Z ]+' "$TMP/itodo" | head -1 | sed 's/Tainted: //')
+        grep -ahE -m1 'CPU: [0-9]+ .*PID: [0-9]+ .*Comm:' "$TMP/itodo" | sed 's/^/   Proceso:  /' | cut -c1-250
+        grep -ahE -m1 'Hardware name:' "$TMP/itodo" | sed 's/^.*Hardware name: */   Equipo:   /'
+        grep -ahE -m2 '(RIP|pc) ?:' "$TMP/itodo" | sed 's/^/   /' | cut -c1-250
+        if [ -n "$TAINT" ]; then echo "   Tainted:  $TAINT"; explica_tainted "$TAINT"; fi
+        grep -ahE -m1 'Modules linked in:' "$TMP/itodo" | sed 's/^.*Modules linked in: */   Módulos cargados: /' | fold -s -w 110 | sed '2,$s/^/      /'
+        echo ""
+        echo "== Pila de llamadas (Call Trace) del primer fallo"
+        awk '/Call Trace:|Call trace:/ { c = 1; n = 0 } c { print "   " $0; if (++n > 45 || /---\[ end trace|<\/TASK>/) exit }' "$TMP/itodo" | cut -c1-200 >"$TMP/ipila"
+        if [ -s "$TMP/ipila" ]; then cat "$TMP/ipila"; else echo "   (no se guardó la pila)"; fi
+        echo ""
+        if [ "$id" != - ]; then
+            echo "== Contexto del arranque"
+            grep -aE -m1 'Command line:' "$TMP/ik" | sed 's/^.*Command line: */   Línea de arranque: /'
+            grep -aE -m1 'DMI:' "$TMP/ik" | sed 's/^.*DMI: */   DMI\/BIOS: /'
+            grep -aE 'microcode:' "$TMP/ik" | head -2 | sed 's/^\S* \S* kernel: /   /'
+            grep -aE 'taints kernel|module verification failed|loading out-of-tree' "$TMP/ik" | sed 's/^\S* \S* kernel: /   /' | sort -u | head -8
+            if [ "$k" != "?" ]; then
+                for m in zfs nvidia vmmon vmnet; do
+                    v=$(modinfo -k "$k" -F version "$m" 2>/dev/null | head -1)
+                    [ -n "$v" ] && echo "   Módulo $m para $k: $v"
+                done
+                v=$(dpkg-query -W -f='${Version} ${db:Status-Abbrev}' "linux-image-$k" 2>/dev/null)
+                echo "   Paquete linux-image-$k: ${v:-no instalado (ya quitado)}"
+            fi
+            echo ""
+            echo "== Bloque del fallo (log del kernel, desde 150 líneas antes del primer error)"
+            N1=$(grep -anE "$GRAVE_RE" "$TMP/ik" | head -1 | cut -d: -f1)
+            if [ -n "$N1" ]; then
+                tail -n +"$(( N1 > 150 ? N1 - 150 : 1 ))" "$TMP/ik" | head -2000 | sed 's/^/   /'
+            else
+                echo "   (el journal no guardó el fallo: el equipo se paró antes de escribirlo; ver los volcados)"
+                echo "   Últimas 40 líneas del kernel en ese arranque:"
+                tail -n 40 "$TMP/ik" | sed 's/^/   /'
+            fi
+            echo ""
+            echo "== Últimas 200 líneas de TODO el journal de ese arranque (qué estaba pasando)"
+            journalctl -b "$id" -n 200 -o short-iso --no-pager 2>/dev/null | sed 's/^/   /' | cut -c1-300
+            echo ""
+            echo "== Avisos y errores del kernel en ese arranque (warning o más, máx. 300)"
+            journalctl -b "$id" -k -p warning -o short-iso --no-pager 2>/dev/null | head -300 | sed 's/^/   /' | cut -c1-300
+            echo ""
+            if [ -n "$sig" ]; then
+                echo "== Arranque siguiente ($sig): primeras líneas y avisos de recuperación"
+                journalctl -b "$sig" -k -o short-iso --no-pager 2>/dev/null >"$TMP/isig"
+                head -3 "$TMP/isig" | sed 's/^/   /'
+                grep -aiE 'pstore|efi-pstore|EDAC|mce:|Hardware Error|unclean|recover|dirty|orphan|zfs.*(import|error)|fsck' "$TMP/isig" | head -30 | sed 's/^/   /' | cut -c1-250
+                echo ""
+            fi
+        fi
+        echo "== Paquetes cambiados con apt en los 7 días anteriores"
+        apt_antes "$tref"
+        if [ -s "$TMP/iv" ]; then
+            echo "== Volcados (pstore / kdump / apport)"
+            sed 's/^/   /' "$TMP/iv" | cut -c1-300
+            echo ""
+        fi
+    } >"$f"
+    INC_FICH+=("$f"); INC_FIRMA+=("$sigl"); INC_IDX+=("$idx")
+}
+
+# Arranque al que pertenece un volcado.
+#   pstore: lo guarda systemd-pstore al arrancar DESPUÉS del panic → si cae en
+#           los 15 primeros minutos de un arranque, es del anterior.
+#   kdump:  su carpeta lleva la hora del panic → el arranque que la contiene.
+#   Entre dos arranques (equipo apagado) → el anterior. Antes del journal → ninguno.
+arranque_de() {   # arranque_de <tipo> <epoch>
+    local tipo=$1 t=$2 prev="-" i id t1 t2
+    while read -r i id t1 t2; do
+        if [ "$t" -lt $((t1 - 60)) ]; then echo "$prev"; return; fi
+        if [ "$t" -le $((t2 + 120)) ]; then
+            if [ "$tipo" = pstore ] && [ "$t" -le $((t1 + 900)) ]; then echo "$prev"; else echo "$id"; fi
+            return
+        fi
+        prev=$id
+    done <"$TMP/arranques"
+    echo "$prev"
+}
+
 if quiere panics; then
     paso panics "Kernel panics y cuelgues (últimos $ARRANQUES arranques)"
-    GRAVE_RE='Kernel panic|kernel BUG at|BUG: unable to handle|BUG: kernel NULL|Oops:|general protection fault|Unable to handle kernel|hard LOCKUP|Machine Check Exception|mce: \[Hardware Error\]'
-    LEVE_RE='soft lockup|rcu: INFO: rcu_[a-z]+ (self-)?detected stall|detected stalls on CPUs|blocked for more than [0-9]+ seconds|NVRM: Xid'
+    PSTORE_RUTAS="${ANALISIS_PSTORE:-/var/lib/systemd/pstore /sys/fs/pstore}"   # variables solo para pruebas
+    CRASH_DIR="${ANALISIS_CRASH:-/var/crash}"
+    APTLOG_DIR="${ANALISIS_APTLOG:-/var/log/apt}"
+    PANDIR="$DIR_SAL/panics"; mkdir -p "$PANDIR"
+    INC_FICH=(); INC_FIRMA=(); INC_IDX=()
+    declare -A INC=() VOLC=()
     [ -d /var/log/journal ] || nomedido "journal no persistente (/var/log/journal no existe): solo se ve el arranque actual"
     # índice id primera-entrada última-entrada (segundos)
     journalctl --list-boots --no-pager -o json 2>/dev/null | python3 -c '
@@ -762,7 +990,7 @@ for b in l: print(b["index"], b["boot_id"], int(b["first_entry"]) // 10**6, int(
                 FINAL="SIN APAGADO LIMPIO"; SUCIOS=$((SUCIOS + 1)); PK_S[${K:-?}]=$(( ${PK_S[${K:-?}]:-0} + 1 ))
             fi
             PK_N[${K:-?}]=$(( ${PK_N[${K:-?}]:-0} + 1 ))
-            [ "$NG" -gt 0 ] && { CONGRAVE=$((CONGRAVE + 1)); PK_P[${K:-?}]=$(( ${PK_P[${K:-?}]:-0} + 1 )); FINAL+=" · $NG panic/oops"; }
+            [ "$NG" -gt 0 ] && { CONGRAVE=$((CONGRAVE + 1)); PK_P[${K:-?}]=$(( ${PK_P[${K:-?}]:-0} + 1 )); FINAL+=" · $NG panic/oops"; INC[$id]=1; }
             [ "$NL" -gt 0 ] && { CONLEVE=$((CONLEVE + 1)); FINAL+=" · $NL cuelgues/stalls"; }
             r "$(printf '   %3s %s  %8s  %-18s  %s' "$i" "$(date -d "@$t1" '+%F %H:%M')" "$(mmss $(( (t2 - t1) / 60 )) | sed 's/:/h/')" "${K:-?}" "$FINAL")"
             # Las primeras líneas distintas de cada tipo, con su hora.
@@ -775,37 +1003,87 @@ for b in l: print(b["index"], b["boot_id"], int(b["first_entry"]) // 10**6, int(
         done
         [ "$NB" -le 1 ] && r "   (en el journal solo está el arranque actual)"
     fi
-    # ---- pstore: volcados de panic guardados por la UEFI
-    NPS=0
-    for f in /var/lib/systemd/pstore/* /sys/fs/pstore/*; do
-        [ -e "$f" ] || continue
-        NPS=$((NPS + 1))
-        L=$(grep -rhaE -m1 "$GRAVE_RE|$LEVE_RE" "$f" 2>/dev/null | head -1 | tr -d '\r' | cut -c1-140)
-        r "   pstore $(date -r "$f" '+%F %H:%M') ${f##*/}: ${L:-(sin línea de panic reconocible)}"
+    # ---- Volcados: "tipo|ruta|epoch". En /sys/fs/pstore las partes de un mismo
+    # registro (dmesg-efi-NNNN01, …02) van juntas.
+    : >"$TMP/volcados"
+    for base in $PSTORE_RUTAS; do
+        if [ "$base" = /sys/fs/pstore ] || [[ "$base" == *sys-pstore* ]]; then
+            for x in "$base"/*; do [ -f "$x" ] && echo "${x%[0-9][0-9]}"; done | sort -u | while read -r g; do
+                echo "pstore|${g}*|$(stat -c %Y ${g}* | sort -n | tail -1)"
+            done >>"$TMP/volcados"
+        else
+            for x in "$base"/*; do
+                [ -e "$x" ] || continue
+                echo "pstore|$x|$(find "$x" -type f -printf '%T@\n' 2>/dev/null | sort -n | tail -1 | cut -d. -f1)" >>"$TMP/volcados"
+            done
+        fi
     done
-    [ "$NPS" -gt 0 ] && error "$NPS volcados de kernel panic en pstore (ver arriba; se pueden borrar tras revisarlos)"
-    # ---- /var/crash: kdump (carpetas con fecha) y oops del kernel recogidos por apport
-    NKD=0
-    for d in /var/crash/[0-9]*/; do
+    for d in "$CRASH_DIR"/[0-9]*/; do
         [ -d "$d" ] || continue
-        NKD=$((NKD + 1))
-        L=$(grep -haE -m1 "$GRAVE_RE" "$d"dmesg* 2>/dev/null | head -1 | cut -c1-140)
-        r "   kdump ${d#/var/crash/}: ${L:-volcado sin dmesg}"
+        n=$(basename "$d")
+        t=$(date -d "${n:0:8} ${n:8:2}:${n:10:2}" +%s 2>/dev/null || stat -c %Y "$d")
+        echo "kdump|${d%/}|$t" >>"$TMP/volcados"
     done
-    [ "$NKD" -gt 0 ] && error "$NKD volcados de kdump en /var/crash"
-    for f in /var/crash/linux-image-*.crash /var/crash/*kernel*.crash; do
-        [ -e "$f" ] || continue
-        r "   apport $(date -r "$f" '+%F %H:%M') ${f##*/}"
-        aviso "oops del kernel recogido por apport: ${f##*/}"
+    for x in "$CRASH_DIR"/linux-image-*.crash "$CRASH_DIR"/*kernel*.crash; do
+        [ -f "$x" ] && echo "apport|$x|$(stat -c %Y "$x")" >>"$TMP/volcados"
     done
+    NPS=0; NKD=0; SOLOS=()
+    while IFS='|' read -r tipo ruta t; do
+        [ -n "$tipo" ] || continue
+        b=$(arranque_de "$tipo" "${t:-0}")
+        L=$(cat $ruta 2>/dev/null | tr -d '\000' | grep -aE -m1 "$GRAVE_RE|$LEVE_RE" | head -1 | cut -c1-120)
+        [ -d "${ruta%\*}" ] && L=$(find "$ruta" -type f -exec cat {} + 2>/dev/null | tr -d '\000' | grep -aE -m1 "$GRAVE_RE|$LEVE_RE" | cut -c1-120)
+        BIDX=$(awk -v id="$b" '$2 == id { print $1 }' "$TMP/arranques")
+        r "   $tipo $(date -d "@${t:-0}" '+%F %H:%M') ${ruta##*/} → arranque ${BIDX:-?}: ${L:-(sin línea de panic reconocible)}"
+        case "$tipo" in pstore) NPS=$((NPS + 1)) ;; kdump) NKD=$((NKD + 1)) ;; apport) aviso "oops del kernel recogido por apport: ${ruta##*/}" ;; esac
+        if [ "$b" != - ]; then
+            INC[$b]=1; VOLC[$b]+="$tipo|$ruta"$'\n'
+        else
+            SOLOS+=("$tipo|$ruta|$t")
+        fi
+    done <"$TMP/volcados"
+    [ "$NPS" -gt 0 ] && error "$NPS volcados de kernel panic en pstore (se pueden borrar tras revisarlos: rm -rf /var/lib/systemd/pstore/*)"
+    [ "$NKD" -gt 0 ] && error "$NKD volcados de kdump en $CRASH_DIR"
+
+    # ---- Un fichero por panic (en el orden de los arranques; luego los volcados sueltos)
+    while read -r i id t1 t2; do
+        [ -n "${INC[$id]:-}" ] && incidente "$id" "${VOLC[$id]:-}" "$t2"
+    done <"$TMP/arranques"
+    for s in "${SOLOS[@]}"; do
+        IFS='|' read -r tipo ruta t <<<"$s"
+        incidente - "$tipo|$ruta" "$t"
+    done
+    if [ "${#INC_FICH[@]}" -gt 0 ]; then
+        declare -A NFIRMA=()
+        for s in "${INC_FIRMA[@]}"; do NFIRMA[$s]=$(( ${NFIRMA[$s]:-0} + 1 )); done
+        r "   Un fichero por panic (${#INC_FICH[@]}, ${#NFIRMA[@]} fallos distintos) en $PANDIR/:"
+        for n in "${!INC_FICH[@]}"; do
+            s=${INC_FIRMA[$n]}
+            r "     ${INC_FICH[$n]##*/}  (arranque ${INC_IDX[$n]})"
+            r "        $s$([ "${NFIRMA[$s]}" -gt 1 ] && echo "  [×${NFIRMA[$s]}, mismo fallo]")"
+            # Al final de cada fichero, los otros panics con la misma firma.
+            {
+                echo "== Otros panics con la misma firma"
+                otros=0
+                for m in "${!INC_FICH[@]}"; do
+                    [ "$m" != "$n" ] && [ "${INC_FIRMA[$m]}" = "$s" ] && { echo "   ${INC_FICH[$m]##*/}"; otros=1; }
+                done
+                [ "$otros" = 0 ] && echo "   ninguno"
+            } >>"${INC_FICH[$n]}"
+            printf 'PANICFILE|%s\n' "${INC_FICH[$n]}" >>"$MAQ"
+        done
+        dato panics_ficheros "${#INC_FICH[@]}"; dato panics_distintos "${#NFIRMA[@]}"
+        unset NFIRMA
+    fi
+
     # ---- veredicto
     [ "$CONGRAVE" -gt 0 ] && error "$CONGRAVE de $NB arranques con kernel panic/oops"
     [ "$CONLEVE" -gt 0 ] && aviso "$CONLEVE de $NB arranques con cuelgues de CPU/tareas (soft lockup, stall, tareas bloqueadas, Xid)"
     [ "$SUCIOS" -ge 2 ] && aviso "$SUCIOS de $NB arranques terminaron sin apagado limpio (cuelgue, panic sin registrar o corte de luz)"
     [ "$SUCIOS" -eq 1 ] && r "   1 arranque terminó sin apagado limpio (puede ser un corte de luz o apagado a botón)"
     dato arranques "$NB"; dato arranques_sucios "$SUCIOS"; dato arranques_panic "$CONGRAVE"; dato pstore "$NPS"
-    corto "$NB arranques · $SUCIOS sin apagado limpio · $CONGRAVE con panic · pstore $NPS"
-    unset PK_N PK_S PK_P
+    corto "$NB arranques · $SUCIOS sin apagado limpio · $CONGRAVE con panic · pstore $NPS · ${#INC_FICH[@]} ficheros"
+    unset PK_N PK_S PK_P INC VOLC
     fin_paso
 fi
 

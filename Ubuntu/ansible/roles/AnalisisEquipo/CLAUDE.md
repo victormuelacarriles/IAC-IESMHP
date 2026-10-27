@@ -56,6 +56,8 @@ tiene que estar autorizada (rol `certificados`).
   - `AnalisisEquipo.log`: salida completa de cada ejecución (se va añadiendo).
   - `AnalisisEquipo/<equipo>-ultimo.txt`: **el resumen más reciente de cada
     equipo**. Histórico en `AnalisisEquipo/<equipo>/resumen-<fecha>.txt`.
+  - `AnalisisEquipo/<equipo>/panics/panic-<equipo>-<fecha>-<arranque>.txt`:
+    **un fichero por cada kernel panic** (ver «Ficheros de panic» abajo).
   - `AnalisisEquipo/AnalisisEquipo-<fecha>.csv`: una fila por equipo con todos
     los datos (modelo, CPU, RAM, tiempos, MB/s, temperaturas, salud de
     discos…). Separador `;`, decimales con punto.
@@ -133,6 +135,53 @@ errores de hardware **no** cuentan como fallo de Ansible.
 - Tiempo máximo del `async`: 25 min + estrés + memtester-max + gpu-min.
 - Sin dependencias gráficas: nada de `zenity`/`notify-send`, stdin a
   `/dev/null`, todo a fichero.
+
+## Ficheros de panic (paso `panics`, 2026-10-27)
+
+Cada **panic** = un arranque con panic/oops/BUG/GPF/hard lockup/MCE en el
+journal, **o** un volcado (pstore, kdump, apport). El volcado se asocia al
+arranque en que ocurrió:
+- pstore lo guarda `systemd-pstore` al arrancar **después**: si cae en los 15
+  primeros minutos de un arranque, es del anterior (así un cuelgue que no dejó
+  nada en el journal recibe su traza).
+- kdump: su carpeta lleva la hora del panic → el arranque que la contiene.
+- Volcados más antiguos que el journal → fichero propio («`-pstore.txt`»).
+
+Fichero: `panics/panic-<equipo>-<YYYYmmdd-HHMM>-<8 primeros del boot id>.txt`
+(en el equipo, en `/var/log/IAC-IESMHP/AnalisisEquipo/`; Ansible los trae a
+`<equipo>/panics/`). El nombre es fijo para cada panic: relanzar lo reescribe,
+no lo duplica. Contenido:
+1. Cabecera: **firma**, arranque (índice, id, inicio → fin), kernel, si acabó
+   con apagado limpio, fuentes.
+2. Resumen del fallo: líneas graves distintas, proceso (`CPU/PID/Comm`),
+   equipo, `RIP`, **`Tainted` explicado** letra a letra, módulos cargados.
+3. Pila de llamadas del primer fallo.
+4. Contexto del arranque: línea de arranque, DMI/BIOS, microcódigo, módulos
+   que «manchan» el kernel, versiones de `zfs`/`nvidia`/`vmmon`/`vmnet` para
+   ese kernel y estado del paquete `linux-image-<k>`.
+5. Bloque del fallo: log del kernel desde 150 líneas antes del primer error
+   hasta el final del arranque (máx. 2000).
+6. Últimas 200 líneas de **todo** el journal de ese arranque (qué pasaba).
+7. Avisos y errores del kernel de ese arranque (máx. 300).
+8. Arranque siguiente: primeras líneas y avisos de recuperación (pstore,
+   EDAC, fsck, ZFS…).
+9. Paquetes cambiados con apt en los 7 días anteriores (lo de `linux-`,
+   `nvidia`, `zfs`, `firmware`, `mesa`, `vmware`, `microcode`, `dkms` delante).
+10. Volcados completos (pstore, kdump, apport sin las partes base64).
+11. **Otros panics con la misma firma**.
+
+**Firma** = primera línea grave sin números ni direcciones + función de la
+línea `RIP`/`pc` (p. ej. `BUG: kernel NULL pointer dereference, address: N @
+zio_execute`). En el resumen sale el listado con `[×N, mismo fallo]` cuando
+se repite, y el total «N ficheros, M fallos distintos».
+
+Pruebas (2026-10-27, local con `journalctl` falso y `ANALISIS_PSTORE`,
+`ANALISIS_CRASH`, `ANALISIS_APTLOG` apuntando a datos de prueba): dos NULL
+pointer en `zio_execute` en arranques distintos (misma firma), un cuelgue sin
+traza en el journal con su volcado de pstore guardado en el arranque siguiente
+(bien asociado) y un pstore antiguo suelto → 4 ficheros, 3 fallos distintos;
+Ansible los trae a `<equipo>/panics/`. **Pendiente**: journal y pstore reales
+como root.
 
 ## Pruebas (2026-10-26, en el equipo del propietario, local y sin root)
 

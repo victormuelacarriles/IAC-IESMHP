@@ -40,6 +40,7 @@
 #   <equipo>/resumen-<fecha>.txt   resumen de cada equipo (lo trae del equipo)
 #   <equipo>-ultimo.txt            el último de ese equipo
 #   AnalisisEquipo-<fecha>.csv     una fila por equipo para comparar (separador ;)
+#   <equipo>/panics/panic-<equipo>-<fecha>-<arranque>.txt   un fichero por kernel panic
 # En cada equipo queda además /var/log/IAC-IESMHP/AnalisisEquipo/.
 # Al final, tabla de TIEMPOS por equipo y paso.
 set -o pipefail
@@ -217,5 +218,7 @@ done
     echo "  TOTAL GENERAL: $(mmss $(( $(date +%s) - T0 )))   (inicio $INICIO, fin $(date '+%d/%m %H:%M'))"
     echo "===== fin (código $RC). Log: $LOG"
     echo "      Resumen de cada equipo: $LOGEQ/<equipo>-ultimo.txt (histórico en $LOGEQ/<equipo>/)"
+    NPF=$(find "$LOGEQ" -path '*/panics/panic-*.txt' -newermt "@$T0" 2>/dev/null | wc -l)
+    [ "$NPF" -gt 0 ] && echo "      Kernel panics: $NPF ficheros (uno por panic) en $LOGEQ/<equipo>/panics/"
 } | tee -a "$LOG"
 exit $RC
