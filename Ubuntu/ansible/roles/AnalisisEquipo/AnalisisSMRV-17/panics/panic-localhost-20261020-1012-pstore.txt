@@ -1,0 +1,815 @@
+================================================================
+ Kernel panic en localhost · 2026-10-20 10:12
+================================================================
+ Firma:      Oops: general protection fault, probably for non-canonical address N: N [#N] SMP NOPTI @ lookup_swap_cgroup_id
+ Arranque:   no está en el journal (volcado más antiguo que el journal)
+ Fuentes:    pstore 1792483411
+ Generado:   2026-10-27 18:07 por analiza.sh (/var/log/IAC-IESMHP/AnalisisEquipo/analisis-20261027-180700.log)
+
+== Resumen del fallo
+   <4>[  909.990229] Oops: general protection fault, probably for non-canonical address 0x7cde1c3a3dffc: 0000 [#1] SMP NOPTI
+   Proceso:  <4>[  909.990240] CPU: 1 UID: 1000 PID: 7730 Comm: pool-spawner Tainted: P           OE       7.0.0-38-generic #38-Ubuntu PREEMPT(lazy) 
+   Equipo:   ASUS System Product Name/PRIME B650M-A II, BIOS 3057 10/29/2024
+   <4>[  909.990255] RIP: 0010:lookup_swap_cgroup_id+0x49/0xa0
+   <4>[  909.990542] RIP: 0033:0x724afff34acd
+   Tainted:  P           OE       
+     E: módulo sin firmar
+     O: módulo fuera del árbol del kernel (zfs, nvidia, vmmon/vmnet…)
+     P: módulo propietario cargado (p. ej. nvidia)
+   Módulos cargados: xt_conntrack xt_MASQUERADE bridge stp llc xfrm_user xfrm_algo xt_set ip_set 
+      snd_seq_dummy snd_hrtimer nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 xt_addrtype 
+      nft_compat x_tables rpcsec_gss_krb5 auth_rpcgss nfsv4 parport_pc vmw_vsock_vmci_transport vsock vmw_vmci nfs 
+      lockd grace netfs sunrpc overlay qrtr vmnet(OE) vmmon(OE) binfmt_misc amd_atl intel_rapl_msr nls_iso8859_1 
+      intel_rapl_common amdgpu edac_mce_amd snd_hda_codec_alc662 snd_hda_codec_realtek_lib snd_hda_codec_generic 
+      snd_hda_codec_atihdmi snd_hda_codec_hdmi snd_hda_intel snd_hda_codec kvm_amd snd_hda_core snd_intel_dspcfg 
+      snd_intel_sdw_acpi snd_hwdep kvm snd_pcm amdxcp drm_panel_backlight_quirks gpu_sched mfd_aaeon eeepc_wmi 
+      snd_seq_midi drm_buddy snd_seq_midi_event irqbypass asus_wmi drm_ttm_helper rapl spd5118 snd_rawmidi 
+      sparse_keymap ttm zfs(PO) drm_exec platform_profile snd_seq wmi_bmof drm_suballoc_helper drm_display_helper 
+      snd_seq_device snd_timer cec input_leds spl(O) joydev rc_core i2c_piix4 snd
+
+== Pila de llamadas (Call Trace) del primer fallo
+   <4>[  909.990299] Call Trace:
+   <4>[  909.990302]  <TASK>
+   <4>[  909.990304]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990309]  ? softleaf_from_pte+0x83/0xb0
+   <4>[  909.990315]  swap_pte_batch+0xa7/0x2a0
+   <4>[  909.990319]  zap_nonpresent_ptes.constprop.0.isra.0+0x497/0x520
+   <4>[  909.990323]  ? pte_offset_map_lock+0xb1/0x120
+   <4>[  909.990327]  zap_pte_range+0x311/0x770
+   <4>[  909.990331]  ? walk_pmd_range+0x181/0x2d0
+   Oops#1 Part3
+   <4>[  909.990336]  zap_pmd_range.isra.0+0xce/0x250
+   <4>[  909.990340]  unmap_page_range+0x23a/0x3d0
+   <4>[  909.990344]  unmap_single_vma+0x96/0x110
+   <4>[  909.990347]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990350]  ? mas_find+0x5b/0x1d0
+   <4>[  909.990355]  unmap_vmas+0xa5/0x180
+   <4>[  909.990360]  exit_mmap+0x13b/0x400
+   <4>[  909.990367]  __mmput+0x45/0x170
+   <4>[  909.990372]  mmput+0x31/0x40
+   <4>[  909.990375]  exit_mm+0xe3/0x150
+   <4>[  909.990379]  do_exit+0x1e4/0x4b0
+   <4>[  909.990383]  do_group_exit+0x2d/0xb0
+   <4>[  909.990386]  get_signal+0x7f5/0x830
+   <4>[  909.990390]  ? __schedule+0x2c3/0x650
+   <4>[  909.990395]  arch_do_signal_or_restart+0x36/0x110
+   <4>[  909.990401]  exit_to_user_mode_loop+0x8f/0x540
+   <4>[  909.990406]  do_syscall_64+0x22f/0x5a0
+   <4>[  909.990410]  ? switch_fpu_return+0x64/0x110
+   <4>[  909.990415]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990418]  ? arch_exit_to_user_mode_prepare.isra.0+0xc3/0xe0
+   <4>[  909.990423]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990426]  ? do_syscall_64+0x140/0x5a0
+   <4>[  909.990430]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990433]  ? resched_curr+0x13/0x20
+   <4>[  909.990437]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990440]  ? wakeup_preempt_idle+0xe/0x20
+   <4>[  909.990444]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990447]  ? wakeup_preempt+0x71/0xc0
+   <4>[  909.990450]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990453]  ? raw_spin_rq_unlock+0x14/0x50
+   <4>[  909.990457]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990460]  ? wake_up_new_task+0x207/0x330
+   <4>[  909.990464]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990467]  ? kernel_clone+0x127/0x4c0
+   Oops#1 Part2
+   <4>[  909.990471]  ? srso_alias_return_thunk+0x5/0xfbef5
+
+== Paquetes cambiados con apt en los 7 días anteriores
+   Start-Date: 2026-10-19  18:56:48
+   Commandline: apt-get install -y -o Dpkg::Options::=--force-confold --no-install-recommends zfsutils-linux zfs-zed
+   Upgrade:    zfs-zed:amd64 (2.4.1-1ubuntu5, 2.4.1-1ubuntu5.1), libzfs7linux:amd64 (2.4.1-1ubuntu5, 2.4.1-1ubuntu5.1), zfsutils-linux:amd64 (2.4.1-1ubuntu5, 2.4.1-1ubuntu5.1)
+               + 3 paquetes más
+
+   Start-Date: 2026-10-19  18:56:52
+   Commandline: apt-get install -y -o Dpkg::Options::=--force-confold openssh-server openssh-sftp-server
+   Install:    ssh-import-id:amd64 (5.11-0ubuntu4, automatic), openssh-server:amd64 (1:10.2p1-2ubuntu3.8), openssh-sftp-server:amd64 (1:10.2p1-2ubuntu3.8), ncurses-term:amd64 (6.6+20251231-1, automatic)
+   Upgrade:    openssh-client:amd64 (1:10.2p1-2ubuntu3, 1:10.2p1-2ubuntu3.8)
+
+   Start-Date: 2026-10-19  18:59:14
+   Commandline: apt-get install -y -o Dpkg::Options::=--force-confold ssh openssh-sftp-server ansible
+   Install:    python3-resolvelib:amd64 (1.2.1-2, automatic), python3-dnspython:amd64 (2.8.0-1ubuntu1, automatic), python3-pyspnego:amd64 (0.10.2-3, automatic), python3-libcloud:amd64 (3.8.0+repack-5ubuntu1, automatic), ssh:amd64 (1:10.2p1-2ubuntu3.8), ansible:amd64 (13.1.0+dfsg-1ubuntu1), python3-jmespath:amd64 (
+
+   Start-Date: 2026-10-19  19:00:11
+   Commandline: apt-get full-upgrade -y -o Dpkg::Options::=--force-confold
+   Install:    linux-modules-7.0.0-38-generic:amd64 (7.0.0-38.38, automatic), linux-image-7.0.0-38-generic:amd64 (7.0.0-38.38, automatic), linux-headers-7.0.0-38-generic:amd64 (7.0.0-38.38, automatic), linux-tools-7.0.0-38:amd64 (7.0.0-38.38, automatic), linux-headers-7.0.0-38:amd64 (7.0.0-38.38, automatic), linux-tools-7.0.0-38-generic:amd64 (7.0.0-38.38, automatic), linux-main-modules-zfs-7.0.0-38-generic:amd64 (7.0.0-38.38, automatic)
+   Upgrade:    linux-generic-hwe-24.04:amd64 (7.0.0-14.14, 7.0.0-38.38), linux-image-generic-hwe-26.04:amd64 (7.0.0-14.14, 7.0.0-38.38), linux-tools-common:amd64 (7.0.0-14.14, 7.0.0-38.38), linux-firmware-intel-graphics:amd64 (20260319.git217ca6e4-0ubuntu2, 20260319.git217ca6e4-0ubuntu2.1), libglx-mesa0:amd64 (26.0.3-1ubuntu1, 26.0.8-1ubuntu0.3), linux-perf:amd64 (7.0.0-14.14, 7.0.0-38.38), linux-firmware-intel-wireless:amd64 (20260319.git217ca6e4-0ubuntu2, 20260319.git217ca6e4-0ubuntu2.1), linux-firmware-amd-misc:amd64 (20260319.git217ca6e4-0ubuntu1, 20260319.git217ca6e4-0ubuntu1.1), mesa-libgallium:amd64 (26.0.3-1ubuntu1, 26.0.8-1ubuntu0.3), linux-firmware-nvidia-graphics:amd64 (20260319.git217ca6e4-0ubuntu1, 20260319.git217ca6e4-0ubuntu1.1), linux-firmware-mediatek:amd64 (20260319.git217ca6e4-0ubuntu1, 20260319.git217ca6e4-0ubuntu1.2), linux-headers-generic-hwe-26.04:amd64 (7.0.0-14.14, 7.0.0-38.38)
+               + 509 paquetes más
+
+   Start-Date: 2026-10-19  19:04:00
+   Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=60 install python3-pip=25.1.1+dfsg-1ubuntu2
+   Install:    gcc-x86-64-linux-gnu:amd64 (4:15.2.0-5ubuntu1, automatic), g++-x86-64-linux-gnu:amd64 (4:15.2.0-5ubuntu1, automatic), g++-15-x86-64-linux-gnu:amd64 (15.2.0-16ubuntu1, automatic), gcc-15-x86-64-linux-gnu:amd64 (15.2.0-16ubuntu1, automatic
+               + 34 paquetes más
+
+   Start-Date: 2026-10-19  19:04:09
+   Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=60 install pipx=1.8.0-1
+   Install:    python3-tk:amd64 (3.14.3-0ubuntu2, automatic), python3-setuptools-whl:amd64 (78.1.1-0.1build1, automatic), python3-dateutil:amd64 (2.9.0-4build1, automatic), python3-tornado:amd64 (6.5.4-0.1ubuntu0.1, automatic), pipx:amd64 (1.8.0-1), node-popper2:amd64 (2.11.2-9, automatic), python3-venv:amd64 (3.1
+
+   Start-Date: 2026-10-19  19:04:18
+   Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=60 install git=1:2.53.0-1ubuntu1.1
+   Install:    git:amd64 (1:2.53.0-1ubuntu1.1), liberror-perl:amd64 (0.17030-1, automatic), git-man:amd64 (1:2.53.0-1ubuntu1.1, automatic)
+
+   Start-Date: 2026-10-19  19:04:22
+   Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=60 install curl=8.18.0-1ubuntu2.8
+   Install:    curl:amd64 (8.18.0-1ubuntu2.8)
+
+   Start-Date: 2026-10-19  19:05:00
+   Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=60 install flatpak=1.16.6-1 gnome-software-plugin-flatpak=50.0-1
+   Install:    gnome-software:amd64 (50.0-1, automatic), gnome-software-common:amd64 (50.0-1, automatic), libcomposefs1:amd64 (1.0.8-3, automatic), libostree-1-1:amd64 (2025.7-3build1, automatic), gnome-software-plugin-deb:amd64 (50.0-1, automatic), libflatpak0:amd64 (1.16.6-1, automatic), gnome-software-plugin-fl
+
+   Start-Date: 2026-10-19  19:05:11
+   Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=60 install obs-studio=32.1.0-0ubuntu3
+   Install:    vlc-plugin-qt:amd64 (3.0.23-1, automatic), qttranslations5-l10n:amd64 (5.15.18-1, automatic), libvlc5:amd64 (3.0.23-1, automatic), libb2-1:amd64 (0.98.1-1.1build2, automatic), libopenal-data:amd64 (1:1.25.1-2, automatic), libvpl2:amd64 (1:2.16.0-1, automatic), libserd-0-0:amd64 (0.32.6-1, automatic)
+
+   Start-Date: 2026-10-19  19:05:43
+   Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=60 install nfs-common=1:2.8.5-1ubuntu1
+   Install:    nfs-common:amd64 (1:2.8.5-1ubuntu1), rpcbind:amd64 (1.2.7-1build2, automatic)
+
+   Start-Date: 2026-10-19  19:06:06
+   Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=60 install docker-ce=5:29.9.1-1~ubuntu.26.04~resolute docker-ce-cli=5:29.9.1-1~ubuntu.26.04~resolute containerd.io=2.4.2-2~ubuntu.26.04~resolute docker-buildx-plugin=0.38.0-1~ubuntu.26.04
+   Install:    containerd.io:amd64 (2.4.2-2~ubuntu.26.04~resolute), docker-compose-plugin:amd64 (5.6.0-1~ubuntu.26.04~resolute), docker-ce-cli:amd64 (5:29.9.1-1~ubuntu.26.04~resolute), pigz:amd64 (2.8-1build1, automatic), fuse-overlayfs:amd64 (1.14-1build2), libsubid5:amd64 (1:4.17.4-2ubuntu3, automatic), libslirp
+
+   Start-Date: 2026-10-19  19:06:19
+   Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=60 install sssd-tools=2.12.0-1ubuntu5.5 krb5-user=1.22.1-2ubuntu4.1 samba-common-bin=2:4.23.6+dfsg-1ubuntu2.2
+   Install:    python3-samba:amd64 (2:4.23.6+dfsg-1ubuntu2.2, automatic), krb5-user:amd64 (1.22.1-2ubuntu4.1), libkadm5srv-mit12:amd64 (1.22.1-2ubuntu4.1, automatic), libgssrpc4t64:amd64 (1.22.1-2ubuntu4.1, automatic), samba-common-bin:amd64 (2:4.23.6+dfsg-1ubuntu2.2), python3-talloc:amd64 (2:2.4.3+samba4.23.6+dfs
+
+   Start-Date: 2026-10-19  19:07:09
+   Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=60 install xvfb=2:21.1.22-1ubuntu1.2 linux-headers-generic=7.0.0-38.38
+   Install:    linux-headers-generic:amd64 (7.0.0-38.38
+               + 1 paquetes más
+
+== Volcados (pstore / kdump / apport)
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg.txt (2026-10-20 10:12)
+   Oops#1 Part18
+   <5>[    4.865842] ccp 0000:0b:00.2: psp enabled
+   <6>[    4.867694] piix4_smbus 0000:00:14.0: Auxiliary SMBus Host Controller at 0xb20
+   <4>[    4.889077] zfs: module license 'CDDL' taints kernel.
+   <4>[    4.889081] Disabling lock debugging due to kernel taint
+   <4>[    4.889093] zfs: module license taints kernel.
+   <6>[    5.103111] RAPL PMU: API unit is 2^-32 Joules, 2 fixed counters, 163840 ms ovfl timer
+   <6>[    5.103115] RAPL PMU: hw unit of domain package 2^-16 Joules
+   <6>[    5.103116] RAPL PMU: hw unit of domain core 2^-16 Joules
+   <6>[    5.105219] asus_wmi: ASUS WMI generic driver loaded
+   <4>[    5.107243] asus_wmi: failed to register LPS0 sleep handler in asus-wmi
+   <6>[    5.107885] asus_wmi: Initialization: 0x0
+   <6>[    5.107918] spd5118 0-0051: DDR5 temperature sensor: vendor 0x06:0x32 revision 1.6
+   <6>[    5.108126] asus_wmi: BIOS WMI version: 0.0
+   <6>[    5.108361] asus_wmi: SFUN value: 0x0
+   <6>[    5.108365] eeepc-wmi eeepc-wmi: Detected AsusMbSwInterface, not ASUSWMI, use DSTS
+   <6>[    5.112883] spd5118 0-0053: DDR5 temperature sensor: vendor 0x06:0x9d revision 2.1
+   <6>[    5.112964] Adding 16777212k swap on /dev/nvme0n1p2.  Priority:-1 extents:1 across:16777212k SS
+   <6>[    5.113751] input: Eee PC WMI hotkeys as /devices/platform/eeepc-wmi/input/input7
+   <6>[    5.161324] kvm_amd: TSC scaling supported
+   <6>[    5.161328] kvm_amd: Nested Virtualization enabled
+   <6>[    5.161330] kvm_amd: Nested Paging enabled
+   <6>[    5.161331] kvm_amd: LBR virtualization supported
+   <6>[    5.161334] kvm_amd: AVIC enabled
+   <6>[    5.161335] kvm_amd: x2AVIC enabled (max 512 vCPUs)
+   <6>[    5.161336] kvm_amd: Virtual GIF supported
+   Oops#1 Part17
+   <6>[    5.161337] kvm_amd: Virtual NMI enabled
+   <6>[    5.168160] snd_hda_intel 0000:0b:00.1: enabling device (0000 -> 0002)
+   <6>[    5.168260] snd_hda_intel 0000:0b:00.1: Handle vga_switcheroo audio client
+   <6>[    5.168308] snd_hda_intel 0000:0b:00.6: enabling device (0000 -> 0002)
+   <6>[    5.176734] input: HD-Audio Generic HDMI/DP,pcm=3 as /devices/pci0000:00/0000:00:08.1/0000:0b:00.1/sound/card0/input8
+   <6>[    5.176784] input: HD-Audio Generic HDMI/DP,pcm=7 as /devices/pci0000:00/0000:00:08.1/0000:0b:00.1/sound/card0/input9
+   <6>[    5.188043] snd_hda_codec_alc662 hdaudioC1D0: autoconfig for ALC897: line_outs=1 (0x14/0x0/0x0/0x0/0x0) type:line
+   <6>[    5.188047] snd_hda_codec_alc662 hdaudioC1D0:    speaker_outs=0 (0x0/0x0/0x0/0x0/0x0)
+   <6>[    5.188049] snd_hda_codec_alc662 hdaudioC1D0:    hp_outs=1 (0x1b/0x0/0x0/0x0/0x0)
+   <6>[    5.188050] snd_hda_codec_alc662 hdaudioC1D0:    mono: mono_out=0x0
+   <6>[    5.188052] snd_hda_codec_alc662 hdaudioC1D0:    dig-out=0x11/0x0
+   <6>[    5.188053] snd_hda_codec_alc662 hdaudioC1D0:    inputs:
+   <6>[    5.188054] snd_hda_codec_alc662 hdaudioC1D0:      Rear Mic=0x18
+   <6>[    5.188056] snd_hda_codec_alc662 hdaudioC1D0:      Front Mic=0x19
+   <6>[    5.188057] snd_hda_codec_alc662 hdaudioC1D0:      Line=0x1a
+   <6>[    5.194496] MCE: In-kernel MCE decoding enabled.
+   <6>[    5.211522] input: HD-Audio Generic Rear Mic as /devices/pci0000:00/0000:00:08.1/0000:0b:00.6/sound/card1/input10
+   <6>[    5.211575] input: HD-Audio Generic Front Mic as /devices/pci0000:00/0000:00:08.1/0000:0b:00.6/sound/card1/input11
+   <6>[    5.211621] input: HD-Audio Generic Line as /devices/pci0000:00/0000:00:08.1/0000:0b:00.6/sound/card1/input12
+   Oops#1 Part16
+   <6>[    5.211674] input: HD-Audio Generic Line Out as /devices/pci0000:00/0000:00:08.1/0000:0b:00.6/sound/card1/input13
+   <6>[    5.211717] input: HD-Audio Generic Front Headphone as /devices/pci0000:00/0000:00:08.1/0000:0b:00.6/sound/card1/input14
+   <5>[    5.251074] ZFS: Loaded module v2.4.1-1ubuntu5.1, ZFS pool version 5000, ZFS filesystem version 5
+   <5>[    5.251077] ZFS: Using ZFS with kernel 7.0.0-38-generic is not expressly supported by OpenZFS. Support for this version is maintained by Canonical for the purposes of the (null) kernel
+   <5>[    5.251078] ZFS: Please report your results at: https://github.com/openzfs/zfs/issues/new
+   <6>[    6.497450] intel_rapl_common: Found RAPL domain package
+   <6>[    6.497453] intel_rapl_common: Found RAPL domain core
+   <6>[    6.497674] amd_atl: AMD Address Translation Library initialized
+   <6>[    6.510789] amdgpu: Virtual CRAT table created for CPU
+   <6>[    6.510808] amdgpu: Topology: Add CPU node
+   <6>[    6.510930] amdgpu 0000:0b:00.0: enabling device (0006 -> 0007)
+   <6>[    6.510974] amdgpu 0000:0b:00.0: initializing kernel modesetting (IP DISCOVERY 0x1002:0x164E 0x1043:0x8877 0xC2).
+   <6>[    6.510983] amdgpu 0000:0b:00.0: register mmio base: 0xF6900000
+   <6>[    6.510984] amdgpu 0000:0b:00.0: register mmio size: 524288
+   <6>[    6.512710] amdgpu 0000:0b:00.0: detected ip block number 0 <common_v1_0_0> (nv_common)
+   <6>[    6.512712] amdgpu 0000:0b:00.0: detected ip block number 1 <gmc_v10_0_0> (gmc_v10_0)
+   <6>[    6.512714] amdgpu 0000:0b:00.0: detected ip block number 2 <ih_v5_0_0> (navi10_ih)
+   <6>[    6.512716] amdgpu 0000:0b:00.0: detected ip block number 3 <psp_v13_0_0> (psp)
+   Oops#1 Part15
+   <6>[    6.512718] amdgpu 0000:0b:00.0: detected ip block number 4 <smu_v13_0_0> (smu)
+   <6>[    6.512720] amdgpu 0000:0b:00.0: detected ip block number 5 <dce_v1_0_0> (dm)
+   <6>[    6.512722] amdgpu 0000:0b:00.0: detected ip block number 6 <gfx_v10_0_0> (gfx_v10_0)
+   <6>[    6.512724] amdgpu 0000:0b:00.0: detected ip block number 7 <sdma_v5_2_0> (sdma_v5_2)
+   <6>[    6.512725] amdgpu 0000:0b:00.0: detected ip block number 8 <vcn_v3_0_0> (vcn_v3_0)
+   <6>[    6.512727] amdgpu 0000:0b:00.0: detected ip block number 9 <jpeg_v3_0_0> (jpeg_v3_0)
+   <6>[    6.512744] amdgpu 0000:0b:00.0: Fetched VBIOS from VFCT
+   <6>[    6.512746] amdgpu 0000:0b:00.0: [drm] ATOM BIOS: 102-RAPHAEL-008
+   <6>[    6.520888] amdgpu 0000:0b:00.0: vgaarb: deactivate vga console
+   <6>[    6.520891] amdgpu 0000:0b:00.0: Trusted Memory Zone (TMZ) feature disabled as experimental (default)
+   <6>[    6.520950] amdgpu 0000:0b:00.0: vm size is 262144 GB, 4 levels, block size is 9-bit, fragment size is 9-bit
+   <6>[    6.520957] amdgpu 0000:0b:00.0: VRAM: 512M 0x000000F400000000 - 0x000000F41FFFFFFF (512M used)
+   <6>[    6.520959] amdgpu 0000:0b:00.0: GART: 1024M 0x0000000000000000 - 0x000000003FFFFFFF
+   <6>[    6.520966] amdgpu 0000:0b:00.0: [drm] Detected VRAM RAM=512M, BAR=512M
+   <6>[    6.520967] amdgpu 0000:0b:00.0: [drm] RAM width 128bits DDR5
+   <6>[    6.521050] amdgpu 0000:0b:00.0:  512M of VRAM memory ready
+   <6>[    6.521052] amdgpu 0000:0b:00.0:  31069M of GTT memory ready.
+   <6>[    6.521073] amdgpu 0000:0b:00.0: [drm] GART: num cpu pages 262144, num gpu pages 262144
+   <6>[    6.521254] amdgpu 0000:0b:00.0: [drm] PCIE GART of 1024M enabled (table at 0x000000F41FC00000).
+   Oops#1 Part14
+   <6>[    6.521625] amdgpu 0000:0b:00.0: [drm] Loading DMUB firmware via PSP: version=0x05002E00
+   <6>[    6.521979] amdgpu 0000:0b:00.0: [drm] use_doorbell being set to: [true]
+   <6>[    6.521996] amdgpu 0000:0b:00.0: [VCN instance 0] Found VCN firmware Version ENC: 1.33 DEC: 4 VEP: 0 Revision: 14
+   <6>[    6.544285] amdgpu 0000:0b:00.0: reserve 0xa00000 from 0xf41e000000 for PSP TMR
+   <6>[    6.605585] amdgpu 0000:0b:00.0: RAS: optional ras ta ucode is not available
+   <6>[    6.611279] amdgpu 0000:0b:00.0: RAP: optional rap ta ucode is not available
+   <6>[    6.611281] amdgpu 0000:0b:00.0: SECUREDISPLAY: optional securedisplay ta ucode is not available
+   <6>[    6.612420] amdgpu 0000:0b:00.0: SMU is initialized successfully!
+   <6>[    6.613305] amdgpu 0000:0b:00.0: [drm] Display Core v3.2.369 initialized on DCN 3.1.5
+   <6>[    6.613308] amdgpu 0000:0b:00.0: [drm] DP-HDMI FRL PCON supported
+   <6>[    6.614063] amdgpu 0000:0b:00.0: [drm] DMUB hardware initialized: version=0x05002E00
+   <6>[    6.616854] snd_hda_intel 0000:0b:00.1: bound 0000:0b:00.0 (ops amdgpu_dm_audio_component_bind_ops [amdgpu])
+   <6>[    6.617490] amdgpu 0000:0b:00.0: [drm] HDMI-A-1: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+   <6>[    6.617543] amdgpu 0000:0b:00.0: [drm] DP-1: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+   <6>[    6.617588] amdgpu 0000:0b:00.0: [drm] DP-2: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+   <6>[    6.617920] amdgpu 0000:0b:00.0: kiq ring mec 2 pipe 1 q 0
+   <6>[    6.620898] kfd kfd: Allocated 3969056 bytes on gart
+   <6>[    6.620908] kfd kfd: Total number of KFD nodes to be created: 1
+   Oops#1 Part13
+   <6>[    6.621300] amdgpu: Virtual CRAT table created for GPU
+   <6>[    6.621414] amdgpu: Topology: Add GPU node [0x1002:0x164e]
+   <6>[    6.621416] kfd kfd: added device 1002:164e
+   <6>[    6.621425] amdgpu 0000:0b:00.0: SE 1, SH per SE 1, CU per SH 2, active_cu_number 2
+   <6>[    6.621428] amdgpu 0000:0b:00.0: ring gfx_0.0.0 uses VM inv eng 0 on hub 0
+   <6>[    6.621430] amdgpu 0000:0b:00.0: ring gfx_0.1.0 uses VM inv eng 1 on hub 0
+   <6>[    6.621431] amdgpu 0000:0b:00.0: ring comp_1.0.0 uses VM inv eng 4 on hub 0
+   <6>[    6.621433] amdgpu 0000:0b:00.0: ring comp_1.1.0 uses VM inv eng 5 on hub 0
+   <6>[    6.621434] amdgpu 0000:0b:00.0: ring comp_1.2.0 uses VM inv eng 6 on hub 0
+   <6>[    6.621435] amdgpu 0000:0b:00.0: ring comp_1.3.0 uses VM inv eng 7 on hub 0
+   <6>[    6.621436] amdgpu 0000:0b:00.0: ring comp_1.0.1 uses VM inv eng 8 on hub 0
+   <6>[    6.621438] amdgpu 0000:0b:00.0: ring comp_1.1.1 uses VM inv eng 9 on hub 0
+   <6>[    6.621439] amdgpu 0000:0b:00.0: ring comp_1.2.1 uses VM inv eng 10 on hub 0
+   <6>[    6.621440] amdgpu 0000:0b:00.0: ring comp_1.3.1 uses VM inv eng 11 on hub 0
+   <6>[    6.621441] amdgpu 0000:0b:00.0: ring kiq_0.2.1.0 uses VM inv eng 12 on hub 0
+   <6>[    6.621443] amdgpu 0000:0b:00.0: ring sdma0 uses VM inv eng 13 on hub 0
+   <6>[    6.621444] amdgpu 0000:0b:00.0: ring vcn_dec_0 uses VM inv eng 0 on hub 8
+   <6>[    6.621445] amdgpu 0000:0b:00.0: ring vcn_enc_0.0 uses VM inv eng 1 on hub 8
+   <6>[    6.621447] amdgpu 0000:0b:00.0: ring vcn_enc_0.1 uses VM inv eng 4 on hub 8
+   <6>[    6.621448] amdgpu 0000:0b:00.0: ring jpeg_dec uses VM inv eng 5 on hub 8
+   <6>[    6.621756] amdgpu 0000:0b:00.0: Runtime PM not available
+   Oops#1 Part12
+   <6>[    6.622166] amdgpu 0000:0b:00.0: [drm] Registered 4 planes with drm panic
+   <6>[    6.631283] [drm] Initialized amdgpu 3.64.0 for 0000:0b:00.0 on minor 0
+   <6>[    6.633645] amdgpu 0000:0b:00.0: [drm] Cannot find any crtc or sizes
+   <6>[    6.633659] [drm] pre_validate_dsc:1667 MST_DSC dsc precompute is not needed
+   <6>[    6.925671] loop0: detected capacity change from 0 to 8
+   <6>[    6.925906] loop1: detected capacity change from 0 to 136904
+   <6>[    6.927357] loop2: detected capacity change from 0 to 40240
+   <6>[    6.928599] loop3: detected capacity change from 0 to 560536
+   <6>[    6.929193] loop4: detected capacity change from 0 to 33792
+   <6>[    6.929738] loop5: detected capacity change from 0 to 29160
+   <6>[    6.930840] loop6: detected capacity change from 0 to 1241248
+   <6>[    6.931648] loop7: detected capacity change from 0 to 187776
+   <6>[    6.933264] loop8: detected capacity change from 0 to 808920
+   <6>[    6.934591] loop9: detected capacity change from 0 to 823256
+   <5>[    6.999293] audit: type=1400 audit(1792482508.742:2): apparmor="STATUS" operation="profile_load" profile="unconfined" name="ch-run" pid=1694 comm="apparmor_parser"
+   <5>[    6.999321] audit: type=1400 audit(1792482508.742:3): apparmor="STATUS" operation="profile_load" profile="unconfined" name="brave" pid=1689 comm="apparmor_parser"
+   <5>[    6.999349] audit: type=1400 audit(1792482508.742:4): apparmor="STATUS" operation="profile_load" profile="unconfined" name="cam" pid=1692 comm="apparmor_parser"
+   <5>[    6.999379] audit: type=1400 audit(1792482508.742:5): apparmor="STATUS" operation="profile_load" profile="unconfined" name="crun" pid=1699 comm="apparmor_parser"
+   Oops#1 Part11
+   <5>[    6.999426] audit: type=1400 audit(1792482508.742:6): apparmor="STATUS" operation="profile_load" profile="unconfined" name="chrome" pid=1695 comm="apparmor_parser"
+   <5>[    6.999459] audit: type=1400 audit(1792482508.742:7): apparmor="STATUS" operation="profile_load" profile="unconfined" name="ch-checkns" pid=1693 comm="apparmor_parser"
+   <5>[    6.999496] audit: type=1400 audit(1792482508.742:8): apparmor="STATUS" operation="profile_load" profile="unconfined" name="desktop-icons-ng" pid=1700 comm="apparmor_parser"
+   <5>[    6.999531] audit: type=1400 audit(1792482508.742:9): apparmor="STATUS" operation="profile_load" profile="unconfined" name="buildah" pid=1690 comm="apparmor_parser"
+   <5>[    6.999564] audit: type=1400 audit(1792482508.742:10): apparmor="STATUS" operation="profile_load" profile="unconfined" name="devhelp" pid=1701 comm="apparmor_parser"
+   <5>[    6.999594] audit: type=1400 audit(1792482508.742:11): apparmor="STATUS" operation="profile_load" profile="unconfined" name="Discord" pid=1680 comm="apparmor_parser"
+   <5>[    7.128773] vmmon: module verification failed: signature and/or required key missing - tainting kernel
+   <7>[    7.129838] /dev/vmmon[2025]: Module vmmon: registered as misc device
+   <7>[    7.129841] /dev/vmmon[2025]: Using tsc_khz as TSC frequency: 4691188
+   <7>[    7.129843] /dev/vmmon[2025]: Module vmmon: initialized
+   <4>[    7.227924] nvme nvme0: using unchecked data buffer
+   <4>[    7.239764] block nvme0n1: No UUID available providing old NGUID
+   <6>[    7.307731] NET: Registered PF_QIPCRTR protocol family
+   <6>[    7.332285] Realtek Internal NBASE-T PHY r8169-0-700:00: attached PHY driver (mii_bus:phy_addr=r8169-0-700:00, irq=MAC)
+   Oops#1 Part10
+   <6>[    7.490419] r8169 0000:07:00.0 eno1: Link is Down
+   <6>[    7.979804] RPC: Registered named UNIX socket transport module.
+   <6>[    7.979807] RPC: Registered udp transport module.
+   <6>[    7.979808] RPC: Registered tcp transport module.
+   <6>[    7.979809] RPC: Registered tcp-with-tls transport module.
+   <6>[    7.979810] RPC: Registered tcp NFSv4.1 backchannel transport module.
+   <6>[   10.425439] r8169 0000:07:00.0 eno1: Link is Up - 1Gbps/Full - flow control off
+   <6>[   10.427530] r8169 0000:07:00.0 eno1: entered promiscuous mode
+   <6>[   11.664483] fbcon: Taking over console
+   <5>[   16.379782] netfs: FS-Cache loaded
+   <6>[   16.400917] Guest personality initialized and is inactive
+   <6>[   16.400962] VMCI host device registered (name=vmci, major=10, minor=264)
+   <6>[   16.400964] Initialized host personality
+   <6>[   16.413213] NET: Registered PF_VSOCK protocol family
+   <5>[   16.490007] NFS: Registering the id_resolver key type
+   <5>[   16.490014] Key type id_resolver registered
+   <5>[   16.490016] Key type id_legacy registered
+   <4>[   16.970751] kauditd_printk_skb: 245 callbacks suppressed
+   <5>[   16.970754] audit: type=1400 audit(1792482518.713:257): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3051 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   16.970759] audit: type=1400 audit(1792482518.713:258): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3051 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   16.970880] audit: type=1400 audit(1792482518.713:259): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3054 comm="fusermount3" capability=7  capname="setuid"
+   Oops#1 Part9
+   <5>[   17.029384] audit: type=1400 audit(1792482518.772:260): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3131 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   17.029391] audit: type=1400 audit(1792482518.772:261): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3131 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   17.029503] audit: type=1400 audit(1792482518.772:262): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3133 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   17.281137] audit: type=1400 audit(1792482519.023:263): apparmor="DENIED" operation="open" class="file" profile="snap-update-ns.snapd-desktop-integration" name="/run/gdm3/home/gdm-greeter/" pid=3312 comm="snap-update-ns" requested_mask="r" denied_mask="r" fsuid=60578 ouid=60578
+   <5>[   17.281791] audit: type=1400 audit(1792482519.024:264): apparmor="DENIED" operation="open" class="file" profile="/usr/lib/snapd/snap-confine" name="/run/gdm3/" pid=2932 comm="snap-confine" requested_mask="r" denied_mask="r" fsuid=60578 ouid=0
+   <6>[   17.343835] Initializing XFRM netlink socket
+   <6>[   17.356279] bridge: filtering via arp/ip/ip6tables is no longer available by default. Update your scripts to load br_netfilter if you need this.
+   <5>[   17.476113] userif-3: sent link down event.
+   <5>[   17.476118] userif-3: sent link up event.
+   <7>[   18.037034] rfkill: input handler disabled
+   <5>[   27.545620] audit: type=1400 audit(1792482529.288:265): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=4592 comm="fusermount3" capability=1  capname="dac_override"
+   Oops#1 Part8
+   <5>[   27.545627] audit: type=1400 audit(1792482529.288:266): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=4592 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   27.545772] audit: type=1400 audit(1792482529.288:267): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=4598 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   27.561356] audit: type=1400 audit(1792482529.304:268): apparmor="DENIED" operation="open" class="file" profile="snap-update-ns.snapd-desktop-integration" name="/run/gdm3/home/gdm-greeter-2/" pid=4611 comm="snap-update-ns" requested_mask="r" denied_mask="r" fsuid=60579 ouid=60579
+   <5>[   27.562623] audit: type=1400 audit(1792482529.305:269): apparmor="DENIED" operation="open" class="file" profile="/usr/lib/snapd/snap-confine" name="/run/gdm3/" pid=4473 comm="snap-confine" requested_mask="r" denied_mask="r" fsuid=60579 ouid=0
+   <5>[   28.389432] audit: type=1400 audit(1792482530.132:270): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=5286 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   28.389438] audit: type=1400 audit(1792482530.132:271): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=5286 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   28.389547] audit: type=1400 audit(1792482530.132:272): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=5288 comm="fusermount3" capability=7  capname="setuid"
+   Oops#1 Part7
+   <5>[   31.265889] audit: type=1400 audit(1792482533.008:273): apparmor="DENIED" operation="mount" class="mount" info="failed mntpnt match" error=-13 profile="fusermount3" name="/" pid=6872 comm="fusermount3" flags="rw, rprivate"
+   <5>[   32.013730] audit: type=1400 audit(1792482533.756:274): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=7281 comm="fusermount3" capability=1  capname="dac_override"
+   <4>[   32.851037] kauditd_printk_skb: 2 callbacks suppressed
+   <5>[   32.851041] audit: type=1400 audit(1792482534.593:277): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=7973 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   32.851046] audit: type=1400 audit(1792482534.593:278): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=7973 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   32.851140] audit: type=1400 audit(1792482534.593:279): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=7974 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   32.884818] audit: type=1400 audit(1792482534.627:280): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8030 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   32.884825] audit: type=1400 audit(1792482534.627:281): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8030 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   32.884916] audit: type=1400 audit(1792482534.627:282): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8034 comm="fusermount3" capability=7  capname="setuid"
+   Oops#1 Part6
+   <5>[   32.887265] audit: type=1400 audit(1792482534.629:283): apparmor="DENIED" operation="mount" class="mount" info="failed mntpnt match" error=-13 profile="fusermount3" name="/" pid=8035 comm="fusermount3" flags="rw, rprivate"
+   <5>[   32.977987] audit: type=1400 audit(1792482534.720:284): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8113 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   32.977994] audit: type=1400 audit(1792482534.720:285): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8113 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   32.978094] audit: type=1400 audit(1792482534.720:286): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8115 comm="fusermount3" capability=7  capname="setuid"
+   <46>[   46.673589] systemd-journald[511]: Time jumped backwards, rotating.
+   <7>[  604.557541] /dev/vmmon[16650]: PTSC: initialized at 4691188000 Hz using TSC, TSCs are synchronized.
+   <7>[  604.603058] /dev/vmmon[16650]: Monitor IPI vector: 0
+   <7>[  604.603062] /dev/vmmon[16650]: HV      IPI vector: 0
+   <5>[  908.337477] audit: type=1400 audit(1792483409.663:287): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25202 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[  908.337483] audit: type=1400 audit(1792483409.663:288): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25202 comm="fusermount3" capability=7  capname="setuid"
+   Oops#1 Part5
+   <5>[  908.337594] audit: type=1400 audit(1792483409.663:289): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25217 comm="fusermount3" capability=7  capname="setuid"
+   <5>[  908.347666] audit: type=1400 audit(1792483409.673:290): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25223 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[  908.347672] audit: type=1400 audit(1792483409.673:291): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25223 comm="fusermount3" capability=7  capname="setuid"
+   <5>[  908.347766] audit: type=1400 audit(1792483409.673:292): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25225 comm="fusermount3" capability=7  capname="setuid"
+   <5>[  908.348516] audit: type=1400 audit(1792483409.674:293): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25226 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[  908.348615] audit: type=1400 audit(1792483409.674:294): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25227 comm="fusermount3" capability=7  capname="setuid"
+   <5>[  908.350716] audit: type=1400 audit(1792483409.676:295): apparmor="DENIED" operation="mount" class="mount" info="failed mntpnt match" error=-13 profile="fusermount3" name="/" pid=25228 comm="fusermount3" flags="rw, rprivate"
+   <4>[  909.990229] Oops: general protection fault, probably for non-canonical address 0x7cde1c3a3dffc: 0000 [#1] SMP NOPTI
+   <4>[  909.990240] CPU: 1 UID: 1000 PID: 7730 Comm: pool-spawner Tainted: P           OE       7.0.0-38-generic #38-Ubuntu PREEMPT(lazy) 
+   Oops#1 Part4
+   <4>[  909.990247] Tainted: [P]=PROPRIETARY_MODULE, [O]=OOT_MODULE, [E]=UNSIGNED_MODULE
+   <4>[  909.990251] Hardware name: ASUS System Product Name/PRIME B650M-A II, BIOS 3057 10/29/2024
+   <4>[  909.990255] RIP: 0010:lookup_swap_cgroup_id+0x49/0xa0
+   <4>[  909.990261] Code: 48 8b 04 c5 40 80 ff b7 48 85 c0 74 3e 48 ba ff ff ff ff ff ff ff 03 48 21 d1 48 89 ca 83 e1 01 48 d1 ea c1 e1 04 48 8d 04 90 <8b> 00 c9 d3 e8 31 d2 31 c9 31 f6 31 ff e9 c0 27 84 ff 31 c0 31 d2
+   <4>[  909.990267] RSP: 0018:ffffcde1e017b538 EFLAGS: 00010212
+   <4>[  909.990271] RAX: 0007cde1c3a3dffc RBX: 07fffffffffffe02 RCX: 0000000000000010
+   <4>[  909.990274] RDX: 0001ffffffffffff RSI: 0000000000000000 RDI: 0003ffffffffffff
+   <4>[  909.990278] RBP: ffffcde1e017b548 R08: ffffcde1e017b7e0 R09: ffffcde1e017b668
+   <4>[  909.990281] R10: 00000000000000d8 R11: 0000000000000000 R12: ffff89787cb9f000
+   <4>[  909.990284] R13: 0000000000000002 R14: ffff89787cb9e7c8 R15: ffff89787cb9e7d0
+   <4>[  909.990287] FS:  0000000000000000(0000) GS:ffff89876547b000(0000) knlGS:0000000000000000
+   <4>[  909.990291] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+   <4>[  909.990293] CR2: 000077cc650f7180 CR3: 00000001a7879000 CR4: 0000000000f50ef0
+   <4>[  909.990297] PKRU: 55555554
+   <4>[  909.990299] Call Trace:
+   <4>[  909.990302]  <TASK>
+   <4>[  909.990304]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990309]  ? softleaf_from_pte+0x83/0xb0
+   <4>[  909.990315]  swap_pte_batch+0xa7/0x2a0
+   <4>[  909.990319]  zap_nonpresent_ptes.constprop.0.isra.0+0x497/0x520
+   <4>[  909.990323]  ? pte_offset_map_lock+0xb1/0x120
+   <4>[  909.990327]  zap_pte_range+0x311/0x770
+   <4>[  909.990331]  ? walk_pmd_range+0x181/0x2d0
+   Oops#1 Part3
+   <4>[  909.990336]  zap_pmd_range.isra.0+0xce/0x250
+   <4>[  909.990340]  unmap_page_range+0x23a/0x3d0
+   <4>[  909.990344]  unmap_single_vma+0x96/0x110
+   <4>[  909.990347]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990350]  ? mas_find+0x5b/0x1d0
+   <4>[  909.990355]  unmap_vmas+0xa5/0x180
+   <4>[  909.990360]  exit_mmap+0x13b/0x400
+   <4>[  909.990367]  __mmput+0x45/0x170
+   <4>[  909.990372]  mmput+0x31/0x40
+   <4>[  909.990375]  exit_mm+0xe3/0x150
+   <4>[  909.990379]  do_exit+0x1e4/0x4b0
+   <4>[  909.990383]  do_group_exit+0x2d/0xb0
+   <4>[  909.990386]  get_signal+0x7f5/0x830
+   <4>[  909.990390]  ? __schedule+0x2c3/0x650
+   <4>[  909.990395]  arch_do_signal_or_restart+0x36/0x110
+   <4>[  909.990401]  exit_to_user_mode_loop+0x8f/0x540
+   <4>[  909.990406]  do_syscall_64+0x22f/0x5a0
+   <4>[  909.990410]  ? switch_fpu_return+0x64/0x110
+   <4>[  909.990415]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990418]  ? arch_exit_to_user_mode_prepare.isra.0+0xc3/0xe0
+   <4>[  909.990423]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990426]  ? do_syscall_64+0x140/0x5a0
+   <4>[  909.990430]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990433]  ? resched_curr+0x13/0x20
+   <4>[  909.990437]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990440]  ? wakeup_preempt_idle+0xe/0x20
+   <4>[  909.990444]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990447]  ? wakeup_preempt+0x71/0xc0
+   <4>[  909.990450]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990453]  ? raw_spin_rq_unlock+0x14/0x50
+   <4>[  909.990457]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990460]  ? wake_up_new_task+0x207/0x330
+   <4>[  909.990464]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990467]  ? kernel_clone+0x127/0x4c0
+   Oops#1 Part2
+   <4>[  909.990471]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990475]  ? __set_task_blocked+0x27/0x90
+   <4>[  909.990479]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990482]  ? __x64_sys_rt_sigprocmask+0xe0/0x160
+   <4>[  909.990486]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990489]  ? arch_exit_to_user_mode_prepare.isra.0+0xd/0xe0
+   <4>[  909.990493]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990496]  ? do_syscall_64+0x140/0x5a0
+   <4>[  909.990501]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990504]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990508]  ? arch_exit_to_user_mode_prepare.isra.0+0xd/0xe0
+   <4>[  909.990511]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990514]  ? do_syscall_64+0x140/0x5a0
+   <4>[  909.990518]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990521]  ? arch_exit_to_user_mode_prepare.isra.0+0xd/0x100
+   <4>[  909.990525]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990528]  ? irqentry_exit+0x97/0x6f0
+   <4>[  909.990532]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990535]  ? exc_page_fault+0x94/0x1e0
+   <4>[  909.990539]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+   <4>[  909.990542] RIP: 0033:0x724afff34acd
+   <4>[  909.990545] Code: Unable to access opcode bytes at 0x724afff34aa3.
+   <4>[  909.990548] RSP: 002b:0000724afbbfcf68 EFLAGS: 00000246 ORIG_RAX: 00000000000000ca
+   <4>[  909.990552] RAX: fffffffffffffe00 RBX: 0000000000000003 RCX: 0000724afff34acd
+   <4>[  909.990555] RDX: 0000000000000003 RSI: 0000000000000080 RDI: 0000614031707f00
+   <4>[  909.990558] RBP: 0000724afbbfcfa0 R08: 0000000000000000 R09: 0000000000000000
+   <4>[  909.990561] R10: 0000000000000000 R11: 0000000000000246 R12: 0000614031707ef0
+   Oops#1 Part1
+   <4>[  909.990564] R13: 0000614031707f00 R14: 0000724afbbfdd48 R15: 0000000000000000
+   <4>[  909.990569]  </TASK>
+   <4>[  909.990571] Modules linked in: xt_conntrack xt_MASQUERADE bridge stp llc xfrm_user xfrm_algo xt_set ip_set snd_seq_dummy snd_hrtimer nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 xt_addrtype nft_compat x_tables rpcsec_gss_krb5 auth_rpcgss nfsv4 parport_pc vmw_vsock_vmci_tr
+   <4>[  909.990642]  k10temp i2c_algo_bit ccp i2c_smbus soundcore gpio_amdpt mac_hid sch_fq_codel nf_tables lp ppdev parport nfnetlink msr efi_pstore dmi_sysfs autofs4 btrfs libblake2b raid10 raid456 async_raid6_recov async_memcpy async_pq async_xor async_tx xor raid6_pq raid1 raid0 linear hid_gene
+   <4>[  909.990711] ---[ end trace 0000000000000000 ]---
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341101001 (2026-10-20 10:03)
+   Oops#1 Part1
+   <4>[  909.990564] R13: 0000614031707f00 R14: 0000724afbbfdd48 R15: 0000000000000000
+   <4>[  909.990569]  </TASK>
+   <4>[  909.990571] Modules linked in: xt_conntrack xt_MASQUERADE bridge stp llc xfrm_user xfrm_algo xt_set ip_set snd_seq_dummy snd_hrtimer nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 xt_addrtype nft_compat x_tables rpcsec_gss_krb5 auth_rpcgss nfsv4 parport_pc vmw_vsock_vmci_tr
+   <4>[  909.990642]  k10temp i2c_algo_bit ccp i2c_smbus soundcore gpio_amdpt mac_hid sch_fq_codel nf_tables lp ppdev parport nfnetlink msr efi_pstore dmi_sysfs autofs4 btrfs libblake2b raid10 raid456 async_raid6_recov async_memcpy async_pq async_xor async_tx xor raid6_pq raid1 raid0 linear hid_gene
+   <4>[  909.990711] ---[ end trace 0000000000000000 ]---
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341102001 (2026-10-20 10:03)
+   Oops#1 Part2
+   <4>[  909.990471]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990475]  ? __set_task_blocked+0x27/0x90
+   <4>[  909.990479]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990482]  ? __x64_sys_rt_sigprocmask+0xe0/0x160
+   <4>[  909.990486]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990489]  ? arch_exit_to_user_mode_prepare.isra.0+0xd/0xe0
+   <4>[  909.990493]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990496]  ? do_syscall_64+0x140/0x5a0
+   <4>[  909.990501]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990504]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990508]  ? arch_exit_to_user_mode_prepare.isra.0+0xd/0xe0
+   <4>[  909.990511]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990514]  ? do_syscall_64+0x140/0x5a0
+   <4>[  909.990518]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990521]  ? arch_exit_to_user_mode_prepare.isra.0+0xd/0x100
+   <4>[  909.990525]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990528]  ? irqentry_exit+0x97/0x6f0
+   <4>[  909.990532]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990535]  ? exc_page_fault+0x94/0x1e0
+   <4>[  909.990539]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+   <4>[  909.990542] RIP: 0033:0x724afff34acd
+   <4>[  909.990545] Code: Unable to access opcode bytes at 0x724afff34aa3.
+   <4>[  909.990548] RSP: 002b:0000724afbbfcf68 EFLAGS: 00000246 ORIG_RAX: 00000000000000ca
+   <4>[  909.990552] RAX: fffffffffffffe00 RBX: 0000000000000003 RCX: 0000724afff34acd
+   <4>[  909.990555] RDX: 0000000000000003 RSI: 0000000000000080 RDI: 0000614031707f00
+   <4>[  909.990558] RBP: 0000724afbbfcfa0 R08: 0000000000000000 R09: 0000000000000000
+   <4>[  909.990561] R10: 0000000000000000 R11: 0000000000000246 R12: 0000614031707ef0
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341103001 (2026-10-20 10:03)
+   Oops#1 Part3
+   <4>[  909.990336]  zap_pmd_range.isra.0+0xce/0x250
+   <4>[  909.990340]  unmap_page_range+0x23a/0x3d0
+   <4>[  909.990344]  unmap_single_vma+0x96/0x110
+   <4>[  909.990347]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990350]  ? mas_find+0x5b/0x1d0
+   <4>[  909.990355]  unmap_vmas+0xa5/0x180
+   <4>[  909.990360]  exit_mmap+0x13b/0x400
+   <4>[  909.990367]  __mmput+0x45/0x170
+   <4>[  909.990372]  mmput+0x31/0x40
+   <4>[  909.990375]  exit_mm+0xe3/0x150
+   <4>[  909.990379]  do_exit+0x1e4/0x4b0
+   <4>[  909.990383]  do_group_exit+0x2d/0xb0
+   <4>[  909.990386]  get_signal+0x7f5/0x830
+   <4>[  909.990390]  ? __schedule+0x2c3/0x650
+   <4>[  909.990395]  arch_do_signal_or_restart+0x36/0x110
+   <4>[  909.990401]  exit_to_user_mode_loop+0x8f/0x540
+   <4>[  909.990406]  do_syscall_64+0x22f/0x5a0
+   <4>[  909.990410]  ? switch_fpu_return+0x64/0x110
+   <4>[  909.990415]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990418]  ? arch_exit_to_user_mode_prepare.isra.0+0xc3/0xe0
+   <4>[  909.990423]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990426]  ? do_syscall_64+0x140/0x5a0
+   <4>[  909.990430]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990433]  ? resched_curr+0x13/0x20
+   <4>[  909.990437]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990440]  ? wakeup_preempt_idle+0xe/0x20
+   <4>[  909.990444]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990447]  ? wakeup_preempt+0x71/0xc0
+   <4>[  909.990450]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990453]  ? raw_spin_rq_unlock+0x14/0x50
+   <4>[  909.990457]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990460]  ? wake_up_new_task+0x207/0x330
+   <4>[  909.990464]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990467]  ? kernel_clone+0x127/0x4c0
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341104001 (2026-10-20 10:03)
+   Oops#1 Part4
+   <4>[  909.990247] Tainted: [P]=PROPRIETARY_MODULE, [O]=OOT_MODULE, [E]=UNSIGNED_MODULE
+   <4>[  909.990251] Hardware name: ASUS System Product Name/PRIME B650M-A II, BIOS 3057 10/29/2024
+   <4>[  909.990255] RIP: 0010:lookup_swap_cgroup_id+0x49/0xa0
+   <4>[  909.990261] Code: 48 8b 04 c5 40 80 ff b7 48 85 c0 74 3e 48 ba ff ff ff ff ff ff ff 03 48 21 d1 48 89 ca 83 e1 01 48 d1 ea c1 e1 04 48 8d 04 90 <8b> 00 c9 d3 e8 31 d2 31 c9 31 f6 31 ff e9 c0 27 84 ff 31 c0 31 d2
+   <4>[  909.990267] RSP: 0018:ffffcde1e017b538 EFLAGS: 00010212
+   <4>[  909.990271] RAX: 0007cde1c3a3dffc RBX: 07fffffffffffe02 RCX: 0000000000000010
+   <4>[  909.990274] RDX: 0001ffffffffffff RSI: 0000000000000000 RDI: 0003ffffffffffff
+   <4>[  909.990278] RBP: ffffcde1e017b548 R08: ffffcde1e017b7e0 R09: ffffcde1e017b668
+   <4>[  909.990281] R10: 00000000000000d8 R11: 0000000000000000 R12: ffff89787cb9f000
+   <4>[  909.990284] R13: 0000000000000002 R14: ffff89787cb9e7c8 R15: ffff89787cb9e7d0
+   <4>[  909.990287] FS:  0000000000000000(0000) GS:ffff89876547b000(0000) knlGS:0000000000000000
+   <4>[  909.990291] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+   <4>[  909.990293] CR2: 000077cc650f7180 CR3: 00000001a7879000 CR4: 0000000000f50ef0
+   <4>[  909.990297] PKRU: 55555554
+   <4>[  909.990299] Call Trace:
+   <4>[  909.990302]  <TASK>
+   <4>[  909.990304]  ? srso_alias_return_thunk+0x5/0xfbef5
+   <4>[  909.990309]  ? softleaf_from_pte+0x83/0xb0
+   <4>[  909.990315]  swap_pte_batch+0xa7/0x2a0
+   <4>[  909.990319]  zap_nonpresent_ptes.constprop.0.isra.0+0x497/0x520
+   <4>[  909.990323]  ? pte_offset_map_lock+0xb1/0x120
+   <4>[  909.990327]  zap_pte_range+0x311/0x770
+   <4>[  909.990331]  ? walk_pmd_range+0x181/0x2d0
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341105001 (2026-10-20 10:03)
+   Oops#1 Part5
+   <5>[  908.337594] audit: type=1400 audit(1792483409.663:289): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25217 comm="fusermount3" capability=7  capname="setuid"
+   <5>[  908.347666] audit: type=1400 audit(1792483409.673:290): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25223 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[  908.347672] audit: type=1400 audit(1792483409.673:291): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25223 comm="fusermount3" capability=7  capname="setuid"
+   <5>[  908.347766] audit: type=1400 audit(1792483409.673:292): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25225 comm="fusermount3" capability=7  capname="setuid"
+   <5>[  908.348516] audit: type=1400 audit(1792483409.674:293): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25226 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[  908.348615] audit: type=1400 audit(1792483409.674:294): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25227 comm="fusermount3" capability=7  capname="setuid"
+   <5>[  908.350716] audit: type=1400 audit(1792483409.676:295): apparmor="DENIED" operation="mount" class="mount" info="failed mntpnt match" error=-13 profile="fusermount3" name="/" pid=25228 comm="fusermount3" flags="rw, rprivate"
+   <4>[  909.990229] Oops: general protection fault, probably for non-canonical address 0x7cde1c3a3dffc: 0000 [#1] SMP NOPTI
+   <4>[  909.990240] CPU: 1 UID: 1000 PID: 7730 Comm: pool-spawner Tainted: P           OE       7.0.0-38-generic #38-Ubuntu PREEMPT(lazy) 
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341106001 (2026-10-20 10:03)
+   Oops#1 Part6
+   <5>[   32.887265] audit: type=1400 audit(1792482534.629:283): apparmor="DENIED" operation="mount" class="mount" info="failed mntpnt match" error=-13 profile="fusermount3" name="/" pid=8035 comm="fusermount3" flags="rw, rprivate"
+   <5>[   32.977987] audit: type=1400 audit(1792482534.720:284): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8113 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   32.977994] audit: type=1400 audit(1792482534.720:285): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8113 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   32.978094] audit: type=1400 audit(1792482534.720:286): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8115 comm="fusermount3" capability=7  capname="setuid"
+   <46>[   46.673589] systemd-journald[511]: Time jumped backwards, rotating.
+   <7>[  604.557541] /dev/vmmon[16650]: PTSC: initialized at 4691188000 Hz using TSC, TSCs are synchronized.
+   <7>[  604.603058] /dev/vmmon[16650]: Monitor IPI vector: 0
+   <7>[  604.603062] /dev/vmmon[16650]: HV      IPI vector: 0
+   <5>[  908.337477] audit: type=1400 audit(1792483409.663:287): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25202 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[  908.337483] audit: type=1400 audit(1792483409.663:288): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=25202 comm="fusermount3" capability=7  capname="setuid"
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341107001 (2026-10-20 10:03)
+   Oops#1 Part7
+   <5>[   31.265889] audit: type=1400 audit(1792482533.008:273): apparmor="DENIED" operation="mount" class="mount" info="failed mntpnt match" error=-13 profile="fusermount3" name="/" pid=6872 comm="fusermount3" flags="rw, rprivate"
+   <5>[   32.013730] audit: type=1400 audit(1792482533.756:274): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=7281 comm="fusermount3" capability=1  capname="dac_override"
+   <4>[   32.851037] kauditd_printk_skb: 2 callbacks suppressed
+   <5>[   32.851041] audit: type=1400 audit(1792482534.593:277): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=7973 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   32.851046] audit: type=1400 audit(1792482534.593:278): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=7973 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   32.851140] audit: type=1400 audit(1792482534.593:279): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=7974 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   32.884818] audit: type=1400 audit(1792482534.627:280): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8030 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   32.884825] audit: type=1400 audit(1792482534.627:281): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8030 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   32.884916] audit: type=1400 audit(1792482534.627:282): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=8034 comm="fusermount3" capability=7  capname="setuid"
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341108001 (2026-10-20 10:03)
+   Oops#1 Part8
+   <5>[   27.545627] audit: type=1400 audit(1792482529.288:266): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=4592 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   27.545772] audit: type=1400 audit(1792482529.288:267): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=4598 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   27.561356] audit: type=1400 audit(1792482529.304:268): apparmor="DENIED" operation="open" class="file" profile="snap-update-ns.snapd-desktop-integration" name="/run/gdm3/home/gdm-greeter-2/" pid=4611 comm="snap-update-ns" requested_mask="r" denied_mask="r" fsuid=60579 ouid=60579
+   <5>[   27.562623] audit: type=1400 audit(1792482529.305:269): apparmor="DENIED" operation="open" class="file" profile="/usr/lib/snapd/snap-confine" name="/run/gdm3/" pid=4473 comm="snap-confine" requested_mask="r" denied_mask="r" fsuid=60579 ouid=0
+   <5>[   28.389432] audit: type=1400 audit(1792482530.132:270): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=5286 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   28.389438] audit: type=1400 audit(1792482530.132:271): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=5286 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   28.389547] audit: type=1400 audit(1792482530.132:272): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=5288 comm="fusermount3" capability=7  capname="setuid"
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341109001 (2026-10-20 10:03)
+   Oops#1 Part9
+   <5>[   17.029384] audit: type=1400 audit(1792482518.772:260): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3131 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   17.029391] audit: type=1400 audit(1792482518.772:261): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3131 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   17.029503] audit: type=1400 audit(1792482518.772:262): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3133 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   17.281137] audit: type=1400 audit(1792482519.023:263): apparmor="DENIED" operation="open" class="file" profile="snap-update-ns.snapd-desktop-integration" name="/run/gdm3/home/gdm-greeter/" pid=3312 comm="snap-update-ns" requested_mask="r" denied_mask="r" fsuid=60578 ouid=60578
+   <5>[   17.281791] audit: type=1400 audit(1792482519.024:264): apparmor="DENIED" operation="open" class="file" profile="/usr/lib/snapd/snap-confine" name="/run/gdm3/" pid=2932 comm="snap-confine" requested_mask="r" denied_mask="r" fsuid=60578 ouid=0
+   <6>[   17.343835] Initializing XFRM netlink socket
+   <6>[   17.356279] bridge: filtering via arp/ip/ip6tables is no longer available by default. Update your scripts to load br_netfilter if you need this.
+   <5>[   17.476113] userif-3: sent link down event.
+   <5>[   17.476118] userif-3: sent link up event.
+   <7>[   18.037034] rfkill: input handler disabled
+   <5>[   27.545620] audit: type=1400 audit(1792482529.288:265): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=4592 comm="fusermount3" capability=1  capname="dac_override"
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341110001 (2026-10-20 10:03)
+   Oops#1 Part10
+   <6>[    7.490419] r8169 0000:07:00.0 eno1: Link is Down
+   <6>[    7.979804] RPC: Registered named UNIX socket transport module.
+   <6>[    7.979807] RPC: Registered udp transport module.
+   <6>[    7.979808] RPC: Registered tcp transport module.
+   <6>[    7.979809] RPC: Registered tcp-with-tls transport module.
+   <6>[    7.979810] RPC: Registered tcp NFSv4.1 backchannel transport module.
+   <6>[   10.425439] r8169 0000:07:00.0 eno1: Link is Up - 1Gbps/Full - flow control off
+   <6>[   10.427530] r8169 0000:07:00.0 eno1: entered promiscuous mode
+   <6>[   11.664483] fbcon: Taking over console
+   <5>[   16.379782] netfs: FS-Cache loaded
+   <6>[   16.400917] Guest personality initialized and is inactive
+   <6>[   16.400962] VMCI host device registered (name=vmci, major=10, minor=264)
+   <6>[   16.400964] Initialized host personality
+   <6>[   16.413213] NET: Registered PF_VSOCK protocol family
+   <5>[   16.490007] NFS: Registering the id_resolver key type
+   <5>[   16.490014] Key type id_resolver registered
+   <5>[   16.490016] Key type id_legacy registered
+   <4>[   16.970751] kauditd_printk_skb: 245 callbacks suppressed
+   <5>[   16.970754] audit: type=1400 audit(1792482518.713:257): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3051 comm="fusermount3" capability=1  capname="dac_override"
+   <5>[   16.970759] audit: type=1400 audit(1792482518.713:258): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3051 comm="fusermount3" capability=7  capname="setuid"
+   <5>[   16.970880] audit: type=1400 audit(1792482518.713:259): apparmor="DENIED" operation="capable" class="cap" profile="fusermount3" pid=3054 comm="fusermount3" capability=7  capname="setuid"
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341111001 (2026-10-20 10:03)
+   Oops#1 Part11
+   <5>[    6.999426] audit: type=1400 audit(1792482508.742:6): apparmor="STATUS" operation="profile_load" profile="unconfined" name="chrome" pid=1695 comm="apparmor_parser"
+   <5>[    6.999459] audit: type=1400 audit(1792482508.742:7): apparmor="STATUS" operation="profile_load" profile="unconfined" name="ch-checkns" pid=1693 comm="apparmor_parser"
+   <5>[    6.999496] audit: type=1400 audit(1792482508.742:8): apparmor="STATUS" operation="profile_load" profile="unconfined" name="desktop-icons-ng" pid=1700 comm="apparmor_parser"
+   <5>[    6.999531] audit: type=1400 audit(1792482508.742:9): apparmor="STATUS" operation="profile_load" profile="unconfined" name="buildah" pid=1690 comm="apparmor_parser"
+   <5>[    6.999564] audit: type=1400 audit(1792482508.742:10): apparmor="STATUS" operation="profile_load" profile="unconfined" name="devhelp" pid=1701 comm="apparmor_parser"
+   <5>[    6.999594] audit: type=1400 audit(1792482508.742:11): apparmor="STATUS" operation="profile_load" profile="unconfined" name="Discord" pid=1680 comm="apparmor_parser"
+   <5>[    7.128773] vmmon: module verification failed: signature and/or required key missing - tainting kernel
+   <7>[    7.129838] /dev/vmmon[2025]: Module vmmon: registered as misc device
+   <7>[    7.129841] /dev/vmmon[2025]: Using tsc_khz as TSC frequency: 4691188
+   <7>[    7.129843] /dev/vmmon[2025]: Module vmmon: initialized
+   <4>[    7.227924] nvme nvme0: using unchecked data buffer
+   <4>[    7.239764] block nvme0n1: No UUID available providing old NGUID
+   <6>[    7.307731] NET: Registered PF_QIPCRTR protocol family
+   <6>[    7.332285] Realtek Internal NBASE-T PHY r8169-0-700:00: attached PHY driver (mii_bus:phy_addr=r8169-0-700:00, irq=MAC)
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341112001 (2026-10-20 10:03)
+   Oops#1 Part12
+   <6>[    6.622166] amdgpu 0000:0b:00.0: [drm] Registered 4 planes with drm panic
+   <6>[    6.631283] [drm] Initialized amdgpu 3.64.0 for 0000:0b:00.0 on minor 0
+   <6>[    6.633645] amdgpu 0000:0b:00.0: [drm] Cannot find any crtc or sizes
+   <6>[    6.633659] [drm] pre_validate_dsc:1667 MST_DSC dsc precompute is not needed
+   <6>[    6.925671] loop0: detected capacity change from 0 to 8
+   <6>[    6.925906] loop1: detected capacity change from 0 to 136904
+   <6>[    6.927357] loop2: detected capacity change from 0 to 40240
+   <6>[    6.928599] loop3: detected capacity change from 0 to 560536
+   <6>[    6.929193] loop4: detected capacity change from 0 to 33792
+   <6>[    6.929738] loop5: detected capacity change from 0 to 29160
+   <6>[    6.930840] loop6: detected capacity change from 0 to 1241248
+   <6>[    6.931648] loop7: detected capacity change from 0 to 187776
+   <6>[    6.933264] loop8: detected capacity change from 0 to 808920
+   <6>[    6.934591] loop9: detected capacity change from 0 to 823256
+   <5>[    6.999293] audit: type=1400 audit(1792482508.742:2): apparmor="STATUS" operation="profile_load" profile="unconfined" name="ch-run" pid=1694 comm="apparmor_parser"
+   <5>[    6.999321] audit: type=1400 audit(1792482508.742:3): apparmor="STATUS" operation="profile_load" profile="unconfined" name="brave" pid=1689 comm="apparmor_parser"
+   <5>[    6.999349] audit: type=1400 audit(1792482508.742:4): apparmor="STATUS" operation="profile_load" profile="unconfined" name="cam" pid=1692 comm="apparmor_parser"
+   <5>[    6.999379] audit: type=1400 audit(1792482508.742:5): apparmor="STATUS" operation="profile_load" profile="unconfined" name="crun" pid=1699 comm="apparmor_parser"
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341113001 (2026-10-20 10:03)
+   Oops#1 Part13
+   <6>[    6.621300] amdgpu: Virtual CRAT table created for GPU
+   <6>[    6.621414] amdgpu: Topology: Add GPU node [0x1002:0x164e]
+   <6>[    6.621416] kfd kfd: added device 1002:164e
+   <6>[    6.621425] amdgpu 0000:0b:00.0: SE 1, SH per SE 1, CU per SH 2, active_cu_number 2
+   <6>[    6.621428] amdgpu 0000:0b:00.0: ring gfx_0.0.0 uses VM inv eng 0 on hub 0
+   <6>[    6.621430] amdgpu 0000:0b:00.0: ring gfx_0.1.0 uses VM inv eng 1 on hub 0
+   <6>[    6.621431] amdgpu 0000:0b:00.0: ring comp_1.0.0 uses VM inv eng 4 on hub 0
+   <6>[    6.621433] amdgpu 0000:0b:00.0: ring comp_1.1.0 uses VM inv eng 5 on hub 0
+   <6>[    6.621434] amdgpu 0000:0b:00.0: ring comp_1.2.0 uses VM inv eng 6 on hub 0
+   <6>[    6.621435] amdgpu 0000:0b:00.0: ring comp_1.3.0 uses VM inv eng 7 on hub 0
+   <6>[    6.621436] amdgpu 0000:0b:00.0: ring comp_1.0.1 uses VM inv eng 8 on hub 0
+   <6>[    6.621438] amdgpu 0000:0b:00.0: ring comp_1.1.1 uses VM inv eng 9 on hub 0
+   <6>[    6.621439] amdgpu 0000:0b:00.0: ring comp_1.2.1 uses VM inv eng 10 on hub 0
+   <6>[    6.621440] amdgpu 0000:0b:00.0: ring comp_1.3.1 uses VM inv eng 11 on hub 0
+   <6>[    6.621441] amdgpu 0000:0b:00.0: ring kiq_0.2.1.0 uses VM inv eng 12 on hub 0
+   <6>[    6.621443] amdgpu 0000:0b:00.0: ring sdma0 uses VM inv eng 13 on hub 0
+   <6>[    6.621444] amdgpu 0000:0b:00.0: ring vcn_dec_0 uses VM inv eng 0 on hub 8
+   <6>[    6.621445] amdgpu 0000:0b:00.0: ring vcn_enc_0.0 uses VM inv eng 1 on hub 8
+   <6>[    6.621447] amdgpu 0000:0b:00.0: ring vcn_enc_0.1 uses VM inv eng 4 on hub 8
+   <6>[    6.621448] amdgpu 0000:0b:00.0: ring jpeg_dec uses VM inv eng 5 on hub 8
+   <6>[    6.621756] amdgpu 0000:0b:00.0: Runtime PM not available
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341114001 (2026-10-20 10:03)
+   Oops#1 Part14
+   <6>[    6.521625] amdgpu 0000:0b:00.0: [drm] Loading DMUB firmware via PSP: version=0x05002E00
+   <6>[    6.521979] amdgpu 0000:0b:00.0: [drm] use_doorbell being set to: [true]
+   <6>[    6.521996] amdgpu 0000:0b:00.0: [VCN instance 0] Found VCN firmware Version ENC: 1.33 DEC: 4 VEP: 0 Revision: 14
+   <6>[    6.544285] amdgpu 0000:0b:00.0: reserve 0xa00000 from 0xf41e000000 for PSP TMR
+   <6>[    6.605585] amdgpu 0000:0b:00.0: RAS: optional ras ta ucode is not available
+   <6>[    6.611279] amdgpu 0000:0b:00.0: RAP: optional rap ta ucode is not available
+   <6>[    6.611281] amdgpu 0000:0b:00.0: SECUREDISPLAY: optional securedisplay ta ucode is not available
+   <6>[    6.612420] amdgpu 0000:0b:00.0: SMU is initialized successfully!
+   <6>[    6.613305] amdgpu 0000:0b:00.0: [drm] Display Core v3.2.369 initialized on DCN 3.1.5
+   <6>[    6.613308] amdgpu 0000:0b:00.0: [drm] DP-HDMI FRL PCON supported
+   <6>[    6.614063] amdgpu 0000:0b:00.0: [drm] DMUB hardware initialized: version=0x05002E00
+   <6>[    6.616854] snd_hda_intel 0000:0b:00.1: bound 0000:0b:00.0 (ops amdgpu_dm_audio_component_bind_ops [amdgpu])
+   <6>[    6.617490] amdgpu 0000:0b:00.0: [drm] HDMI-A-1: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+   <6>[    6.617543] amdgpu 0000:0b:00.0: [drm] DP-1: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+   <6>[    6.617588] amdgpu 0000:0b:00.0: [drm] DP-2: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+   <6>[    6.617920] amdgpu 0000:0b:00.0: kiq ring mec 2 pipe 1 q 0
+   <6>[    6.620898] kfd kfd: Allocated 3969056 bytes on gart
+   <6>[    6.620908] kfd kfd: Total number of KFD nodes to be created: 1
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341115001 (2026-10-20 10:03)
+   Oops#1 Part15
+   <6>[    6.512718] amdgpu 0000:0b:00.0: detected ip block number 4 <smu_v13_0_0> (smu)
+   <6>[    6.512720] amdgpu 0000:0b:00.0: detected ip block number 5 <dce_v1_0_0> (dm)
+   <6>[    6.512722] amdgpu 0000:0b:00.0: detected ip block number 6 <gfx_v10_0_0> (gfx_v10_0)
+   <6>[    6.512724] amdgpu 0000:0b:00.0: detected ip block number 7 <sdma_v5_2_0> (sdma_v5_2)
+   <6>[    6.512725] amdgpu 0000:0b:00.0: detected ip block number 8 <vcn_v3_0_0> (vcn_v3_0)
+   <6>[    6.512727] amdgpu 0000:0b:00.0: detected ip block number 9 <jpeg_v3_0_0> (jpeg_v3_0)
+   <6>[    6.512744] amdgpu 0000:0b:00.0: Fetched VBIOS from VFCT
+   <6>[    6.512746] amdgpu 0000:0b:00.0: [drm] ATOM BIOS: 102-RAPHAEL-008
+   <6>[    6.520888] amdgpu 0000:0b:00.0: vgaarb: deactivate vga console
+   <6>[    6.520891] amdgpu 0000:0b:00.0: Trusted Memory Zone (TMZ) feature disabled as experimental (default)
+   <6>[    6.520950] amdgpu 0000:0b:00.0: vm size is 262144 GB, 4 levels, block size is 9-bit, fragment size is 9-bit
+   <6>[    6.520957] amdgpu 0000:0b:00.0: VRAM: 512M 0x000000F400000000 - 0x000000F41FFFFFFF (512M used)
+   <6>[    6.520959] amdgpu 0000:0b:00.0: GART: 1024M 0x0000000000000000 - 0x000000003FFFFFFF
+   <6>[    6.520966] amdgpu 0000:0b:00.0: [drm] Detected VRAM RAM=512M, BAR=512M
+   <6>[    6.520967] amdgpu 0000:0b:00.0: [drm] RAM width 128bits DDR5
+   <6>[    6.521050] amdgpu 0000:0b:00.0:  512M of VRAM memory ready
+   <6>[    6.521052] amdgpu 0000:0b:00.0:  31069M of GTT memory ready.
+   <6>[    6.521073] amdgpu 0000:0b:00.0: [drm] GART: num cpu pages 262144, num gpu pages 262144
+   <6>[    6.521254] amdgpu 0000:0b:00.0: [drm] PCIE GART of 1024M enabled (table at 0x000000F41FC00000).
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341116001 (2026-10-20 10:03)
+   Oops#1 Part16
+   <6>[    5.211674] input: HD-Audio Generic Line Out as /devices/pci0000:00/0000:00:08.1/0000:0b:00.6/sound/card1/input13
+   <6>[    5.211717] input: HD-Audio Generic Front Headphone as /devices/pci0000:00/0000:00:08.1/0000:0b:00.6/sound/card1/input14
+   <5>[    5.251074] ZFS: Loaded module v2.4.1-1ubuntu5.1, ZFS pool version 5000, ZFS filesystem version 5
+   <5>[    5.251077] ZFS: Using ZFS with kernel 7.0.0-38-generic is not expressly supported by OpenZFS. Support for this version is maintained by Canonical for the purposes of the (null) kernel
+   <5>[    5.251078] ZFS: Please report your results at: https://github.com/openzfs/zfs/issues/new
+   <6>[    6.497450] intel_rapl_common: Found RAPL domain package
+   <6>[    6.497453] intel_rapl_common: Found RAPL domain core
+   <6>[    6.497674] amd_atl: AMD Address Translation Library initialized
+   <6>[    6.510789] amdgpu: Virtual CRAT table created for CPU
+   <6>[    6.510808] amdgpu: Topology: Add CPU node
+   <6>[    6.510930] amdgpu 0000:0b:00.0: enabling device (0006 -> 0007)
+   <6>[    6.510974] amdgpu 0000:0b:00.0: initializing kernel modesetting (IP DISCOVERY 0x1002:0x164E 0x1043:0x8877 0xC2).
+   <6>[    6.510983] amdgpu 0000:0b:00.0: register mmio base: 0xF6900000
+   <6>[    6.510984] amdgpu 0000:0b:00.0: register mmio size: 524288
+   <6>[    6.512710] amdgpu 0000:0b:00.0: detected ip block number 0 <common_v1_0_0> (nv_common)
+   <6>[    6.512712] amdgpu 0000:0b:00.0: detected ip block number 1 <gmc_v10_0_0> (gmc_v10_0)
+   <6>[    6.512714] amdgpu 0000:0b:00.0: detected ip block number 2 <ih_v5_0_0> (navi10_ih)
+   <6>[    6.512716] amdgpu 0000:0b:00.0: detected ip block number 3 <psp_v13_0_0> (psp)
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341117001 (2026-10-20 10:03)
+   Oops#1 Part17
+   <6>[    5.161337] kvm_amd: Virtual NMI enabled
+   <6>[    5.168160] snd_hda_intel 0000:0b:00.1: enabling device (0000 -> 0002)
+   <6>[    5.168260] snd_hda_intel 0000:0b:00.1: Handle vga_switcheroo audio client
+   <6>[    5.168308] snd_hda_intel 0000:0b:00.6: enabling device (0000 -> 0002)
+   <6>[    5.176734] input: HD-Audio Generic HDMI/DP,pcm=3 as /devices/pci0000:00/0000:00:08.1/0000:0b:00.1/sound/card0/input8
+   <6>[    5.176784] input: HD-Audio Generic HDMI/DP,pcm=7 as /devices/pci0000:00/0000:00:08.1/0000:0b:00.1/sound/card0/input9
+   <6>[    5.188043] snd_hda_codec_alc662 hdaudioC1D0: autoconfig for ALC897: line_outs=1 (0x14/0x0/0x0/0x0/0x0) type:line
+   <6>[    5.188047] snd_hda_codec_alc662 hdaudioC1D0:    speaker_outs=0 (0x0/0x0/0x0/0x0/0x0)
+   <6>[    5.188049] snd_hda_codec_alc662 hdaudioC1D0:    hp_outs=1 (0x1b/0x0/0x0/0x0/0x0)
+   <6>[    5.188050] snd_hda_codec_alc662 hdaudioC1D0:    mono: mono_out=0x0
+   <6>[    5.188052] snd_hda_codec_alc662 hdaudioC1D0:    dig-out=0x11/0x0
+   <6>[    5.188053] snd_hda_codec_alc662 hdaudioC1D0:    inputs:
+   <6>[    5.188054] snd_hda_codec_alc662 hdaudioC1D0:      Rear Mic=0x18
+   <6>[    5.188056] snd_hda_codec_alc662 hdaudioC1D0:      Front Mic=0x19
+   <6>[    5.188057] snd_hda_codec_alc662 hdaudioC1D0:      Line=0x1a
+   <6>[    5.194496] MCE: In-kernel MCE decoding enabled.
+   <6>[    5.211522] input: HD-Audio Generic Rear Mic as /devices/pci0000:00/0000:00:08.1/0000:0b:00.6/sound/card1/input10
+   <6>[    5.211575] input: HD-Audio Generic Front Mic as /devices/pci0000:00/0000:00:08.1/0000:0b:00.6/sound/card1/input11
+   <6>[    5.211621] input: HD-Audio Generic Line as /devices/pci0000:00/0000:00:08.1/0000:0b:00.6/sound/card1/input12
+   ----- pstore: /var/lib/systemd/pstore/1792483411/001/dmesg-efi_pstore-179248341118001 (2026-10-20 10:03)
+   Oops#1 Part18
+   <5>[    4.865842] ccp 0000:0b:00.2: psp enabled
+   <6>[    4.867694] piix4_smbus 0000:00:14.0: Auxiliary SMBus Host Controller at 0xb20
+   <4>[    4.889077] zfs: module license 'CDDL' taints kernel.
+   <4>[    4.889081] Disabling lock debugging due to kernel taint
+   <4>[    4.889093] zfs: module license taints kernel.
+   <6>[    5.103111] RAPL PMU: API unit is 2^-32 Joules, 2 fixed counters, 163840 ms ovfl timer
+   <6>[    5.103115] RAPL PMU: hw unit of domain package 2^-16 Joules
+   <6>[    5.103116] RAPL PMU: hw unit of domain core 2^-16 Joules
+   <6>[    5.105219] asus_wmi: ASUS WMI generic driver loaded
+   <4>[    5.107243] asus_wmi: failed to register LPS0 sleep handler in asus-wmi
+   <6>[    5.107885] asus_wmi: Initialization: 0x0
+   <6>[    5.107918] spd5118 0-0051: DDR5 temperature sensor: vendor 0x06:0x32 revision 1.6
+   <6>[    5.108126] asus_wmi: BIOS WMI version: 0.0
+   <6>[    5.108361] asus_wmi: SFUN value: 0x0
+   <6>[    5.108365] eeepc-wmi eeepc-wmi: Detected AsusMbSwInterface, not ASUSWMI, use DSTS
+   <6>[    5.112883] spd5118 0-0053: DDR5 temperature sensor: vendor 0x06:0x9d revision 2.1
+   <6>[    5.112964] Adding 16777212k swap on /dev/nvme0n1p2.  Priority:-1 extents:1 across:16777212k SS
+   <6>[    5.113751] input: Eee PC WMI hotkeys as /devices/platform/eeepc-wmi/input/input7
+   <6>[    5.161324] kvm_amd: TSC scaling supported
+   <6>[    5.161328] kvm_amd: Nested Virtualization enabled
+   <6>[    5.161330] kvm_amd: Nested Paging enabled
+   <6>[    5.161331] kvm_amd: LBR virtualization supported
+   <6>[    5.161334] kvm_amd: AVIC enabled
+   <6>[    5.161335] kvm_amd: x2AVIC enabled (max 512 vCPUs)
+   <6>[    5.161336] kvm_amd: Virtual GIF supported
+
+== Otros panics con la misma firma
+   ninguno
