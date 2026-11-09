@@ -20,6 +20,7 @@
      #- { role: obs, tags: obs } # Mejor instarlo via flatpak (ver roles/flatpak/CLAUDE.md)
      - { role: rdp, tags: rdp } # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
      - { role: vscode, tags: vscode }
+     - { role: AWScli, tags: AWScli } #AWS CLI v2 de sistema (/usr/local/bin/aws) para todos los usuarios; instala o actualiza a la última. Timer semanal. Ver roles/AWScli/CLAUDE.md
      - { role: clienteNAS, tags: clienteNAS } #Cliente NFS del NAS del DEPARTAMENTO: 
                       #autodescubre exports y los monta RO en /mnt/nasDepInfo (ver roles/clienteNAS/CLAUDE.md)
      - { role: DirtyFrag, tags: DirtyFrag } #Evalua y mitiga la vuln. "Dirty Frag" (CVE-2026-43284 ESP/IPsec + CVE-2026-43500 RxRPC): bloquea esp4/esp6/rxrpc

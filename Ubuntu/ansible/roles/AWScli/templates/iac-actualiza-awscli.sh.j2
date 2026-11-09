@@ -1,0 +1,58 @@
+#!/bin/bash
+# =============================================================================
+#  iac-actualiza-awscli.sh   ({{ ansible_managed }})
+#  Instalado por el rol Ansible 'AWScli'. NO editar a mano: lo regenera el rol.
+#
+#  Lanza el playbook del rol AWScli en local, como mucho cada {{ awscli_autoactualiza_dias }} días:
+#  si AWS CLI está en la última versión no hace nada; si no, lo actualiza.
+#  Lo lanza {{ awscli_autoactualiza_unidad }}.timer {{ awscli_autoactualiza_espera }} después de arrancar
+#  (y cada {{ awscli_autoactualiza_intervalo }} si el equipo sigue encendido).
+#
+#  Log: {{ awscli_autoactualiza_log }} (y journalctl -t iac-awscli)
+#  Forzar una comprobación ya:  sudo rm -f {{ awscli_autoactualiza_marca }}; sudo systemctl start {{ awscli_autoactualiza_unidad }}
+# =============================================================================
+set -u
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.local/bin"
+
+PLAYBOOK="{{ awscli_autoactualiza_playbook }}"
+LOG="{{ awscli_autoactualiza_log }}"
+MARCA="{{ awscli_autoactualiza_marca }}"
+DIAS={{ awscli_autoactualiza_dias }}
+HOY="$(date +%F)"
+
+mkdir -p "$(dirname "$LOG")" "$(dirname "$MARCA")"
+# Rotación mínima: si pasa de 1 MB, se guarda como .1 y se empieza de nuevo
+[ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" -gt 1048576 ] && mv -f "$LOG" "$LOG.1"
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; logger -t iac-awscli "$*"; }
+
+ULTIMA="$(cat "$MARCA" 2>/dev/null)"
+if [ -n "$ULTIMA" ] && date -d "$ULTIMA" >/dev/null 2>&1; then
+    PASADOS=$(( ( $(date -d "$HOY" +%s) - $(date -d "$ULTIMA" +%s) ) / 86400 ))
+    if [ "$PASADOS" -ge 0 ] && [ "$PASADOS" -lt "$DIAS" ]; then
+        log "Última comprobación $ULTIMA (hace $PASADOS días, cada $DIAS); nada que hacer."
+        exit 0
+    fi
+fi
+
+if [ ! -f "$PLAYBOOK" ]; then
+    log "[ERR] No existe $PLAYBOOK (¿falta el clon del repo?)."
+    exit 1
+fi
+if ! command -v ansible-playbook >/dev/null 2>&1; then
+    log "[ERR] ansible-playbook no está instalado."
+    exit 1
+fi
+
+log "Comprobando AWS CLI con $PLAYBOOK ..."
+ANSIBLE_NOCOLOR=1 ansible-playbook -i localhost, --connection=local "$PLAYBOOK" \
+    </dev/null >> "$LOG" 2>&1
+RC=$?
+
+if [ $RC -eq 0 ]; then
+    echo "$HOY" > "$MARCA"
+    log "OK: $({{ awscli_bin_dir }}/aws --version 2>&1 | cut -d' ' -f1)"
+else
+    # Sin marca nueva: se reintenta en el próximo arranque o disparo del timer
+    log "[ERR] ansible-playbook devolvió rc=$RC (ver arriba en este log)."
+fi
+exit $RC

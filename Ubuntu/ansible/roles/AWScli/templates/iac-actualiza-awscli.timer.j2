@@ -1,0 +1,12 @@
+[Unit]
+# {{ ansible_managed }}
+Description=IAC-IESMHP - Comprueba y actualiza AWS CLI ({{ awscli_autoactualiza_espera }} tras arrancar; como mucho cada {{ awscli_autoactualiza_dias }} días)
+
+[Timer]
+OnBootSec={{ awscli_autoactualiza_espera }}
+OnUnitActiveSec={{ awscli_autoactualiza_intervalo }}
+# Que no coincidan todos los equipos del aula en el mismo segundo
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
