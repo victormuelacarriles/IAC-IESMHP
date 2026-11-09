@@ -1,0 +1,38 @@
+# Variables del rol AWScli
+# Instala/actualiza AWS CLI v2 para todo el sistema (/usr/local/bin/aws) y deja
+# un timer que lo vuelve a lanzar solo (a los 10 min de encender, como mucho
+# cada awscli_autoactualiza_dias días).
+
+# Dónde se instala (instalador oficial: ./aws/install -i ... -b ...)
+awscli_install_dir: /usr/local/aws-cli
+awscli_bin_dir: /usr/local/bin
+
+# Borrar las versiones antiguas que deja el instalador en <install_dir>/v2/
+# (cada una ocupa ~200 MB)
+awscli_borra_versiones_viejas: true
+
+# Autocompletado de bash para todos los usuarios (/etc/bash_completion.d/aws-cli)
+awscli_autocompletado: true
+
+# Activar la actualización automática (false → se quitan timer/service/script)
+awscli_autoactualiza: true
+
+# Espera tras el arranque antes de comprobar (formato systemd OnBootSec).
+# 10 min y no 5 para no coincidir con iac-actualiza-vscode (los dos usan ansible).
+awscli_autoactualiza_espera: 10min
+
+# Equipos que se quedan encendidos: el timer se dispara cada... (OnUnitActiveSec)
+awscli_autoactualiza_intervalo: 1d
+
+# Como mucho una comprobación cada N días (AWS saca versión casi a diario y
+# cada descarga son ~60 MB por equipo)
+awscli_autoactualiza_dias: 7
+
+# Playbook que lanza el timer (el clon del repo en el equipo, ver comun.sh)
+awscli_autoactualiza_playbook: /opt/IAC-IESMHP/Ubuntu/ansible/roles/AWScli/AWScli.yaml
+
+# Rutas / nombres de los artefactos instalados (no suele hacer falta cambiarlos)
+awscli_autoactualiza_script: /usr/local/sbin/iac-actualiza-awscli.sh
+awscli_autoactualiza_unidad: iac-actualiza-awscli
+awscli_autoactualiza_log: /var/log/IAC-IESMHP/Ubuntu/iac-actualiza-awscli.log
+awscli_autoactualiza_marca: /var/lib/IAC-IESMHP/awscli-ultima-comprobacion

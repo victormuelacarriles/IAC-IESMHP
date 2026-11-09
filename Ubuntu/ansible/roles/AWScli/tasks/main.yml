@@ -1,0 +1,235 @@
+---
+# Instala AWS CLI v2 para todo el sistema (instalador oficial de AWS) o lo
+# actualiza si la versión instalada es más vieja que la última publicada.
+
+- name: Arquitectura soportada por AWS CLI
+  ansible.builtin.set_fact:
+    awscli_arch: "{{ {'x86_64': 'x86_64', 'amd64': 'x86_64', 'aarch64': 'aarch64', 'arm64': 'aarch64'}[ansible_facts['architecture']] }}"
+
+- name: Versión de AWS CLI instalada
+  ansible.builtin.shell: >-
+    {{ awscli_bin_dir }}/aws --version 2>&1 |
+    sed -n 's#^aws-cli/\([0-9.]*\).*#\1#p'
+  register: awscli_instalada
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Las versiones de v2 son las etiquetas 2.x.y del repo de GitHub. git ls-remote
+# no gasta el límite de la API de GitHub (60 consultas/h por IP: el aula sale
+# por la misma IP).
+- name: Consultar la última versión de AWS CLI v2
+  ansible.builtin.shell: >-
+    set -o pipefail;
+    timeout 60 git ls-remote --tags --refs https://github.com/aws/aws-cli '2.*' |
+    sed 's#.*refs/tags/##' | grep -E '^2\.[0-9]+\.[0-9]+$' | sort -V | tail -n1
+  args:
+    executable: /bin/bash
+  register: awscli_latest
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Calcular si hay que instalar o actualizar
+  ansible.builtin.set_fact:
+    awscli_actual: "{{ awscli_instalada.stdout | trim }}"
+    awscli_ultima: "{{ awscli_latest.stdout | default('') | trim }}"
+
+- name: Decidir acción
+  ansible.builtin.set_fact:
+    # Sin instalar -> instalar. Instalado -> actualizar solo si conocemos la
+    # última versión y es mayor que la instalada (si no hay red, no se toca).
+    awscli_hay_que_instalar: >-
+      {{ awscli_actual == '' or
+         (awscli_ultima != '' and awscli_ultima is version(awscli_actual, '>')) }}
+
+- name: Mostrar estado de AWS CLI
+  ansible.builtin.debug:
+    msg: >-
+      AWS CLI instalado: {{ awscli_actual if awscli_actual else 'no' }} |
+      última: {{ awscli_ultima if awscli_ultima else 'desconocida (GitHub no accesible)' }} |
+      acción: {{ ('instalar' if awscli_actual == '' else 'actualizar') if awscli_hay_que_instalar | bool else 'ninguna' }}
+
+- name: Instalar / actualizar AWS CLI
+  when:
+    - awscli_hay_que_instalar | bool
+    - not ansible_check_mode
+  block:
+    # Solo se llama a apt si falta unzip (evita bloqueos de apt si coincide
+    # con otro timer de actualización)
+    - name: ¿Está unzip?
+      ansible.builtin.stat:
+        path: /usr/bin/unzip
+      register: awscli_unzip
+
+    - name: Paquete unzip (lo necesita unarchive)
+      ansible.builtin.apt:
+        name: unzip
+        state: present
+        cache_valid_time: 86400
+      when: not awscli_unzip.stat.exists
+
+    - name: Carpeta temporal
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: awscli.
+      register: awscli_tmp
+
+    # URL genérica: siempre apunta a la última versión publicada
+    - name: Descargar AWS CLI v2 ({{ awscli_arch }})
+      ansible.builtin.get_url:
+        url: "https://awscli.amazonaws.com/awscli-exe-linux-{{ awscli_arch }}.zip"
+        dest: "{{ awscli_tmp.path }}/awscliv2.zip"
+        mode: '0644'
+        timeout: 120
+
+    - name: Descomprimir el instalador
+      ansible.builtin.unarchive:
+        src: "{{ awscli_tmp.path }}/awscliv2.zip"
+        dest: "{{ awscli_tmp.path }}"
+        remote_src: true
+
+    # Si la carpeta de esa versión ya existe pero no es la activa (instalación
+    # rota o a medias), el instalador dice "Found same AWS CLI version...
+    # Skipping install" y no arregla nada: se borra antes para que reinstale.
+    - name: Quitar restos de una instalación rota de la misma versión
+      ansible.builtin.shell: |
+        set -eu
+        v="$({{ awscli_tmp.path }}/aws/dist/aws --version 2>&1 | sed -n 's#^aws-cli/\([0-9.]*\).*#\1#p')"
+        d="{{ awscli_install_dir }}/v2"
+        [ -n "$v" ] && [ -d "$d/$v" ] || exit 0
+        if [ "$(readlink -f "$d/current" 2>/dev/null)" != "$(readlink -f "$d/$v")" ] \
+           || ! "{{ awscli_bin_dir }}/aws" --version >/dev/null 2>&1; then
+          rm -rf "${d:?}/$v" && echo "borrada $d/$v"
+        fi
+      args:
+        executable: /bin/bash
+      register: awscli_restos
+      changed_when: awscli_restos.stdout | trim != ''
+
+    # --update vale también para la primera instalación
+    - name: Instalar AWS CLI en {{ awscli_install_dir }}
+      ansible.builtin.command: >-
+        {{ awscli_tmp.path }}/aws/install
+        --install-dir {{ awscli_install_dir }}
+        --bin-dir {{ awscli_bin_dir }}
+        --update
+      register: awscli_install
+
+    - name: Versión tras instalar
+      ansible.builtin.shell: >-
+        {{ awscli_bin_dir }}/aws --version 2>&1 |
+        sed -n 's#^aws-cli/\([0-9.]*\).*#\1#p'
+      register: awscli_nueva
+      changed_when: false
+
+    - name: Resultado
+      ansible.builtin.debug:
+        msg: "AWS CLI ahora: {{ awscli_nueva.stdout | trim }} ({{ awscli_install.stdout | trim }})"
+
+  always:
+    - name: Borrar la carpeta temporal
+      ansible.builtin.file:
+        path: "{{ awscli_tmp.path }}"
+        state: absent
+      when: awscli_tmp.path is defined
+
+# El instalador deja cada versión en <install_dir>/v2/<versión> y cambia el
+# enlace v2/current. Se borran todas menos la que apunta current.
+- name: Borrar versiones antiguas de AWS CLI
+  ansible.builtin.shell: |
+    set -eu
+    d="{{ awscli_install_dir }}/v2"
+    [ -L "$d/current" ] || exit 0
+    actual="$(basename "$(readlink -f "$d/current")")"
+    borradas=""
+    for v in "$d"/*/; do
+      v="$(basename "$v")"
+      [ "$v" = current ] || [ "$v" = "$actual" ] && continue
+      rm -rf "${d:?}/$v" && borradas="$borradas $v"
+    done
+    echo "$borradas"
+  args:
+    executable: /bin/bash
+  register: awscli_limpieza
+  changed_when: awscli_limpieza.stdout | trim != ''
+  when: awscli_borra_versiones_viejas | bool
+
+- name: Autocompletado de bash para todos los usuarios
+  ansible.builtin.copy:
+    dest: /etc/bash_completion.d/aws-cli
+    content: |
+      # Instalado por el rol Ansible AWScli (IAC-IESMHP)
+      [ -x {{ awscli_bin_dir }}/aws_completer ] && complete -C {{ awscli_bin_dir }}/aws_completer aws
+    owner: root
+    group: root
+    mode: "0644"
+  when: awscli_autocompletado | bool
+
+# ── Actualización automática ─────────────────────────────────────────────────
+# Timer que, {{ awscli_autoactualiza_espera }} después de encender (y cada
+# {{ awscli_autoactualiza_intervalo }} si sigue encendido), vuelve a lanzar este
+# rol en local; el script solo lo hace cada {{ awscli_autoactualiza_dias }} días.
+# OJO: aquí NO se arranca el .service (state: started): cuando este rol lo lanza
+# el propio service, esperaría a sí mismo y se quedaría bloqueado.
+
+- name: Actualización automática de AWS CLI
+  when: awscli_autoactualiza | bool
+  block:
+    - name: Instalar el script de actualización automática
+      ansible.builtin.template:
+        src: iac-actualiza-awscli.sh.j2
+        dest: "{{ awscli_autoactualiza_script }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Instalar las unidades service y timer
+      ansible.builtin.template:
+        src: "iac-actualiza-awscli.{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ awscli_autoactualiza_unidad }}.{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: [service, timer]
+
+    # Antes de arrancar el timer: si el equipo lleva más de
+    # {{ awscli_autoactualiza_espera }} encendido, systemd lo dispara al momento y
+    # lanzaría otro ansible en paralelo. Con la marca de hoy, el script sale.
+    - name: Marcar que hoy ya se ha comprobado AWS CLI
+      ansible.builtin.shell: >-
+        mkdir -p "$(dirname {{ awscli_autoactualiza_marca }})" &&
+        date +%F > {{ awscli_autoactualiza_marca }}
+      changed_when: false
+
+    - name: Habilitar y arrancar el timer
+      ansible.builtin.systemd:
+        name: "{{ awscli_autoactualiza_unidad }}.timer"
+        enabled: true
+        state: started
+        daemon_reload: true
+      # En --check las unidades no se escriben y systemd no las encontraría
+      when: not ansible_check_mode
+
+- name: Quitar la actualización automática de AWS CLI
+  when: not (awscli_autoactualiza | bool)
+  block:
+    - name: Parar y deshabilitar el timer
+      ansible.builtin.systemd:
+        name: "{{ awscli_autoactualiza_unidad }}.timer"
+        enabled: false
+        state: stopped
+      failed_when: false
+
+    - name: Borrar script y unidades
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ awscli_autoactualiza_script }}"
+        - "/etc/systemd/system/{{ awscli_autoactualiza_unidad }}.service"
+        - "/etc/systemd/system/{{ awscli_autoactualiza_unidad }}.timer"
+
+    - name: Recargar systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
