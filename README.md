@@ -6,5 +6,5 @@ cd /opt
 git clone https://github.com/victormuelacarriles/IAC-IESMHP.git
 (si ya está clonado, para actualizarlo: cd /opt/IAC-IESMHP && git pull)
 
-## USO -- por hacer (descripciones en cada apartado)
+## -- por hacer (descripciones en cada apartado a html, no mD) 
 
