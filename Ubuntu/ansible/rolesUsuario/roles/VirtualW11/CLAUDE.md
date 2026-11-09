@@ -262,6 +262,16 @@ configuración de la máquina se irá añadiendo poco a poco a este rol.
            `admin<usuario>` con la misma y reconfigura el arranque;
         4. termina avisando de que **recuerde la contraseña para entrar por
            Remmina**;
+      - **modo `--AutorranqueDeActual`** (2026-10-27, para reutilizar el
+        script fuera del rol; también vale `-AutorranqueDeActual`): pide la
+        contraseña del **usuario actual** (`$env:USERNAME`, estándar o
+        administrador) y, si es correcta, configura su arranque automático
+        (mismo `Set-ArranqueAutomatico`). No cambia contraseñas ni toca
+        `admin<usuario>`. Si no está elevado, se relanza con UAC pasando el
+        usuario actual en `-Usuario` (el proceso elevado corre como el
+        administrador que da el permiso). Vacío + Enter = salir sin cambios.
+        Uso: `powershell -ExecutionPolicy Bypass -File CambiarPassword.ps1 --AutorranqueDeActual`.
+        Los modos `instalar` e interactivo no cambian;
       - **con clave del fichero**: arranque automático con esa clave y **sin**
         acceso directo (si lo había, se quita): la contraseña la fija el
         profesor;

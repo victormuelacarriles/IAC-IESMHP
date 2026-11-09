@@ -19,6 +19,12 @@
 #    contraseña inicial pide una nueva (dos veces) y se la pone a LOS DOS
 #    usuarios; si ya la cambió, pide la actual de <usuario> y deja <admin> con
 #    la misma. En los dos casos configura el arranque automático de <usuario>.
+#  - --AutorranqueDeActual (también -AutorranqueDeActual): pide la contraseña
+#    del usuario ACTUAL (el que lo lanza, sea estándar o administrador) y, si
+#    es correcta, configura el arranque automático con él. No cambia ninguna
+#    contraseña. Si no es administrador, Windows pide el permiso (UAC) y el
+#    nombre del usuario actual se pasa al proceso elevado en -Usuario.
+#      powershell -ExecutionPolicy Bypass -File CambiarPassword.ps1 --AutorranqueDeActual
 #
 # La contraseña del arranque automático se guarda como secreto LSA
 # ("DefaultPassword", como Autologon de Sysinternals), no en texto plano en el
@@ -29,8 +35,15 @@ param(
     [Parameter(Position = 2)][string]$Autologon = 'no',         # 'si' = configurarlo
     [Parameter(Position = 3)][string]$PasswordInicial = 'usuario@1',
     [Parameter(Position = 4)][string]$Admin = '',
-    [Parameter(Position = 5)][string]$AccesoDirecto = 'si'      # 'no' = sin acceso directo
+    [Parameter(Position = 5)][string]$AccesoDirecto = 'si',     # 'no' = sin acceso directo
+    [switch]$AutorranqueDeActual                                # autologon del usuario actual
 )
+# "--AutorranqueDeActual" (doble guion) llega a PowerShell como texto en la
+# primera posición, no como switch: se acepta igual.
+if ($Accion -in '--AutorranqueDeActual', '-AutorranqueDeActual', 'AutorranqueDeActual') {
+    $AutorranqueDeActual = $true
+    $Accion = ''
+}
 if (-not $Admin) { $Admin = "admin$Usuario" }
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
@@ -151,9 +164,52 @@ if ($Accion -eq 'instalar') {
     }
 }
 
+$yo = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+
+# ======================================================== --AutorranqueDeActual
+if ($AutorranqueDeActual) {
+    # Al elevar con UAC, el proceso nuevo corre como el administrador que da el
+    # permiso: el usuario actual se fija ANTES y se pasa en -Usuario.
+    if (-not $yo.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Start-Process powershell.exe -Verb RunAs -ArgumentList @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"",
+            '-AutorranqueDeActual', '-Usuario', "`"$Usuario`"")
+        exit
+    }
+    $Host.UI.RawUI.WindowTitle = 'Arranque automático'
+    Write-Host ''
+    Write-Host '  ARRANQUE AUTOMÁTICO DE WINDOWS' -ForegroundColor Cyan
+    Write-Host '  =============================='
+    Write-Host ''
+    Write-Host "  Al encender esta máquina, Windows entrará solo con el usuario $Usuario."
+    Write-Host '  Escribe su contraseña ACTUAL (no se cambia ninguna contraseña).'
+    Write-Host '  (Deja vacío y pulsa Enter para salir sin cambiar nada.)'
+    Write-Host ''
+    try {
+        if (-not (Get-LocalUser -Name $Usuario -ErrorAction SilentlyContinue)) {
+            throw "$Usuario no es un usuario local de este equipo"
+        }
+        while ($true) {
+            $p1 = Get-Texto (Read-Host "  Contraseña de $Usuario" -AsSecureString)
+            if ($p1.Length -eq 0) { Write-Host '  No se ha cambiado nada.'; Read-Host '  Pulsa Enter para cerrar' | Out-Null; exit 0 }
+            if (Test-Password $Usuario $p1) { break }
+            Write-Host '  Contraseña incorrecta. Otra vez.' -ForegroundColor Red
+        }
+        Set-ArranqueAutomatico $Usuario $p1
+        Write-Host ''
+        Write-Host "  Arranque automático configurado con $Usuario." -ForegroundColor Green
+    } catch {
+        Write-Host ''
+        Write-Host "  ERROR: $_" -ForegroundColor Red
+        Write-Host '  No se ha completado.' -ForegroundColor Red
+    }
+    Write-Host ''
+    Read-Host '  Pulsa Enter para cerrar' | Out-Null
+    exit 0
+}
+
 # ================================================================ interactivo
 # Hace falta ser administrador (elevado): si no, se vuelve a lanzar con UAC.
-$yo = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $yo.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Start-Process powershell.exe -Verb RunAs -ArgumentList @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"",

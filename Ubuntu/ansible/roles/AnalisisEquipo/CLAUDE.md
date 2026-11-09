@@ -1,0 +1,207 @@
+# Rol `AnalisisEquipo` (como root)
+
+Análisis de hardware de cada equipo del aula: **sistema, CPU, memoria, discos,
+GPU NVIDIA, estrés largo y errores del kernel**. Mide el tiempo de cada paso y
+deja **un resumen por equipo** (y un CSV para comparar todos).
+
+Mismo esquema que los roles de [`rolesUsuario`](../../rolesUsuario/CLAUDE.md)
+(`VirtualW11`, `AODappsflatpack`): playbook propio en la carpeta del rol,
+lanzador `.sh` con parámetros y tabla de tiempos. La diferencia: **entra
+siempre como root**, con los inventarios de aula (`equiposSMRD.ini`,
+`equiposIABD.ini`, `ansible_user=root`). **No está en `roles.yaml`**: se lanza
+a mano.
+
+Creado el 2026-10-26.
+
+## Uso — `AnalisisEquipo.sh`
+
+```bash
+cd /opt/IAC-IESMHP/Ubuntu/ansible/roles/AnalisisEquipo
+bash AnalisisEquipo.sh SMRD                       # toda el aula, completo (~30-50 min)
+bash AnalisisEquipo.sh IABD -l IABD-05            # un equipo
+bash AnalisisEquipo.sh SMRD --sin-estres          # rápido (~3-5 min por equipo)
+bash AnalisisEquipo.sh SMRD --estres-min 30 --gpu-min 15
+bash AnalisisEquipo.sh SMRD --pasos discos,kernel # solo salud de discos y errores
+bash AnalisisEquipo.sh SMRD --soloKernelPanics    # solo kernels + panics (segundos)
+sudo bash AnalisisEquipo.sh                       # en local (este equipo)
+bash AnalisisEquipo.sh --ayuda
+```
+
+| Opción | Qué hace |
+|---|---|
+| `SMRD` / `IABD` / `<equipos.ini>` | Inventario de aula (`Ubuntu/ansible/equipos*.ini`). Sin él, en local (como root) |
+| `-l PATRÓN` | Equipos, como en Ansible (`SMRD-05`, `'SMRD-0*'`, `'all:!SMRD-00'`) |
+| `--forks N` | Equipos a la vez (**30**: cada uno se mide a sí mismo; también `FORKS=N`) |
+| `--pasos L` | Solo esos: `kernels,sistema,cpu,memoria,discos,gpu,estres,kernel,panics` |
+| `--soloKernelPanics` | Solo `kernels,panics`: kernels instalados y panics/oops/cuelgues de los arranques anteriores. **No instala nada ni mide nada más**; tarda segundos (también `--solo-kernel-panics`) |
+| `--arranques N` | Arranques anteriores que revisa `panics` (**10**) |
+| `--sin-estres` | Sin stress-ng, memtester ni estrés de GPU |
+| `--sin-pruebas` | Solo datos y salud: sin pruebas de rendimiento ni estrés |
+| `--estres-min N` | Minutos de stress-ng CPU+RAM (**10**; 0 = no) |
+| `--memtester-pct N` | % de la RAM disponible para memtester (**25**; 0 = no; máx 80) |
+| `--memtester-max N` | Minutos máximos de memtester (**30**) |
+| `--gpu-min N` | Minutos de estrés de la GPU NVIDIA (**5**; 0 = no) |
+| `--disco-gb N` | GB del fichero de prueba de escritura (**2**) |
+| `--temp-max N` | °C de CPU a los que se **corta** el estrés (**95**) |
+| `--forzar` | Estrés aunque haya usuarios con sesión (por defecto se salta) |
+| `--sin-instalar` | No instala con apt las herramientas que falten |
+| resto (`-v`, `-e …`) | A `ansible-playbook` |
+
+Sin preguntas (headless). En otros equipos la clave SSH de root del que lanza
+tiene que estar autorizada (rol `certificados`).
+
+### Resultados
+- **En el equipo que lanza** (`/var/log/IAC-IESMHP/` o
+  `~/.local/state/IAC-IESMHP/` si no se puede escribir allí):
+  - `AnalisisEquipo.log`: salida completa de cada ejecución (se va añadiendo).
+  - `AnalisisEquipo/<equipo>-ultimo.txt`: **el resumen más reciente de cada
+    equipo**. Histórico en `AnalisisEquipo/<equipo>/resumen-<fecha>.txt`.
+  - `AnalisisEquipo/<equipo>/panics/panic-<equipo>-<fecha>-<arranque>.txt`:
+    **un fichero por cada kernel panic** (ver «Ficheros de panic» abajo).
+  - `AnalisisEquipo/AnalisisEquipo-<fecha>.csv`: una fila por equipo con todos
+    los datos (modelo, CPU, RAM, tiempos, MB/s, temperaturas, salud de
+    discos…). Separador `;`, decimales con punto.
+- **En cada equipo**, `/var/log/IAC-IESMHP/AnalisisEquipo/`:
+  `resumen-<fecha>.txt`, `ultimo-resumen.txt` y `analisis-<fecha>.log` (salida
+  bruta de cada herramienta: smartctl, fio, stress-ng…). Para seguirlo en
+  marcha: `ssh root@equipo tail -f /var/log/IAC-IESMHP/AnalisisEquipo/analisis-*.log`.
+- Al final, **tabla de TIEMPOS**: por equipo (total y estado) y debajo una
+  línea por paso (tiempo, estado y el dato clave), recuento de estados y
+  tiempo medio/máximo por paso.
+
+### Estados
+Por paso y global (el peor de los pasos): `OK` < `NO_APLICA` (sin NVIDIA) <
+`NO_MEDIDO` (falta una herramienta, disco sin SMART, estrés saltado) < `AVISO`
+< `ERROR`. Además, en la tabla: `SIN_RESPUESTA` (apagado / sin SSH) y
+`FALLO_ANALISIS` (no se pudo ejecutar el script). Códigos de `analiza.sh`:
+0 OK · 1 avisos · 2 errores de hardware · 3 no se pudo analizar. Los avisos y
+errores de hardware **no** cuentan como fallo de Ansible.
+
+## Estructura
+
+| Fichero | Qué es |
+|---|---|
+| `AnalisisEquipo.sh` | Lanzador: parámetros, latido, `<equipo>-ultimo.txt`, tabla de tiempos y CSV |
+| `AnalisisEquipo.yaml` | Playbook: `become: yes`, `strategy: free`, ping y salto de los apagados, `rescue` por equipo, línea `TIEMPO\|equipo\|…` |
+| `defaults/main.yml` | Duraciones, paquetes, directorios de prueba |
+| `tasks/main.yml` | Comprueba root, instala herramientas (tolerante), copia y lanza `analiza.sh` en `async`, trae el resumen con `fetch` |
+| `files/analiza.sh` | **Todo el análisis**, en el equipo. Vale suelto: `sudo bash analiza.sh --ayuda` |
+
+## Qué mide cada paso (`files/analiza.sh`)
+
+| Paso | Datos y salud | Prueba con tiempos | Avisos / errores |
+|---|---|---|---|
+| `kernels` (el **primero**) | Kernels de `/boot` (los **5 más nuevos** si hay más), fecha de instalación, cuál está en uso y cuál arranca por defecto (`GRUB_DEFAULT=0` → el más nuevo); carpetas de `/lib/modules` de kernels ya quitados | — | Kernel sin `initrd` o sin módulos; no arranca con el más nuevo aunque ya estaba instalado al arrancar (si se instaló después, solo dice «falta reiniciar») |
+| `sistema` | Fabricante, modelo, placa, BIOS, nº de serie, SO, kernel, red (IP, MAC, velocidad), Secure Boot, sesiones abiertas | — | Red < 1000 Mb/s |
+| `cpu` | Modelo, núcleos/hilos, MHz máx, gobernador, temperatura en reposo | sysbench (primos hasta 10000): 20000 eventos con 1 hilo y 20000×N con todos → **segundos** y eventos/s | ≥ 70 °C en reposo |
+| `memoria` | Total, disponible, swap, módulos (dmidecode: ranura, tamaño, tipo, velocidad configurada/máxima, fabricante, modelo), ECC/EDAC | sysbench memory: 20 GB con 1 hilo y 100 GB con todos → segundos y MiB/s | EDAC: corregibles = AVISO, no corregibles = ERROR |
+| `discos` | Por disco: tipo, tamaño, modelo, SMART (smartctl JSON: estado, temperatura, horas, desgaste/reserva/errores NVMe, sectores reasignados/pendientes SATA); ocupación; pools ZFS (salud, dedup, errores, último scrub) | `fio` **solo lectura** sobre el disco en bruto (secuencial 1M y aleatoria 4k, 15 s cada una) y, una vez por disco/pool, escribir y leer `--disco-gb` GB en `/`, `/home`, `/datos` (+ 4k aleatoria 15 s); fichero borrado al acabar | SMART falla o aviso crítico NVMe = ERROR; desgaste ≥ 90 %, reserva ≤ 10 %, sectores malos, ≥ 70 °C, NVMe < 500 MB/s, SSD < 200 MB/s, FS ≥ 90 %; pool ZFS no ONLINE = ERROR |
+| `gpu` | Solo NVIDIA: modelo, driver, memoria, temperatura, consumo, enlace PCIe actual/máximo | `clpeak` (OpenCL): GFLOPS simple precisión y GB/s de memoria, tiempo, gen PCIe con carga | NVIDIA sin driver = ERROR; PCIe con menos carriles o generación de la posible |
+| `estres` | — | **stress-ng** N min (todos los hilos `--cpu-method all` + 2 trabajadores con el 40 % de la RAM disponible y `--verify`), vigilando temperatura y MHz cada 5 s; **memtester** (1 pasada, % de la RAM disponible); **GPU** N min con `gpu_burn` si está o `clpeak` en bucle, vigilando temperatura, consumo, reloj y motivos de bajada | Corte por `--temp-max` = ERROR; fallos de stress-ng/memtester/gpu_burn = ERROR; CPU ≥ 90 °C, bajadas de frecuencia por calor, < 50 % de los MHz máx; GPU ≥ 90 °C, bajada de reloj por calor/hardware; errores Xid nuevos = ERROR |
+| `panics` (el último) | Por cada uno de los últimos `--arranques` arranques del journal: fecha, duración, kernel con el que arrancó, si acabó con **apagado limpio** y las primeras líneas de panic/oops/cuelgue con su hora; resumen **por kernel**. Además los volcados de **pstore** (`/var/lib/systemd/pstore`, `/sys/fs/pstore`) y de `/var/crash` (kdump, oops de apport) | — | Panic/oops/BUG/GPF/hard lockup/MCE = ERROR; soft lockup, stalls RCU, tareas bloqueadas, Xid = AVISO; ≥ 2 arranques sin apagado limpio = AVISO (1 solo se anota: puede ser un corte de luz); volcados en pstore/kdump = ERROR |
+| `kernel` | Mensajes del kernel desde el arranque: MCE, Hardware Error, EDAC, I/O error, NVMe timeout/reset, ATA, Xid, Oops, lockups, thermal (agrupados, los 8 más repetidos) | — | MCE = ERROR; otros = AVISO (cuenta aparte los aparecidos durante el análisis) |
+
+## Notas y avisos
+
+- **El estrés se salta si hay alguien con sesión** (UID ≥ 1000, sin
+  `gdm-greeter`): no se le cuelga el equipo a un alumno. Sale `NO_MEDIDO`
+  «saltado (sesión de X)». Lanzarlo con el aula vacía o `--forzar`.
+- **El `-00` suele ser el servidor del aula**: con estrés va lento durante
+  ~30 min. Si hace falta, excluirlo: `-l 'all:!SMRD-00'`.
+- **Un solo análisis a la vez por equipo** (`flock` en
+  `/var/log/IAC-IESMHP/AnalisisEquipo/.en-marcha`). Ctrl+C en el lanzador **no
+  para** el análisis en los equipos (va en `async`); su resumen se queda en
+  el equipo. Relanzar mientras sigue da `FALLO_ANALISIS` («ya hay un análisis
+  en marcha»).
+- **ZFS**: la lectura del fichero de prueba puede salir de la caché ARC
+  (velocidades infladas) y la escritura incluye compresión zstd y, en `rpool`,
+  dedup (datos aleatorios con `--refill_buffers`, así que no deduplica). La
+  lectura **en bruto** del disco (fio `--readonly` sobre `/dev/…`) sí es
+  real y es segura aunque sea miembro de un pool.
+- **GPU** (pendiente de probar en un equipo con NVIDIA): `clpeak` necesita el
+  OpenCL de NVIDIA (`/etc/OpenCL/vendors/nvidia.icd`, viene con el driver que
+  pone el rol [`nvidia`](../nvidia/CLAUDE.md)). Si no lo ve, sale
+  `NO_MEDIDO`. Con varias GPU se mide la 0. Para un estrés más duro, instalar
+  `gpu_burn` en el `PATH` (se usa si está; detecta resultados `FAULTY`).
+- Con un fallo de `apt` (sin red, repo roto) el rol **sigue**: lo que falte
+  sale `NO_MEDIDO`. `clpeak`/`clinfo` solo se instalan si hay NVIDIA.
+- **Panics**: un panic casi nunca queda en el journal del arranque en el que
+  ocurre (el equipo se para antes de escribir). Por eso cuenta también los
+  arranques que acaban **sin apagado limpio** (no hay `Journal stopped` /
+  `systemd-shutdown` al final) y mira pstore, donde la UEFI guarda el
+  volcado. Necesita el journal persistente (`/var/log/journal`, por defecto en
+  26.04); si no lo hay, sale `NO_MEDIDO`. Para borrar los volcados ya
+  revisados: `rm -rf /var/lib/systemd/pstore/*`.
+- Tiempo máximo del `async`: 25 min + estrés + memtester-max + gpu-min.
+- Sin dependencias gráficas: nada de `zenity`/`notify-send`, stdin a
+  `/dev/null`, todo a fichero.
+
+## Ficheros de panic (paso `panics`, 2026-10-27)
+
+Cada **panic** = un arranque con panic/oops/BUG/GPF/hard lockup/MCE en el
+journal, **o** un volcado (pstore, kdump, apport). El volcado se asocia al
+arranque en que ocurrió:
+- pstore lo guarda `systemd-pstore` al arrancar **después**: si cae en los 15
+  primeros minutos de un arranque, es del anterior (así un cuelgue que no dejó
+  nada en el journal recibe su traza).
+- kdump: su carpeta lleva la hora del panic → el arranque que la contiene.
+- Volcados más antiguos que el journal → fichero propio («`-pstore.txt`»).
+
+Fichero: `panics/panic-<equipo>-<YYYYmmdd-HHMM>-<8 primeros del boot id>.txt`
+(en el equipo, en `/var/log/IAC-IESMHP/AnalisisEquipo/`; Ansible los trae a
+`<equipo>/panics/`). El nombre es fijo para cada panic: relanzar lo reescribe,
+no lo duplica. Contenido:
+1. Cabecera: **firma**, arranque (índice, id, inicio → fin), kernel, si acabó
+   con apagado limpio, fuentes.
+2. Resumen del fallo: líneas graves distintas, proceso (`CPU/PID/Comm`),
+   equipo, `RIP`, **`Tainted` explicado** letra a letra, módulos cargados.
+3. Pila de llamadas del primer fallo.
+4. Contexto del arranque: línea de arranque, DMI/BIOS, microcódigo, módulos
+   que «manchan» el kernel, versiones de `zfs`/`nvidia`/`vmmon`/`vmnet` para
+   ese kernel y estado del paquete `linux-image-<k>`.
+5. Bloque del fallo: log del kernel desde 150 líneas antes del primer error
+   hasta el final del arranque (máx. 2000).
+6. Últimas 200 líneas de **todo** el journal de ese arranque (qué pasaba).
+7. Avisos y errores del kernel de ese arranque (máx. 300).
+8. Arranque siguiente: primeras líneas y avisos de recuperación (pstore,
+   EDAC, fsck, ZFS…).
+9. Paquetes cambiados con apt en los 7 días anteriores (lo de `linux-`,
+   `nvidia`, `zfs`, `firmware`, `mesa`, `vmware`, `microcode`, `dkms` delante).
+10. Volcados completos (pstore, kdump, apport sin las partes base64).
+11. **Otros panics con la misma firma**.
+
+**Firma** = primera línea grave sin números ni direcciones + función de la
+línea `RIP`/`pc` (p. ej. `BUG: kernel NULL pointer dereference, address: N @
+zio_execute`). En el resumen sale el listado con `[×N, mismo fallo]` cuando
+se repite, y el total «N ficheros, M fallos distintos».
+
+Pruebas (2026-10-27, local con `journalctl` falso y `ANALISIS_PSTORE`,
+`ANALISIS_CRASH`, `ANALISIS_APTLOG` apuntando a datos de prueba): dos NULL
+pointer en `zio_execute` en arranques distintos (misma firma), un cuelgue sin
+traza en el journal con su volcado de pstore guardado en el arranque siguiente
+(bien asociado) y un pstore antiguo suelto → 4 ficheros, 3 fallos distintos;
+Ansible los trae a `<equipo>/panics/`. **Pendiente**: journal y pstore reales
+como root.
+
+## Pruebas (2026-10-26, en el equipo del propietario, local y sin root)
+
+Con `ANALISIS_SIN_ROOT=1` / `-e AnalisisEquipo_sin_root=true -e ansible_become=false`
+y las herramientas extraídas de sus `.deb` (sin instalar), en un Ryzen 9 7900X:
+- `analiza.sh` completo corto (`--estres-min 1 --memtester-pct 2`): sysbench
+  CPU 3,2 s (1 hilo) / 6,5 s (24 hilos), memoria 46 / 77 GiB/s, stress-ng 1 min
+  (94 °C máx → AVISO), memtester correcto.
+- Discos: ext4 `/var/tmp` escribir 1 GB 1,7 s (602 MB/s); ZFS `rpool/home`
+  2,2 s (465 MB/s); un directorio en tmpfs se salta con aviso; ficheros de
+  prueba borrados. SMART y lectura en bruto necesitan root (salen `NO_MEDIDO`).
+- Cadena completa `AnalisisEquipo.sh` → playbook → rol → `fetch`: tabla de
+  tiempos, `<equipo>-ultimo.txt` y CSV correctos. Errores de parámetros
+  (`-l` inexistente, número mal, inventario o paso desconocido).
+- Corregido en las pruebas: `gdm-greeter` contaba como sesión (saltaba siempre
+  el estrés) y la línea «failed: 0» de stress-ng daba un ERROR falso.
+- 2026-10-27: pasos `kernels` y `panics` + `--soloKernelPanics` y
+  `--arranques`. `kernels` probado con los kernels reales de este equipo;
+  `panics` con un `journalctl` falso (un panic con NULL pointer + Oops, un
+  soft lockup y dos arranques sin apagado limpio): detecta todo y da el
+  resumen por kernel. La cadena completa con `--soloKernelPanics` no instala nada.
+- **Pendiente**: probar `panics` como root con el journal real, y probarlo como root en un equipo real (`SMRD -l <uno>`), en
+  uno con NVIDIA (IABD) y la duración real del estrés completo.
