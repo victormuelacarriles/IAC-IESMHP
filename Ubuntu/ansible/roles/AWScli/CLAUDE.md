@@ -78,9 +78,18 @@ bash AWScli.sh IABD -l 'all:!IABD-00'  # todos menos el del profesor
 bash AWScli.sh SMRD --check            # solo dice qué haría
 bash AWScli.sh SMRD IABD               # varias aulas, una tras otra
 sudo bash AWScli.sh                    # en local (este equipo)
+bash AWScli.sh                         # en local sin sudo, si entras por clave en root@localhost
 bash AWScli.sh --ayuda                 # todas las opciones
 ```
 
+- **En local sin `sudo`**: `become` pediría la contraseña de sudo y el script
+  no pregunta nada (headless). Si el usuario entra por clave en
+  `root@localhost` (`Autorizados.txt`), el script lo detecta
+  (`ssh -o BatchMode=yes root@localhost true`) y lanza Ansible por SSH como
+  root (`-i localhost, --connection=ssh -u root`). Si no, pide `sudo`.
+- **Didáctico**: antes de cada `ansible-playbook` muestra en **amarillo** el
+  comando exacto (rutas absolutas, comillas solo donde hacen falta), listo para
+  copiar y pegar. En el log queda igual, con `$ ` delante y sin color.
 - Opciones propias: `-l`, `--forks N` (20), `--check`, `--dias N`,
   `--sin-autoactualiza`, `--conservar-versiones`, `--sin-autocompletado`. Lo
   demás que empiece por `-` va a `ansible-playbook` (`-v`, `-e`...).

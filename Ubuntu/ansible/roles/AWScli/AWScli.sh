@@ -11,6 +11,7 @@
 #   bash AWScli.sh SMRD IABD               # varias aulas (una tras otra)
 #   bash AWScli.sh <equipos.ini> [args de ansible-playbook]
 #   sudo bash AWScli.sh                    # en local (este equipo)
+#   bash AWScli.sh                         # en local sin sudo, si entras por clave en root@localhost
 #
 # Opciones:
 #   SMRD | IABD | <equipos.ini>   inventario(s) de aula (ansible_user=root). Sin él: en local
@@ -69,8 +70,19 @@ done
 [[ "$FORKS" =~ ^[1-9][0-9]*$ ]] || { echo "[ERR] --forks no válido: '$FORKS'" >&2; exit 1; }
 command -v ansible-playbook >/dev/null 2>&1 || { echo "[ERR] ansible-playbook no está instalado." >&2; exit 1; }
 
+# En local sin ser root: become pediría la contraseña de sudo y aquí no hay
+# preguntas (headless). Si este usuario entra por clave en root@localhost
+# (Autorizados.txt), se usa esa vía: Ansible se conecta por SSH como root.
+LOCAL_SSH=0
 if [ "${#INVENTARIOS[@]}" -eq 0 ] && [ "$(id -u)" -ne 0 ] && [[ " ${ARGS[*]} " != *"ansible_become=false"* ]]; then
-    echo "[ERR] En local hay que lanzarlo como root: sudo bash $0 $*" >&2; exit 1
+    if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
+           root@localhost true </dev/null >/dev/null 2>&1; then
+        LOCAL_SSH=1
+    else
+        echo "[ERR] En local hace falta root: sudo bash $0 $*" >&2
+        echo "      (o una clave SSH de este usuario en root@localhost; ahora 'ssh root@localhost' pide contraseña o falla)" >&2
+        exit 1
+    fi
 fi
 
 LOGDIR=/var/log/IAC-IESMHP
@@ -79,6 +91,19 @@ LOGDIR=/var/log/IAC-IESMHP
 mkdir -p "$LOGDIR"
 LOG="$LOGDIR/AWScli.log"
 cd "$DIR" || exit 1
+
+# Didáctico: antes de cada ansible-playbook se enseña el comando exacto, listo
+# para copiar y pegar (en amarillo en pantalla; sin color en el log).
+muestra_cmd() {   # muestra_cmd <comando> <args...>
+    local a c=""
+    for a in "$@"; do   # comillas simples solo si hacen falta, como se teclearía
+        if [[ "$a" =~ ^[A-Za-z0-9_./:=,@%+-]+$ ]]; then c+=" $a"
+        else c+=" '${a//\'/\'\\\'\'}'"; fi
+    done
+    c="${c# }"
+    if [ -t 1 ]; then printf '\033[1;33m$ %s\033[0m\n' "$c"; else printf '$ %s\n' "$c"; fi
+    printf '$ %s\n' "$c" >> "$LOG"
+}
 
 SAL=$(mktemp); trap 'rm -f "$SAL"' EXIT
 mmss() { printf '%d:%02d' $(( $1 / 60 )) $(( $1 % 60 )); }
@@ -140,12 +165,18 @@ for INVENTARIO in "${INVENTARIOS[@]}"; do
                 || { echo "[AVISO] El -l '$LIMITE' no coincide con ningún equipo de $INVENTARIO; se salta." | tee -a "$LOG"; continue; }
         fi
     else
-        INV=(-i localhost, --connection=local)
+        if [ "$LOCAL_SSH" = 1 ]; then
+            INV=(-i localhost, --connection=ssh -u root)   # este equipo, por SSH como root
+        else
+            INV=(-i localhost, --connection=local)
+        fi
     fi
     LIM=(); [ -n "$LIMITE" ] && LIM=(-l "$LIMITE")
-    echo "===== $(date '+%F %T') AWScli ($(o="${RESUMEN_OPC# }"; echo "${o:-instalar/actualizar}")) ${INV[*]} --forks $FORKS ${LIM[*]} ${ARGS[*]}" | tee -a "$LOG"
-    ANSIBLE_NOCOLOR=1 ansible-playbook "${INV[@]}" --forks "$FORKS" AWScli.yaml "${LIM[@]}" "${ARGS[@]}" \
-        </dev/null >> "$SAL" 2>&1
+    FRK=(); [ -n "$INVENTARIO" ] && FRK=(--forks "$FORKS")   # en local (un equipo) no pinta nada
+    echo "===== $(date '+%F %T') AWScli ($(o="${RESUMEN_OPC# }"; echo "${o:-instalar/actualizar}")) ${INV[*]} ${FRK[*]} ${LIM[*]} ${ARGS[*]}" | tr -s " " | tee -a "$LOG"
+    CMD=(ansible-playbook "${INV[@]}" "${FRK[@]}" "$DIR/AWScli.yaml" "${LIM[@]}" "${ARGS[@]}")
+    muestra_cmd "${CMD[@]}"
+    ANSIBLE_NOCOLOR=1 "${CMD[@]}" </dev/null >> "$SAL" 2>&1
     R=$?
     [ $R -ne 0 ] && RC=1
 done
