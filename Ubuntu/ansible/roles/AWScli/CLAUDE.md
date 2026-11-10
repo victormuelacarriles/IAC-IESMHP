@@ -90,6 +90,11 @@ bash AWScli.sh --ayuda                 # todas las opciones
 - **Didáctico**: antes de cada `ansible-playbook` muestra en **amarillo** el
   comando exacto (rutas absolutas, comillas solo donde hacen falta), listo para
   copiar y pegar. En el log queda igual, con `$ ` delante y sin color.
+- **Sin comprobar la clave de host** (`ANSIBLE_HOST_KEY_CHECKING=False`, igual
+  que `Reclona-IAC-IESMHP.sh`): los equipos se reinstalan, cambian de clave SSH
+  y el `known_hosts` de quien lanza los rechazaba → todos «no responde por SSH»
+  (2026-11-10). Un `ERROR no responde por SSH` lleva ahora el motivo: clave
+  rechazada, puerto cerrado, no contesta (¿apagado?), DNS...
 - Opciones propias: `-l`, `--forks N` (20), `--check`, `--dias N`,
   `--sin-autoactualiza`, `--conservar-versiones`, `--sin-autocompletado`. Lo
   demás que empiece por `-` va a `ansible-playbook` (`-v`, `-e`...).
