@@ -52,6 +52,23 @@ Esta carpeta contiene la **configuración automática del equipo ya instalado**,
 
 ## Comandos clave
 
+**Lanzador `roles.sh`** (recomendado; ayuda con `bash roles.sh --ayuda`). Una
+línea por equipo al final, log en `/var/log/IAC-IESMHP/roles.log`, código 1 si
+algún equipo da ERROR. Cada rol va en un `block`/`rescue`: si uno falla, el
+equipo sigue con el siguiente (2026-11-13):
+
+```bash
+bash roles.sh ping TODAS                      # ping-pong a IABD y SMRD
+bash roles.sh info SMRD                       # SO, kernel, IP, RAM, disco, sesiones
+bash roles.sh vscode,AWScli IABD-05 SMRD-03   # roles concretos en equipos concretos
+bash roles.sh todos IABD -x vmware --check    # roles activos menos vmware, sin cambiar nada
+bash roles.sh cmd 'df -h /' IABD -l 'all:!IABD-00'
+bash roles.sh reinicia SMRD                   # también: apaga, lista, equipos
+sudo bash roles.sh vscode                     # en local
+```
+
+Comandos directos de Ansible:
+
 ```bash
 cd /opt/IAC-IESMHP/Ubuntu/ansible       # (en el repo clonado del equipo)
 

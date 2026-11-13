@@ -192,6 +192,12 @@ latido() {   # latido <pid de ansible>
     done
 }
 
+# Pedagógico: enseña el comando en amarillo antes de lanzarlo (y lo deja en el log)
+AMARILLO=""; NORMAL=""
+if [ -t 2 ] && [ -z "$NO_COLOR" ]; then AMARILLO=$'\e[1;33m'; NORMAL=$'\e[0m'; fi
+CMDTXT="cd $DIR && $(printf '%q ' ansible-playbook "${INV[@]}" --forks "$FORKS" -e "AnalisisEquipo_destino=$LOGEQ" AnalisisEquipo.yaml "${ARGS[@]}")"
+echo "${AMARILLO}\$ ${CMDTXT% }${NORMAL}" >&2
+echo "\$ ${CMDTXT% }" >> "$LOG"
 ( ansible-playbook "${INV[@]}" --forks "$FORKS" -e "AnalisisEquipo_destino=$LOGEQ" AnalisisEquipo.yaml "${ARGS[@]}" </dev/null 2>&1 | tee -a "$LOG" "$SAL" ) &
 PID=$!
 latido "$PID" &
