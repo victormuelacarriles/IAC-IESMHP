@@ -1,0 +1,219 @@
+---
+# Instala Terraform (HashiCorp) para todo el sistema descargando el .zip
+# oficial (sin añadir el repo apt de HashiCorp) o lo reinstala si la versión
+# instalada es más vieja que la última publicada.
+
+- name: Arquitectura para Terraform
+  ansible.builtin.set_fact:
+    terraform_arch: "{{ {'x86_64': 'amd64', 'amd64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}[ansible_facts['architecture']] }}"
+
+- name: Versión de Terraform instalada
+  ansible.builtin.shell: >-
+    {{ terraform_bin_dir }}/terraform version -json 2>/dev/null |
+    sed -n 's/.*"terraform_version": *"\([0-9.]*\)".*/\1/p'
+  register: terraform_instalada
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Otro terraform fuera de terraform_bin_dir (paquete apt del repo de HashiCorp,
+# snap...): no se toca, solo se avisa. /usr/local/bin va antes en el PATH.
+- name: ¿Hay otro terraform en el sistema?
+  ansible.builtin.shell: >-
+    for f in /usr/bin/terraform /snap/bin/terraform; do
+    [ -e "$f" ] && echo "$f"; done; true
+  register: terraform_otros
+  changed_when: false
+  check_mode: false
+
+- name: Consultar la última versión de Terraform
+  ansible.builtin.uri:
+    url: https://api.releases.hashicorp.com/v1/releases/terraform/latest
+    return_content: true
+    timeout: 30
+  register: terraform_latest
+  failed_when: false
+  check_mode: false
+
+- name: Calcular si hay que instalar o actualizar
+  ansible.builtin.set_fact:
+    terraform_actual: "{{ terraform_instalada.stdout | trim }}"
+    terraform_ultima: "{{ terraform_latest.json.version | default('') }}"
+    terraform_url: >-
+      {{ (terraform_latest.json.builds | default([])
+          | selectattr('os', 'equalto', 'linux')
+          | selectattr('arch', 'equalto', terraform_arch)
+          | map(attribute='url') | first) | default('') }}
+    terraform_shasums: "{{ terraform_latest.json.url_shasums | default('') }}"
+
+- name: Decidir acción
+  ansible.builtin.set_fact:
+    # Sin instalar (o binario roto) -> instalar. Instalado -> actualizar solo si
+    # conocemos la última y es mayor. Sin la API no se sabe qué bajar: no se toca.
+    terraform_hay_que_instalar: >-
+      {{ terraform_url != '' and
+         (terraform_actual == '' or terraform_ultima is version(terraform_actual, '>')) }}
+
+- name: Mostrar estado de Terraform
+  ansible.builtin.debug:
+    msg: >-
+      Terraform instalado: {{ terraform_actual if terraform_actual else 'no' }} |
+      última: {{ terraform_ultima if terraform_ultima else 'desconocida (API de HashiCorp no accesible)' }} |
+      acción: {{ ('instalar' if terraform_actual == '' else 'actualizar') if terraform_hay_que_instalar | bool else 'ninguna' }}
+
+- name: Aviso de otros terraform en el sistema
+  ansible.builtin.debug:
+    msg: >-
+      Hay otro terraform en {{ terraform_otros.stdout_lines | join(', ') }} (no se toca;
+      manda {{ terraform_bin_dir }}/terraform porque va antes en el PATH).
+  when: terraform_otros.stdout_lines | length > 0
+
+- name: Instalar / actualizar Terraform
+  when:
+    - terraform_hay_que_instalar | bool
+    - not ansible_check_mode
+  block:
+    # Solo se llama a apt si falta unzip (evita bloqueos de apt si coincide
+    # con otro timer de actualización)
+    - name: ¿Está unzip?
+      ansible.builtin.stat:
+        path: /usr/bin/unzip
+      register: terraform_unzip
+
+    - name: Paquete unzip (lo necesita unarchive)
+      ansible.builtin.apt:
+        name: unzip
+        state: present
+        cache_valid_time: 86400
+      when: not terraform_unzip.stat.exists
+
+    - name: Carpeta temporal
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: terraform.
+      register: terraform_tmp
+
+    # El checksum lo saca get_url del fichero SHA256SUMS oficial de esa versión
+    - name: Descargar Terraform {{ terraform_ultima }} ({{ terraform_arch }})
+      ansible.builtin.get_url:
+        url: "{{ terraform_url }}"
+        dest: "{{ terraform_tmp.path }}/terraform.zip"
+        mode: '0644'
+        timeout: 120
+        checksum: "{{ ('sha256:' + terraform_shasums) if terraform_shasums else omit }}"
+
+    - name: Descomprimir
+      ansible.builtin.unarchive:
+        src: "{{ terraform_tmp.path }}/terraform.zip"
+        dest: "{{ terraform_tmp.path }}"
+        remote_src: true
+
+    # copy deja el fichero de golpe (rename): quien esté usando terraform en ese
+    # momento no ve un binario a medias
+    - name: Instalar el binario en {{ terraform_bin_dir }}
+      ansible.builtin.copy:
+        src: "{{ terraform_tmp.path }}/terraform"
+        dest: "{{ terraform_bin_dir }}/terraform"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Versión tras instalar
+      ansible.builtin.shell: >-
+        {{ terraform_bin_dir }}/terraform version -json |
+        sed -n 's/.*"terraform_version": *"\([0-9.]*\)".*/\1/p'
+      register: terraform_nueva
+      changed_when: false
+
+    - name: Resultado
+      ansible.builtin.debug:
+        msg: "Terraform ahora: {{ terraform_nueva.stdout | trim }}"
+
+  always:
+    - name: Borrar la carpeta temporal
+      ansible.builtin.file:
+        path: "{{ terraform_tmp.path }}"
+        state: absent
+      when: terraform_tmp.path is defined
+
+# terraform -install-autocomplete es por usuario (toca ~/.bashrc); esto vale
+# para todos y no toca ningún perfil.
+- name: Autocompletado de bash para todos los usuarios
+  ansible.builtin.copy:
+    dest: /etc/bash_completion.d/terraform
+    content: |
+      # Instalado por el rol Ansible Terraform (IAC-IESMHP)
+      [ -x {{ terraform_bin_dir }}/terraform ] && complete -C {{ terraform_bin_dir }}/terraform terraform
+    owner: root
+    group: root
+    mode: "0644"
+  when: terraform_autocompletado | bool
+
+# ── Actualización automática ─────────────────────────────────────────────────
+# Timer que, {{ terraform_autoactualiza_espera }} después de encender (y cada
+# {{ terraform_autoactualiza_intervalo }} si sigue encendido), vuelve a lanzar este
+# rol en local; el script solo lo hace cada {{ terraform_autoactualiza_dias }} días.
+# OJO: aquí NO se arranca el .service (state: started): cuando este rol lo lanza
+# el propio service, esperaría a sí mismo y se quedaría bloqueado.
+
+- name: Actualización automática de Terraform
+  when: terraform_autoactualiza | bool
+  block:
+    - name: Instalar el script de actualización automática
+      ansible.builtin.template:
+        src: iac-actualiza-terraform.sh.j2
+        dest: "{{ terraform_autoactualiza_script }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Instalar las unidades service y timer
+      ansible.builtin.template:
+        src: "iac-actualiza-terraform.{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ terraform_autoactualiza_unidad }}.{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: [service, timer]
+
+    # Antes de arrancar el timer: si el equipo lleva más de
+    # {{ terraform_autoactualiza_espera }} encendido, systemd lo dispara al momento y
+    # lanzaría otro ansible en paralelo. Con la marca de hoy, el script sale.
+    - name: Marcar que hoy ya se ha comprobado Terraform
+      ansible.builtin.shell: >-
+        mkdir -p "$(dirname {{ terraform_autoactualiza_marca }})" &&
+        date +%F > {{ terraform_autoactualiza_marca }}
+      changed_when: false
+
+    - name: Habilitar y arrancar el timer
+      ansible.builtin.systemd:
+        name: "{{ terraform_autoactualiza_unidad }}.timer"
+        enabled: true
+        state: started
+        daemon_reload: true
+      # En --check las unidades no se escriben y systemd no las encontraría
+      when: not ansible_check_mode
+
+- name: Quitar la actualización automática de Terraform
+  when: not (terraform_autoactualiza | bool)
+  block:
+    - name: Parar y deshabilitar el timer
+      ansible.builtin.systemd:
+        name: "{{ terraform_autoactualiza_unidad }}.timer"
+        enabled: false
+        state: stopped
+      failed_when: false
+
+    - name: Borrar script y unidades
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ terraform_autoactualiza_script }}"
+        - "/etc/systemd/system/{{ terraform_autoactualiza_unidad }}.service"
+        - "/etc/systemd/system/{{ terraform_autoactualiza_unidad }}.timer"
+
+    - name: Recargar systemd
+      ansible.builtin.systemd:
+        daemon_reload: true

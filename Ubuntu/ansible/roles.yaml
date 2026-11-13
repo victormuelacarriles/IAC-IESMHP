@@ -21,6 +21,7 @@
      - { role: rdp, tags: rdp } # Servidor RDP nativo de GNOME (Ubuntu 26.04). Antes era el rol comentado #- xrdp
      - { role: vscode, tags: vscode }
      - { role: AWScli, tags: AWScli } #AWS CLI v2 de sistema (/usr/local/bin/aws) para todos los usuarios; instala o actualiza a la última. Timer semanal. Ver roles/AWScli/CLAUDE.md
+     - { role: Terraform, tags: Terraform } #Terraform (HashiCorp) de sistema (/usr/local/bin/terraform); instala o actualiza a la última. Timer semanal. Ver roles/Terraform/CLAUDE.md
      - { role: clienteNAS, tags: clienteNAS } #Cliente NFS del NAS del DEPARTAMENTO: 
                       #autodescubre exports y los monta RO en /mnt/nasDepInfo (ver roles/clienteNAS/CLAUDE.md)
      - { role: DirtyFrag, tags: DirtyFrag } #Evalua y mitiga la vuln. "Dirty Frag" (CVE-2026-43284 ESP/IPsec + CVE-2026-43500 RxRPC): bloquea esp4/esp6/rxrpc
@@ -34,7 +35,7 @@
 
 #POR HACER:
 #      - apt cache [tirando de cabina si la tiene a tiro. Como está configurado en 10.0.72.140]
-#      - hashicorp     #[terraform, packer]
+#      - hashicorp     #[packer, vagrant] (terraform ya: rol Terraform, 2026-11-10)
 
 
 

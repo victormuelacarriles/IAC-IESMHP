@@ -1,0 +1,12 @@
+[Unit]
+# {{ ansible_managed }}
+Description=IAC-IESMHP - Comprueba y actualiza Terraform ({{ terraform_autoactualiza_espera }} tras arrancar; como mucho cada {{ terraform_autoactualiza_dias }} días)
+
+[Timer]
+OnBootSec={{ terraform_autoactualiza_espera }}
+OnUnitActiveSec={{ terraform_autoactualiza_intervalo }}
+# Que no coincidan todos los equipos del aula en el mismo segundo
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

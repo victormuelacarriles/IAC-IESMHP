@@ -11,6 +11,7 @@
 #   bash AWScli.sh SMRD IABD               # varias aulas (una tras otra)
 #   bash AWScli.sh <equipos.ini> [args de ansible-playbook]
 #   sudo bash AWScli.sh                    # en local (este equipo)
+#   bash AWScli.sh                         # en local sin sudo, si entras por clave en root@localhost
 #
 # Opciones:
 #   SMRD | IABD | <equipos.ini>   inventario(s) de aula (ansible_user=root). Sin él: en local
@@ -69,8 +70,19 @@ done
 [[ "$FORKS" =~ ^[1-9][0-9]*$ ]] || { echo "[ERR] --forks no válido: '$FORKS'" >&2; exit 1; }
 command -v ansible-playbook >/dev/null 2>&1 || { echo "[ERR] ansible-playbook no está instalado." >&2; exit 1; }
 
+# En local sin ser root: become pediría la contraseña de sudo y aquí no hay
+# preguntas (headless). Si este usuario entra por clave en root@localhost
+# (Autorizados.txt), se usa esa vía: Ansible se conecta por SSH como root.
+LOCAL_SSH=0
 if [ "${#INVENTARIOS[@]}" -eq 0 ] && [ "$(id -u)" -ne 0 ] && [[ " ${ARGS[*]} " != *"ansible_become=false"* ]]; then
-    echo "[ERR] En local hay que lanzarlo como root: sudo bash $0 $*" >&2; exit 1
+    if ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
+           root@localhost true </dev/null >/dev/null 2>&1; then
+        LOCAL_SSH=1
+    else
+        echo "[ERR] En local hace falta root: sudo bash $0 $*" >&2
+        echo "      (o una clave SSH de este usuario en root@localhost; ahora 'ssh root@localhost' pide contraseña o falla)" >&2
+        exit 1
+    fi
 fi
 
 LOGDIR=/var/log/IAC-IESMHP
@@ -79,6 +91,19 @@ LOGDIR=/var/log/IAC-IESMHP
 mkdir -p "$LOGDIR"
 LOG="$LOGDIR/AWScli.log"
 cd "$DIR" || exit 1
+
+# Didáctico: antes de cada ansible-playbook se enseña el comando exacto, listo
+# para copiar y pegar (en amarillo en pantalla; sin color en el log).
+muestra_cmd() {   # muestra_cmd <comando> <args...>
+    local a c=""
+    for a in "$@"; do   # comillas simples solo si hacen falta, como se teclearía
+        if [[ "$a" =~ ^[A-Za-z0-9_./:=,@%+-]+$ ]]; then c+=" $a"
+        else c+=" '${a//\'/\'\\\'\'}'"; fi
+    done
+    c="${c# }"
+    if [ -t 1 ]; then printf '\033[1;33m$ %s\033[0m\n' "$c"; else printf '$ %s\n' "$c"; fi
+    printf '$ %s\n' "$c" >> "$LOG"
+}
 
 SAL=$(mktemp); trap 'rm -f "$SAL"' EXIT
 mmss() { printf '%d:%02d' $(( $1 / 60 )) $(( $1 % 60 )); }
@@ -89,7 +114,19 @@ resumen() {   # resumen <salida>  → imprime líneas y devuelve 1 si hay ERROR
     python3 - "$1" <<'PY'
 import re, sys
 txt = open(sys.argv[1], encoding='utf-8', errors='replace').read()
-estado, ahora, fallo = {}, {}, {}
+estado, ahora, fallo, fallo_largo = {}, {}, {}, {}
+def motivo_ssh(m):   # motivo corto y en castellano de un UNREACHABLE
+    # Permission denied primero: sin comprobar la clave de host, ssh avisa del
+    # cambio de clave pero sigue, y el fallo de verdad es el acceso.
+    if 'Permission denied' in m: return ': no acepta la clave SSH (Permission denied)'
+    if 'IDENTIFICATION HAS CHANGED' in m: return ': la clave del equipo ha cambiado (¿reinstalado?)'
+    if 'Host key verification failed' in m: return ': clave del equipo desconocida o cambiada (known_hosts)'
+    if 'Connection refused' in m: return ': puerto SSH cerrado (Connection refused)'
+    if 'timed out' in m or 'No route to host' in m: return ': no contesta (¿apagado?)'
+    if 'Could not resolve' in m: return ': nombre no encontrado (DNS)'
+    m = re.sub(r'^(Task failed: *)?(Failed to connect to the host via ssh: *)?', '', m)
+    m = m.replace('\\r', '\\n').split('\\n')[0].strip()
+    return (': ' + m[:110]) if m else ''
 for eq, ins, ult, acc in re.findall(
         r'ok: \[([^\]]+)\] => \{\s*"msg": "AWS CLI instalado: (.*?) \| última: (.*?) \| acción: (\w+)"', txt):
     estado[eq] = (ins, ult, acc)
@@ -98,6 +135,7 @@ for eq, v in re.findall(r'ok: \[([^\]]+)\] => \{\s*"msg": "AWS CLI ahora: ([0-9.
 for eq, msg in re.findall(r'fatal: \[([^\]]+)\]: (?:FAILED|UNREACHABLE)! => (.*)', txt):
     m = re.search(r'"msg": "((?:[^"\\]|\\.)*)"', msg)
     fallo.setdefault(eq, (m.group(1) if m else msg)[:120])
+    fallo_largo.setdefault(eq, m.group(1) if m else msg)
 recap = dict(re.findall(r'^(\S+)\s+: (ok=.*)$', txt, re.M))
 hay_error, cuenta = False, {}
 for eq in sorted(set(recap) | set(estado)):
@@ -106,7 +144,7 @@ for eq in sorted(set(recap) | set(estado)):
     fallido = re.search(r'failed=[1-9]', r)
     ins, ult, acc = estado.get(eq, ('?', '?', '?'))
     if sin_ssh:
-        linea, tipo = 'ERROR  no responde por SSH', 'ERROR'
+        linea, tipo = 'ERROR  no responde por SSH' + motivo_ssh(fallo_largo.get(eq, '')), 'ERROR'
     elif fallido:
         linea, tipo = 'ERROR  ' + fallo.get(eq, 'falló una tarea (ver log)'), 'ERROR'
     elif acc == 'ninguna':
@@ -140,12 +178,20 @@ for INVENTARIO in "${INVENTARIOS[@]}"; do
                 || { echo "[AVISO] El -l '$LIMITE' no coincide con ningún equipo de $INVENTARIO; se salta." | tee -a "$LOG"; continue; }
         fi
     else
-        INV=(-i localhost, --connection=local)
+        if [ "$LOCAL_SSH" = 1 ]; then
+            INV=(-i localhost, --connection=ssh -u root)   # este equipo, por SSH como root
+        else
+            INV=(-i localhost, --connection=local)
+        fi
     fi
     LIM=(); [ -n "$LIMITE" ] && LIM=(-l "$LIMITE")
-    echo "===== $(date '+%F %T') AWScli ($(o="${RESUMEN_OPC# }"; echo "${o:-instalar/actualizar}")) ${INV[*]} --forks $FORKS ${LIM[*]} ${ARGS[*]}" | tee -a "$LOG"
-    ANSIBLE_NOCOLOR=1 ansible-playbook "${INV[@]}" --forks "$FORKS" AWScli.yaml "${LIM[@]}" "${ARGS[@]}" \
-        </dev/null >> "$SAL" 2>&1
+    FRK=(); [ -n "$INVENTARIO" ] && FRK=(--forks "$FORKS")   # en local (un equipo) no pinta nada
+    echo "===== $(date '+%F %T') AWScli ($(o="${RESUMEN_OPC# }"; echo "${o:-instalar/actualizar}")) ${INV[*]} ${FRK[*]} ${LIM[*]} ${ARGS[*]}" | tr -s " " | tee -a "$LOG"
+    CMD=(ansible-playbook "${INV[@]}" "${FRK[@]}" "$DIR/AWScli.yaml" "${LIM[@]}" "${ARGS[@]}")
+    # Sin comprobar la clave de host (como Reclona-IAC-IESMHP.sh): los equipos se
+    # reinstalan, cambian de clave y known_hosts los rechazaría ("no responde").
+    muestra_cmd ANSIBLE_HOST_KEY_CHECKING=False "${CMD[@]}"
+    ANSIBLE_HOST_KEY_CHECKING=False ANSIBLE_NOCOLOR=1 "${CMD[@]}" </dev/null >> "$SAL" 2>&1
     R=$?
     [ $R -ne 0 ] && RC=1
 done

@@ -1,0 +1,18 @@
+---
+# Playbook independiente del rol Terraform (no depende de roles.yaml).
+# Instala Terraform (HashiCorp) para todo el sistema o lo actualiza a la última versión.
+#
+# Desde esta carpeta:
+#   sudo ansible-playbook -i localhost, --connection=local Terraform.yaml
+#   ansible-playbook -i ../../equiposIABD.ini Terraform.yaml          # aula por SSH
+#   ansible-playbook -i ../../equiposIABD.ini Terraform.yaml -l IABD-17
+#   ... --check   → solo muestra qué haría
+#
+# Sin "apt update" en pre_tasks: el rol solo usa apt para unzip, y con
+# cache_valid_time (no refresca si la caché tiene menos de un día).
+
+- hosts: all
+  become: yes
+
+  roles:
+    - role: "{{ playbook_dir }}"   # esta misma carpeta es el rol

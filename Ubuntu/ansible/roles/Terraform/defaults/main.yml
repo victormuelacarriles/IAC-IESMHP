@@ -1,0 +1,32 @@
+# Variables del rol Terraform
+# Instala/actualiza Terraform (HashiCorp) para todo el sistema
+# (/usr/local/bin/terraform) y deja un timer que lo vuelve a lanzar solo
+# (a los 15 min de encender, como mucho cada terraform_autoactualiza_dias días).
+
+# Dónde se deja el binario (en el PATH de todos los usuarios)
+terraform_bin_dir: /usr/local/bin
+
+# Autocompletado de bash para todos los usuarios (/etc/bash_completion.d/terraform)
+terraform_autocompletado: true
+
+# Activar la actualización automática (false → se quitan timer/service/script)
+terraform_autoactualiza: true
+
+# Espera tras el arranque antes de comprobar (formato systemd OnBootSec).
+# 15 min para no coincidir con vscode (5 min) ni AWScli (10 min): todos usan ansible.
+terraform_autoactualiza_espera: 15min
+
+# Equipos que se quedan encendidos: el timer se dispara cada... (OnUnitActiveSec)
+terraform_autoactualiza_intervalo: 1d
+
+# Como mucho una comprobación cada N días
+terraform_autoactualiza_dias: 7
+
+# Playbook que lanza el timer (el clon del repo en el equipo, ver comun.sh)
+terraform_autoactualiza_playbook: /opt/IAC-IESMHP/Ubuntu/ansible/roles/Terraform/Terraform.yaml
+
+# Rutas / nombres de los artefactos instalados (no suele hacer falta cambiarlos)
+terraform_autoactualiza_script: /usr/local/sbin/iac-actualiza-terraform.sh
+terraform_autoactualiza_unidad: iac-actualiza-terraform
+terraform_autoactualiza_log: /var/log/IAC-IESMHP/Ubuntu/iac-actualiza-terraform.log
+terraform_autoactualiza_marca: /var/lib/IAC-IESMHP/terraform-ultima-comprobacion
